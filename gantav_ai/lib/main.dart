@@ -11,6 +11,7 @@ import 'screens/auth_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
+import 'widgets/connectivity_wrapper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,7 +42,9 @@ class GantavAIApp extends StatelessWidget {
           theme: AppTheme.lightTheme(),
           darkTheme: AppTheme.darkTheme(),
           themeMode: appState.themeMode,
-          home: const _AppRouter(),
+          home: ConnectivityWrapper(
+            child: const _AppRouter(),
+          ),
         );
       },
     );
@@ -55,23 +58,20 @@ class _AppRouter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AppState>(
       builder: (context, appState, _) {
-        // Still loading initial state
         if (appState.isLoading && !appState.isAuthenticated) {
           return const _SplashScreen();
         }
 
-        // Not authenticated → onboarding
-        if (!appState.isAuthenticated) {
-          return const AuthScreen();
+        // Already authenticated - skip dream entirely
+        if (appState.isAuthenticated) {
+          if (appState.isGeneratingCourse) {
+            return const _GeneratingScreen();
+          }
+          return const AppShell(); // Go straight to app
         }
 
-        // Generating course (psychological hook — show progress)
-        if (appState.isGeneratingCourse) {
-          return const _GeneratingScreen();
-        }
-
-        // Main app
-        return const AppShell();
+        // Not authenticated - show auth (which includes dream input)
+        return const AuthScreen();
       },
     );
   }
@@ -451,21 +451,27 @@ class _GantavHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 14, 16, 10),
       child: Row(
         children: [
-          SizedBox(
-            width: 32, height: 32,
-            child: Image.asset('assets/images/logo.png'),
-          ),
+          SizedBox(width: 32, height: 32, child: Image.asset('assets/images/logo.png')),
           const SizedBox(width: 10),
-          Text('Gantav',
-            style: GoogleFonts.dmSans(
-              fontSize: 18, fontWeight: FontWeight.w800,
-              color: isDark ? AppColors.textLight : AppColors.textDark,
-            )),
-          Text(' AI',
-            style: GoogleFonts.dmSans(
-              fontSize: 18, fontWeight: FontWeight.w300,
-              color: AppColors.violetLight,
-            )),
+          Text('Gantav', style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w800,
+            color: isDark ? AppColors.textLight : AppColors.textDark)),
+          Text(' AI', style: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w300, color: AppColors.violetLight)),
+          const Spacer(),
+          // Notification bell
+          IconButton(
+            onPressed: () {}, // TODO: Notifications screen
+            icon: Icon(Icons.notifications_outlined, size: 22,
+              color: isDark ? AppColors.textLightSub : AppColors.textDarkSub),
+          ),
+          // Search button
+          IconButton(
+            onPressed: () {
+              final appState = context.read<AppState>();
+              appState.setTabIndex(1); // Go to Explore tab
+            },
+            icon: Icon(Icons.search_rounded, size: 22,
+              color: isDark ? AppColors.textLightSub : AppColors.textDarkSub),
+          ),
         ],
       ),
     );

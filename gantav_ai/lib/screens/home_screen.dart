@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
+import '../services/gemini_service.dart';
 import '../services/recommendation_service.dart';
 import '../widgets/widgets.dart';
 import 'course_detail_screen.dart';
@@ -18,39 +19,62 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  Timer? _pulseTimer;
-  List<RecommendationVideo> _recommendations = [];
+  final ScrollController _scrollController = ScrollController();
+  List<Map<String, String>> _recommendations = [];
   bool _loadingRecs = true;
+  bool _loadingMoreRecs = false;
+  int _recPage = 0;
+  Timer? _pulseTimer;
 
   @override
   void initState() {
     super.initState();
-    // Auto-cycle pulse events every 5 seconds
     _pulseTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) {
-        context.read<AppState>().nextPulseEvent();
-      }
+      if (mounted) context.read<AppState>().nextPulseEvent();
     });
-    _loadRecommendations();
+    
+    _scrollController.addListener(_onScroll);
+    _loadRecommendations(reset: true);
   }
 
-  Future<void> _loadRecommendations() async {
+  void _onScroll() {
+    if (_scrollController.position.pixels >= 
+        _scrollController.position.maxScrollExtent - 300) {
+      _loadMoreRecommendations();
+    }
+  }
+
+  Future<void> _loadRecommendations({bool reset = false}) async {
+    if (reset) {
+      if (mounted) setState(() { _loadingRecs = true; _recPage = 0; });
+    }
+    
     final appState = context.read<AppState>();
-    final recs = await RecommendationService.fetchRecommendations(
+    final recs = await GeminiService.generateRecommendations(
       dream: appState.dream?.text,
-      activeCategories: appState.activeCourses.map((c) => c.category).toList(),
+      categories: appState.activeCourses.map((c) => c.category).toList(),
     );
+    
     if (mounted) {
       setState(() {
-        _recommendations = recs;
+        if (reset) _recommendations = recs;
+        else _recommendations.addAll(recs);
         _loadingRecs = false;
+        _loadingMoreRecs = false;
       });
     }
+  }
+
+  Future<void> _loadMoreRecommendations() async {
+    if (_loadingMoreRecs) return;
+    if (mounted) setState(() { _loadingMoreRecs = true; _recPage++; });
+    await _loadRecommendations(reset: false);
   }
 
   @override
   void dispose() {
     _pulseTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -75,6 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           color: AppColors.violet,
           child: CustomScrollView(
+            controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
             ),
@@ -344,12 +369,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
 /// Recommendation video card
 class _RecommendationCard extends StatelessWidget {
-  final RecommendationVideo rec;
+  final Map<String, String> rec;
   const _RecommendationCard({required this.rec});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final videoId = rec['video_id'] ?? '';
+    final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/mqdefault.jpg';
 
     return Container(
       width: 240,
@@ -377,7 +404,7 @@ class _RecommendationCard extends StatelessWidget {
             child: Stack(
               children: [
                 Image.network(
-                  rec.thumbnailUrl,
+                  thumbnailUrl,
                   height: 110,
                   width: 240,
                   fit: BoxFit.cover,
@@ -396,7 +423,7 @@ class _RecommendationCard extends StatelessWidget {
                       color: Colors.black.withValues(alpha: 0.75),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(rec.duration,
+                    child: Text(rec['duration'] ?? '',
                       style: GoogleFonts.dmMono(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
                   ),
                 ),
@@ -409,7 +436,7 @@ class _RecommendationCard extends StatelessWidget {
                       color: AppColors.violet.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(rec.category,
+                    child: Text(rec['category'] ?? '',
                       style: GoogleFonts.dmSans(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600)),
                   ),
                 ),
@@ -422,14 +449,14 @@ class _RecommendationCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(rec.title,
+                Text(rec['title'] ?? '',
                   style: GoogleFonts.dmSans(
                     fontSize: 12, fontWeight: FontWeight.w600, height: 1.3,
                     color: isDark ? AppColors.textLight : AppColors.textDark,
                   ),
                   maxLines: 2, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
-                Text(rec.channel,
+                Text(rec['channel'] ?? '',
                   style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
               ],
             ),

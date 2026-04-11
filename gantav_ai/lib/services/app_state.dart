@@ -24,6 +24,10 @@ class AppState extends ChangeNotifier {
   bool _isLoadingMore = false;
   int _courseBatchIndex = 0;
   String? _authError;
+  
+  // FIXED: Track if onboarding dream was collected
+  bool _dreamCollectedInOnboarding = false;
+  bool get dreamCollectedInOnboarding => _dreamCollectedInOnboarding;
 
   // Services
   final FirestoreService _firestoreService = FirestoreService();
@@ -53,8 +57,8 @@ class AppState extends ChangeNotifier {
     await _loadThemePreference();
     await _loadAuthStatus();
     await _loadDream();
-
-    // Check if user is already logged in via Firebase
+    await _loadLocalCourses(); // NEW: load from local storage first
+    
     final firebaseUser = AuthService.currentUser;
     if (firebaseUser != null && _authStatus == AuthStatus.unauthenticated) {
       _authStatus = AuthStatus.authenticated;
@@ -347,6 +351,7 @@ class AppState extends ChangeNotifier {
   Future<void> _loadAuthStatus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      _dreamCollectedInOnboarding = prefs.getBool('dream_collected') ?? false;
       final status = prefs.getString('authStatus');
       if (status == AuthStatus.authenticated.name) {
         _authStatus = AuthStatus.authenticated;
@@ -399,9 +404,37 @@ class AppState extends ChangeNotifier {
     await prefs.remove('dream');
   }
 
+  // NEW: Load courses from local storage (SharedPreferences backup)
+  Future<void> _loadLocalCourses() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final coursesJson = prefs.getString('local_courses');
+      if (coursesJson != null) {
+        final List<dynamic> data = jsonDecode(coursesJson);
+        _generatedCourses.clear();
+        _generatedCourses.addAll(data.map((j) => Course.fromJson(j)));
+      }
+    } catch (e) {
+      debugPrint('Error loading local courses: $e');
+    }
+  }
+
+  // NEW: Save courses to local storage
+  Future<void> _saveLocalCourses() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final data = jsonEncode(_generatedCourses.map((c) => c.toJson()).toList());
+      await prefs.setString('local_courses', data);
+    } catch (e) {
+      debugPrint('Error saving local courses: $e');
+    }
+  }
+
+  // Override addGeneratedCourse to also save locally
   Future<void> addGeneratedCourse(Course course) async {
     _generatedCourses.add(course);
-    await _firestoreService.saveActiveCourse(course);
+    await _saveLocalCourses(); // Save locally
+    await _firestoreService.saveActiveCourse(course); // Try Firestore
     notifyListeners();
   }
 

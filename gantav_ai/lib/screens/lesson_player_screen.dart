@@ -52,16 +52,23 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _ytController = YoutubePlayerController.fromVideoId(
-      videoId: widget.lesson.youtubeVideoId,
-      autoPlay: false,
+    
+    _ytController = YoutubePlayerController(
       params: const YoutubePlayerParams(
         showControls: true,
         showFullscreenButton: true,
-        enableCaption: true,
+        enableCaption: false, // Disable to reduce errors
         playsInline: true,
+        showVideoAnnotations: false,
+        pointerEvents: PointerEvents.auto,
       ),
     );
+    
+    // Load video after frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ytController.loadVideoById(videoId: widget.lesson.youtubeVideoId);
+    });
+    
     _loadInteractionState();
   }
 
@@ -377,6 +384,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       aspectRatio: 16 / 9,
       child: YoutubePlayer(
         controller: _ytController,
+        aspectRatio: 16 / 9,
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
 import '../services/auth_service.dart';
@@ -72,7 +73,14 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
       setState(() => _error = 'Please enter your dream first');
       return;
     }
-    setState(() { _error = null; });
+    
+    // Save dream text to prefs immediately so it survives navigation
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('onboarding_dream', _dreamCtrl.text.trim());
+      prefs.setBool('dream_collected', true);
+    });
+    
+    setState(() => _error = null);
     _pageCtrl.animateToPage(1, duration: const Duration(milliseconds: 400), curve: Curves.easeInOutCubic);
   }
 
