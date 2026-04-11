@@ -24,6 +24,9 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   bool _showSubCategories = false;
   CourseCategory? _selectedCatalogCategory;
 
+  // Infinite scroll controller
+  final ScrollController _scrollController = ScrollController();
+
   final List<String> _categories = [
     'All',
     'Machine Learning',
@@ -37,12 +40,25 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      // Near the bottom — trigger loading more courses
+      final appState = context.read<AppState>();
+      if (!appState.isLoadingMore && !appState.isLoading) {
+        appState.generateNextCourseBatch();
+      }
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     _tabController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -60,11 +76,16 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   Future<void> _generateCourseFromSubCategory(SubCategory sub) async {
     final appState = context.read<AppState>();
 
-    // Show generating dialog
+    // Show generating dialog with timeout
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _GeneratingDialog(title: sub.name),
+      builder: (ctx) => _GeneratingDialog(
+        title: sub.name,
+        onCancel: () {
+          Navigator.of(ctx).pop();
+        },
+      ),
     );
 
     final course = await appState.generateCourseFromCategory(sub.promptHint);
@@ -77,7 +98,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
         MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course)),
       );
     } else {
-      ErrorHandler.showError(context, 'Could not generate course. Please check your Gemini API key and try again.');
+      ErrorHandler.showError(context, 'Could not generate course. The request may have timed out. Please try again.');
     }
   }
 
@@ -88,13 +109,16 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
     return Consumer<AppState>(
       builder: (context, appState, _) {
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Header
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              child: SizedBox(
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Text('Explore', style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 4),
                   Text('Find your next learning path',
@@ -102,6 +126,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
                 ],
               ),
             ),
+          ),
 
             const SizedBox(height: 12),
 
@@ -163,6 +188,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
       onRefresh: appState.refresh,
       color: AppColors.violet,
       child: CustomScrollView(
+        controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         slivers: [
           // Search bar
@@ -242,8 +268,16 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-              child: Text('${filtered.length} course${filtered.length != 1 ? 's' : ''} found',
-                style: Theme.of(context).textTheme.bodySmall),
+              child: Row(
+                children: [
+                  Text('${filtered.length} course${filtered.length != 1 ? 's' : ''} found',
+                    style: Theme.of(context).textTheme.bodySmall),
+                  const Spacer(),
+                  if (filtered.isNotEmpty)
+                    Text('Scroll for more ↓',
+                      style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.violet, fontWeight: FontWeight.w500)),
+                ],
+              ),
             ),
           ),
 
@@ -254,11 +288,24 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
                 padding: const EdgeInsets.all(40),
                 child: Column(
                   children: [
-                    Icon(Icons.search_off, color: AppColors.textMuted, size: 48),
+                    const Icon(Icons.search_off, color: AppColors.textMuted, size: 48),
                     const SizedBox(height: 14),
                     Text('No courses found', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 4),
                     Text('Try a different search or category', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        appState.generateNextCourseBatch();
+                      },
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: Text('Generate AI courses', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.violet,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -267,6 +314,25 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
             _buildGrid(filtered)
           else
             _buildList(filtered),
+
+          // ─── Infinite Scroll Loading Indicator ─────────────────
+          if (appState.isLoadingMore)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  children: [
+                    const SizedBox(
+                      width: 24, height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.violet),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('Generating more courses with AI...',
+                      style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+            ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
@@ -305,11 +371,11 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
               color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: cat.color.withValues(alpha:0.2),
+                color: cat.color.withValues(alpha: 0.2),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: cat.color.withValues(alpha:0.06),
+                  color: cat.color.withValues(alpha: 0.06),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -322,7 +388,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
                 Container(
                   width: 40, height: 40,
                   decoration: BoxDecoration(
-                    color: cat.color.withValues(alpha:0.12),
+                    color: cat.color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(cat.icon, color: cat.color, size: 22),
@@ -375,7 +441,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
               Container(
                 width: 36, height: 36,
                 decoration: BoxDecoration(
-                  color: cat.color.withValues(alpha:0.12),
+                  color: cat.color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(cat.icon, color: cat.color, size: 18),
@@ -418,7 +484,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
                       Container(
                         width: 44, height: 44,
                         decoration: BoxDecoration(
-                          color: cat.color.withValues(alpha:0.1),
+                          color: cat.color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Center(
@@ -446,7 +512,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: cat.color.withValues(alpha:0.1),
+                          color: cat.color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(Icons.auto_awesome, size: 16, color: cat.color),
@@ -531,10 +597,27 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   }
 }
 
-/// Dialog shown while generating course from category
-class _GeneratingDialog extends StatelessWidget {
+/// Dialog shown while generating course — now with cancel button and timeout
+class _GeneratingDialog extends StatefulWidget {
   final String title;
-  const _GeneratingDialog({required this.title});
+  final VoidCallback onCancel;
+  const _GeneratingDialog({required this.title, required this.onCancel});
+
+  @override
+  State<_GeneratingDialog> createState() => _GeneratingDialogState();
+}
+
+class _GeneratingDialogState extends State<_GeneratingDialog> {
+  bool _showCancel = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Show cancel button after 10 seconds
+    Future.delayed(const Duration(seconds: 10), () {
+      if (mounted) setState(() => _showCancel = true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -550,7 +633,7 @@ class _GeneratingDialog extends StatelessWidget {
             Container(
               width: 56, height: 56,
               decoration: BoxDecoration(
-                color: AppColors.violet.withValues(alpha:0.12),
+                color: AppColors.violet.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 28),
@@ -558,13 +641,29 @@ class _GeneratingDialog extends StatelessWidget {
             const SizedBox(height: 20),
             Text('Generating Course', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            Text('Creating a $title learning path with AI...',
+            Text('Creating a ${widget.title} learning path with AI...',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4)),
             const SizedBox(height: 24),
             const SizedBox(
               width: 24, height: 24,
               child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.violet),
+            ),
+            // Cancel button appears after delay
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              child: _showCancel
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 20),
+                      child: TextButton.icon(
+                        onPressed: widget.onCancel,
+                        icon: const Icon(Icons.arrow_back, size: 16),
+                        label: Text('Go back',
+                          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500)),
+                        style: TextButton.styleFrom(foregroundColor: AppColors.textMuted),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),
@@ -655,7 +754,7 @@ class _ExploreCourseCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Icon(Icons.people_outline, color: AppColors.textMuted, size: 14),
+                      const Icon(Icons.people_outline, color: AppColors.textMuted, size: 14),
                       const SizedBox(width: 4),
                       Text(_formatCount(course.learnerCount), style: Theme.of(context).textTheme.bodySmall),
                     ],
@@ -669,11 +768,11 @@ class _ExploreCourseCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Icon(Icons.play_lesson_outlined, color: AppColors.textMuted, size: 14),
+                      const Icon(Icons.play_lesson_outlined, color: AppColors.textMuted, size: 14),
                       const SizedBox(width: 4),
                       Flexible(child: Text('${course.totalLessons} lessons', style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
                       const SizedBox(width: 14),
-                      Icon(Icons.schedule_outlined, color: AppColors.textMuted, size: 14),
+                      const Icon(Icons.schedule_outlined, color: AppColors.textMuted, size: 14),
                       const SizedBox(width: 4),
                       Flexible(child: Text(course.estimatedTime, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
                     ],

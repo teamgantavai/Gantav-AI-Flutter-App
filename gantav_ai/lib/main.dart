@@ -91,7 +91,7 @@ class _SplashScreen extends StatelessWidget {
           children: [
             SizedBox(
               width: 72, height: 72,
-              child: CustomPaint(painter: _LogoPainter()),
+              child: Image.asset('assets/images/logo.png'),
             ),
             const SizedBox(height: 16),
             Text('Gantav AI',
@@ -119,6 +119,8 @@ class _GeneratingScreenState extends State<_GeneratingScreen>
   late AnimationController _pulseCtrl;
   late AnimationController _progressCtrl;
   late Animation<double> _progressAnim;
+  bool _showBackButton = false;
+  bool _timedOut = false;
 
   final List<String> _steps = [
     'Analysing your dream...',
@@ -134,9 +136,32 @@ class _GeneratingScreenState extends State<_GeneratingScreen>
   void initState() {
     super.initState();
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat(reverse: true);
-    _progressCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 6));
+    _progressCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 8));
     _progressAnim = Tween<double>(begin: 0, end: 0.92).animate(CurvedAnimation(parent: _progressCtrl, curve: Curves.easeInOut));
     _progressCtrl.forward();
+
+    // Show back button after 15 seconds
+    Future.delayed(const Duration(seconds: 15), () {
+      if (mounted) setState(() => _showBackButton = true);
+    });
+
+    // Timeout after 90 seconds
+    Future.delayed(const Duration(seconds: 90), () {
+      if (mounted && !_timedOut) {
+        setState(() => _timedOut = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Course generation is taking too long. Please try again.',
+              style: GoogleFonts.dmSans()),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+        // Cancel generation
+        context.read<AppState>().cancelGeneration();
+      }
+    });
 
     // Cycle through steps
     Future.doWhile(() async {
@@ -174,7 +199,7 @@ class _GeneratingScreenState extends State<_GeneratingScreen>
                   scale: 1.0 + _pulseCtrl.value * 0.06,
                   child: SizedBox(
                     width: 80, height: 80,
-                    child: CustomPaint(painter: _LogoPainter()),
+                    child: Image.asset('assets/images/logo.png'),
                   ),
                 ),
               ),
@@ -194,9 +219,9 @@ class _GeneratingScreenState extends State<_GeneratingScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.gold.withValues(alpha:0.1),
+                  color: AppColors.gold.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(100),
-                  border: Border.all(color: AppColors.gold.withValues(alpha:0.3)),
+                  border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -252,7 +277,26 @@ class _GeneratingScreenState extends State<_GeneratingScreen>
                 },
               ),
 
-              const SizedBox(height: 64),
+              const SizedBox(height: 32),
+
+              // Back / Cancel button — appears after delay
+              AnimatedOpacity(
+                opacity: _showBackButton ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 400),
+                child: _showBackButton
+                    ? TextButton.icon(
+                        onPressed: () {
+                          context.read<AppState>().cancelGeneration();
+                        },
+                        icon: const Icon(Icons.arrow_back, size: 16),
+                        label: Text('Taking too long? Go back',
+                          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500)),
+                        style: TextButton.styleFrom(foregroundColor: AppColors.textMuted),
+                      )
+                    : const SizedBox(),
+              ),
+
+              const SizedBox(height: 32),
 
               // Social proof
               Row(
@@ -409,7 +453,7 @@ class _GantavHeader extends StatelessWidget {
         children: [
           SizedBox(
             width: 32, height: 32,
-            child: CustomPaint(painter: _LogoPainter()),
+            child: Image.asset('assets/images/logo.png'),
           ),
           const SizedBox(width: 10),
           Text('Gantav',
@@ -428,38 +472,7 @@ class _GantavHeader extends StatelessWidget {
   }
 }
 
-class _LogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bg = Paint()..color = const Color(0xFF070C1A);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width, size.height),
-        Radius.circular(size.width * 0.24),
-      ),
-      bg,
-    );
-    final stroke = Paint()
-      ..color = Colors.white
-      ..strokeWidth = size.width * 0.068
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final path = Path();
-    final cx = size.width * 0.54;
-    final cy = size.height * 0.46;
-    final r = size.width * 0.265;
-    path.addArc(
-      Rect.fromCircle(center: Offset(cx, cy), radius: r),
-      3.14159 * 0.35, 3.14159 * 1.7,
-    );
-    path.lineTo(cx, cy);
-    canvas.drawPath(path, stroke);
-    canvas.drawCircle(Offset(cx, cy), size.width * 0.048, Paint()..color = AppColors.gold);
-  }
 
-  @override
-  bool shouldRepaint(_) => false;
-}
 
 class _NavItem {
   final IconData activeIcon;

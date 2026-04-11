@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
@@ -261,14 +262,79 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       body: SafeArea(
         child: Row(
           children: [
-            // Left: Video
-            SizedBox(
-              width: screenWidth * 0.55,
+            // Left: Video — takes more space in landscape
+            Expanded(
+              flex: 3,
               child: Column(
                 children: [
-                  _buildVideoSection(isDark, showTopBar: true),
+                  // Top bar with back button
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            // Reset orientation and pop
+                            SystemChrome.setPreferredOrientations([
+                              DeviceOrientation.portraitUp,
+                              DeviceOrientation.portraitDown,
+                              DeviceOrientation.landscapeLeft,
+                              DeviceOrientation.landscapeRight,
+                            ]);
+                            Navigator.of(context).pop();
+                          },
+                          icon: const Icon(Icons.arrow_back, size: 22),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: Text(
+                            '${widget.module.title} · $_currentLessonIndex/${widget.module.lessonCount}',
+                            style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textMuted),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Fullscreen toggle
+                        IconButton(
+                          onPressed: () {
+                            // Toggle to fullscreen video
+                            setState(() => _isFocusMode = !_isFocusMode);
+                          },
+                          icon: Icon(
+                            _isFocusMode ? Icons.fullscreen_exit : Icons.fullscreen,
+                            size: 22,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // YouTube Player
+                  _buildVideoPlayer(),
+                  // Interaction bar
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.lesson.title,
+                            style: Theme.of(context).textTheme.titleSmall,
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        _InteractionButton(icon: _isLiked ? Icons.thumb_up : Icons.thumb_up_outlined, isActive: _isLiked, activeColor: AppColors.violet, onTap: _toggleLike, tooltip: 'Like'),
+                        _InteractionButton(icon: _isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined, isActive: _isDisliked, activeColor: AppColors.error, onTap: _toggleDislike, tooltip: 'Dislike'),
+                        _InteractionButton(icon: _isStarred ? Icons.star : Icons.star_border, isActive: _isStarred, activeColor: AppColors.gold, onTap: _toggleStar, tooltip: 'Favorite'),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     child: _buildSpeedControls(isDark),
                   ),
                   const Spacer(),
@@ -278,6 +344,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             ),
             // Right: Content / Chat
             Expanded(
+              flex: 2,
               child: Container(
                 decoration: BoxDecoration(
                   border: Border(
@@ -611,10 +678,56 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// AI Chat panel
+  /// AI Chat panel — with back arrow header
   Widget _buildAiChatPanel(bool isDark) {
     return Column(
       children: [
+        // ─── Back Arrow Header ──────────────────────────────
+        Container(
+          padding: const EdgeInsets.fromLTRB(4, 4, 14, 4),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: () => setState(() => _showAiChat = false),
+                icon: Icon(
+                  Icons.arrow_back,
+                  size: 20,
+                  color: isDark ? AppColors.textLight : AppColors.textDark,
+                ),
+                tooltip: 'Back to content',
+              ),
+              Container(
+                width: 28, height: 28,
+                decoration: BoxDecoration(
+                  color: AppColors.violet.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 14),
+              ),
+              const SizedBox(width: 10),
+              Text('AI Tutor',
+                style: GoogleFonts.dmSans(
+                  fontSize: 15, fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.textLight : AppColors.textDark,
+                )),
+              const Spacer(),
+              if (_chatMessages.isNotEmpty)
+                TextButton(
+                  onPressed: () => setState(() => _chatMessages.clear()),
+                  child: Text('Clear',
+                    style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted)),
+                ),
+            ],
+          ),
+        ),
+
         Expanded(
           child: _chatMessages.isEmpty
               ? _buildChatEmptyState(isDark)

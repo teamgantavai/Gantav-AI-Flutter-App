@@ -497,7 +497,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: CustomPaint(painter: _GoogleLogoPainter()),
+                            child: Image.asset('assets/images/google.png'),
                           ),
                           const SizedBox(width: 12),
                           Text(
@@ -781,97 +781,13 @@ class _GantavLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size, height: size,
-      child: CustomPaint(painter: _LogoPainter()),
+    return Image.asset(
+      'assets/images/logo.png',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
     );
   }
 }
 
-class _LogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bg = Paint()..color = const Color(0xFF070C1A);
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Radius.circular(size.width * 0.24),
-    );
-    canvas.drawRRect(rrect, bg);
 
-    final stroke = Paint()
-      ..color = Colors.white
-      ..strokeWidth = size.width * 0.065
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    final cx = size.width * 0.54;
-    final cy = size.height * 0.46;
-    final r = size.width * 0.265;
-    path.addArc(
-      Rect.fromCircle(center: Offset(cx, cy), radius: r),
-      3.14159 * 0.35, 3.14159 * 1.7,
-    );
-    path.lineTo(size.width * 0.545, cy);
-    canvas.drawPath(path, stroke);
-
-    final dot = Paint()..color = AppColors.gold;
-    canvas.drawCircle(Offset(size.width * 0.545, cy), size.width * 0.045, dot);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// Draws a simplified Google "G" logo
-class _GoogleLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double w = size.width;
-    final double h = size.height;
-    final double cx = w / 2;
-    final double cy = h / 2;
-    final double r = w * 0.45;
-
-    // Blue arc (top-right quarter)
-    final bluePaint = Paint()
-      ..color = const Color(0xFF4285F4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.18
-      ..strokeCap = StrokeCap.butt;
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), -0.8, 1.4, false, bluePaint);
-
-    // Green arc (bottom-right quarter)
-    final greenPaint = Paint()
-      ..color = const Color(0xFF34A853)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.18
-      ..strokeCap = StrokeCap.butt;
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 0.6, 1.0, false, greenPaint);
-
-    // Yellow arc (bottom-left quarter)
-    final yellowPaint = Paint()
-      ..color = const Color(0xFFFBBC05)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.18
-      ..strokeCap = StrokeCap.butt;
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 1.6, 1.0, false, yellowPaint);
-
-    // Red arc (top-left quarter)
-    final redPaint = Paint()
-      ..color = const Color(0xFFEA4335)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.18
-      ..strokeCap = StrokeCap.butt;
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, cy), radius: r), 2.6, 0.9, false, redPaint);
-
-    // Blue horizontal bar
-    final barPaint = Paint()
-      ..color = const Color(0xFF4285F4)
-      ..style = PaintingStyle.fill;
-    canvas.drawRect(Rect.fromLTWH(cx - w * 0.02, cy - w * 0.09, w * 0.48, w * 0.18), barPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
