@@ -2,6 +2,8 @@
 ///
 /// Paste your Gemini API key below. Get one free at:
 /// https://aistudio.google.com/apikey
+library;
+
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConfig {
@@ -16,6 +18,5 @@ class ApiConfig {
       'https://generativelanguage.googleapis.com/v1beta/models';
 
   /// Whether the API key is configured
-  static bool get isConfigured =>
-      geminiApiKey.isNotEmpty && !geminiApiKey.contains('AIzaSyAdUzW');
+  static bool get isConfigured => geminiApiKey.isNotEmpty;
 }

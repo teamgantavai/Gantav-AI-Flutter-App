@@ -5,7 +5,9 @@ import '../models/models.dart';
 import '../services/gemini_service.dart';
 import '../services/api_config.dart';
 import 'quiz_screen.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class LessonPlayerScreen extends StatefulWidget {
   final Lesson lesson;
@@ -36,52 +38,104 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   bool _includeTimestamp = false;
   bool _isFocusMode = false;
 
-  late YoutubePlayerController _youtubeController;
+  // Interaction states
+  bool _isLiked = false;
+  bool _isDisliked = false;
+  bool _isStarred = false;
+
+  late YoutubePlayerController _ytController;
 
   int get _currentLessonIndex =>
       widget.module.lessons.indexOf(widget.lesson) + 1;
 
-  bool _lessonCompletedEventFired = false;
-
   @override
   void initState() {
     super.initState();
-    _youtubeController = YoutubePlayerController(
-      initialVideoId: widget.lesson.youtubeVideoId,
-      flags: const YoutubePlayerFlags(
-        autoPlay: false,
-        hideControls: true,
+    _ytController = YoutubePlayerController.fromVideoId(
+      videoId: widget.lesson.youtubeVideoId,
+      autoPlay: false,
+      params: const YoutubePlayerParams(
+        showControls: true,
+        showFullscreenButton: true,
+        enableCaption: true,
+        playsInline: true,
       ),
     );
-    _youtubeController.addListener(_onPlayerStateChange);
+    _loadInteractionState();
   }
 
-  void _onPlayerStateChange() {
-    if (_lessonCompletedEventFired) return;
-    
-    final position = _youtubeController.value.position;
-    final duration = _youtubeController.metadata.duration;
-    
-    if (duration.inMilliseconds > 0 && position.inMilliseconds >= duration.inMilliseconds * 0.8) {
-      _lessonCompletedEventFired = true;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Lesson completed! XP awarded.'),
-            duration: Duration(seconds: 3),
-            backgroundColor: AppColors.teal,
-          ),
-        );
+  Future<void> _loadInteractionState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'lesson_${widget.lesson.id}';
+      final data = prefs.getString(key);
+      if (data != null) {
+        final map = jsonDecode(data) as Map<String, dynamic>;
+        setState(() {
+          _isLiked = map['liked'] ?? false;
+          _isDisliked = map['disliked'] ?? false;
+          _isStarred = map['starred'] ?? false;
+        });
       }
+    } catch (_) {}
+  }
+
+  Future<void> _saveInteractionState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'lesson_${widget.lesson.id}';
+      await prefs.setString(key, jsonEncode({
+        'liked': _isLiked,
+        'disliked': _isDisliked,
+        'starred': _isStarred,
+      }));
+    } catch (_) {}
+  }
+
+  void _toggleLike() {
+    setState(() {
+      _isLiked = !_isLiked;
+      if (_isLiked) _isDisliked = false;
+    });
+    _saveInteractionState();
+    if (_isLiked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('👍 Liked this lesson!'), duration: Duration(seconds: 1), backgroundColor: AppColors.teal),
+      );
+    }
+  }
+
+  void _toggleDislike() {
+    setState(() {
+      _isDisliked = !_isDisliked;
+      if (_isDisliked) _isLiked = false;
+    });
+    _saveInteractionState();
+  }
+
+  void _toggleStar() {
+    setState(() {
+      _isStarred = !_isStarred;
+    });
+    _saveInteractionState();
+    if (_isStarred) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⭐ Added to favorites!'), duration: Duration(seconds: 1), backgroundColor: AppColors.gold),
+      );
     }
   }
 
   @override
   void dispose() {
-    _youtubeController.dispose();
+    _ytController.close();
     _chatController.dispose();
     _chatScrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _setPlaybackSpeed(double speed) async {
+    setState(() => _playbackSpeed = speed);
+    await _ytController.setPlaybackRate(speed);
   }
 
   Future<void> _sendMessage() async {
@@ -89,7 +143,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     if (text.isEmpty || _isAiTyping) return;
 
     if (_includeTimestamp) {
-      final time = _youtubeController.value.position.inSeconds;
+      final time = (await _ytController.currentTime).toInt();
       final minutes = (time / 60).floor();
       final seconds = (time % 60).floor().toString().padLeft(2, '0');
       text = '[At $minutes:$seconds]: $text';
@@ -163,7 +217,16 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildVideoSection(isDark),
+              _buildVideoPlayer(),
+              // Tap to exit focus mode
+              GestureDetector(
+                onTap: () => setState(() => _isFocusMode = false),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  child: Text('Tap to exit focus mode',
+                    style: GoogleFonts.dmSans(fontSize: 12, color: Colors.white54)),
+                ),
+              ),
             ],
           ),
         ),
@@ -175,10 +238,10 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ─── Video Section (YouTube-style) ─────────────────────
+            // ─── Video Section ─────────────────────────────────
             _buildVideoSection(isDark),
 
-            // ─── Content or AI Chat ─────────────────────────────────
+            // ─── Content or AI Chat ────────────────────────────
             Expanded(
               child: _showAiChat
                   ? _buildAiChatPanel(isDark)
@@ -187,7 +250,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           ],
         ),
       ),
-      // ─── Bottom CTA ────────────────────────────────────────────
+      // ─── Bottom CTA ──────────────────────────────────────
       bottomNavigationBar: _buildBottomBar(isDark),
     );
   }
@@ -204,10 +267,8 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               child: Column(
                 children: [
                   _buildVideoSection(isDark, showTopBar: true),
-                  // Speed controls below video in landscape
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: _buildSpeedControls(isDark),
                   ),
                   const Spacer(),
@@ -221,15 +282,12 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                 decoration: BoxDecoration(
                   border: Border(
                     left: BorderSide(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : Colors.black.withValues(alpha: 0.06),
+                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
                     ),
                   ),
                 ),
                 child: Column(
                   children: [
-                    // Tab toggle
                     _buildContentToggle(isDark),
                     Expanded(
                       child: _showAiChat
@@ -246,12 +304,21 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// YouTube-style video thumbnail with controls
+  /// YouTube iframe player
+  Widget _buildVideoPlayer() {
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: YoutubePlayer(
+        controller: _ytController,
+      ),
+    );
+  }
+
+  /// Video section with top bar, player, and interaction bar
   Widget _buildVideoSection(bool isDark, {bool showTopBar = true}) {
     return Column(
       children: [
         if (showTopBar)
-          // ─── Top bar ─────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
             child: Row(
@@ -262,84 +329,24 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.black.withValues(alpha: 0.05),
+                    color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: Text(
                     '${widget.module.title} · $_currentLessonIndex/${widget.module.lessonCount}',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textMuted,
-                    ),
+                    style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textMuted),
                   ),
                 ),
               ],
             ),
           ),
 
-        // ─── Video Player ─────────────────────────────────────
-        AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 0),
-            child: Stack(
-              children: [
-                YoutubePlayer(
-                  controller: _youtubeController,
-                ),
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: () {
-                      if (_youtubeController.value.isPlaying) {
-                        _youtubeController.pause();
-                      } else {
-                        _youtubeController.play();
-                      }
-                    },
-                    child: Center(
-                      child: ValueListenableBuilder<YoutubePlayerValue>(
-                        valueListenable: _youtubeController,
-                        builder: (context, value, _) {
-                          return Icon(
-                            value.isPlaying ? Icons.pause : Icons.play_arrow,
-                            size: 64,
-                            color: Colors.white.withValues(alpha: value.isPlaying ? 0.0 : 0.8),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                // Simple Progress Bar
-                Positioned(
-                  bottom: 0, left: 0, right: 0,
-                  child: ValueListenableBuilder<YoutubePlayerValue>(
-                    valueListenable: _youtubeController,
-                    builder: (context, value, _) {
-                      final pos = value.position.inMilliseconds.toDouble();
-                      final dur = _youtubeController.metadata.duration.inMilliseconds.toDouble();
-                      final val = (dur > 0) ? (pos / dur).clamp(0.0, 1.0) : 0.0;
-                      return LinearProgressIndicator(
-                        value: val,
-                        minHeight: 3,
-                        backgroundColor: Colors.transparent,
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.violet),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        
-        // ─── Interaction Bar ──────────────────────────────────
+        // ─── YouTube iframe Player ───────────────────────────
+        _buildVideoPlayer(),
+
+        // ─── Interaction Bar ─────────────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -356,29 +363,37 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.thumb_up_outlined, size: 20),
-                    onPressed: () {},
-                    color: AppColors.textMuted,
+                  // Like button
+                  _InteractionButton(
+                    icon: _isLiked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                    isActive: _isLiked,
+                    activeColor: AppColors.violet,
+                    onTap: _toggleLike,
+                    tooltip: 'Like',
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.thumb_down_outlined, size: 20),
-                    onPressed: () {},
-                    color: AppColors.textMuted,
+                  // Dislike button
+                  _InteractionButton(
+                    icon: _isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined,
+                    isActive: _isDisliked,
+                    activeColor: AppColors.error,
+                    onTap: _toggleDislike,
+                    tooltip: 'Dislike',
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.star_border, size: 20),
-                    onPressed: () {},
-                    color: AppColors.textMuted,
+                  // Star / Favorite button
+                  _InteractionButton(
+                    icon: _isStarred ? Icons.star : Icons.star_border,
+                    isActive: _isStarred,
+                    activeColor: AppColors.gold,
+                    onTap: _toggleStar,
+                    tooltip: 'Favorite',
                   ),
-                  IconButton(
-                    icon: Icon(_isFocusMode ? Icons.center_focus_strong : Icons.center_focus_weak, size: 20),
-                    onPressed: () {
-                      setState(() {
-                         _isFocusMode = !_isFocusMode;
-                      });
-                    },
-                    color: _isFocusMode ? AppColors.violet : AppColors.textMuted,
+                  // Focus mode
+                  _InteractionButton(
+                    icon: _isFocusMode ? Icons.center_focus_strong : Icons.center_focus_weak,
+                    isActive: _isFocusMode,
+                    activeColor: AppColors.violet,
+                    onTap: () => setState(() => _isFocusMode = !_isFocusMode),
+                    tooltip: 'Focus mode',
                   ),
                 ],
               ),
@@ -389,7 +404,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// Toggle between Content and AI Chat tabs in portrait
+  /// Toggle between Content and AI Chat tabs
   Widget _buildContentToggle(bool isDark) {
     return Container(
       padding: const EdgeInsets.all(4),
@@ -419,8 +434,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
 
   /// Content panel (lesson info, chapters, speed controls)
   Widget _buildContentPanel(bool isDark) {
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -431,45 +445,29 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           if (!isLandscape) ...[
             const SizedBox(height: 14),
 
-            // Lesson title (YouTube style)
-            Text(
-              widget.lesson.title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
-                  ),
-            ),
+            Text(widget.lesson.title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, height: 1.3)),
             const SizedBox(height: 6),
 
-            // Course info row
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.violet.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(100),
                   ),
-                  child: Text(
-                    widget.course.category,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.violet,
-                    ),
-                  ),
+                  child: Text(widget.course.category,
+                    style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet)),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  widget.course.title,
-                  style: Theme.of(context).textTheme.bodySmall,
+                Expanded(
+                  child: Text(widget.course.title, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            // Content / AI Chat toggle
             _buildContentToggle(isDark),
             const SizedBox(height: 16),
 
@@ -478,21 +476,14 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             const SizedBox(height: 20),
           ] else ...[
             const SizedBox(height: 8),
-            Text(
-              widget.lesson.title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
+            Text(widget.lesson.title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
           ],
 
-          // ─── Chapters ───────────────────────────────────────
+          // ─── Chapters ──────────────────────────────────────
           if (widget.lesson.chapters.isNotEmpty) ...[
-            Text(
-              'Chapters',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Chapters', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             ...widget.lesson.chapters.asMap().entries.map((entry) {
               final i = entry.key;
@@ -515,7 +506,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// Speed control bar
+  /// Speed control bar — actually calls setPlaybackRate now
   Widget _buildSpeedControls(bool isDark) {
     return Container(
       padding: const EdgeInsets.all(3),
@@ -528,27 +519,19 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           final isSelected = speed == _playbackSpeed;
           return Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _playbackSpeed = speed),
+              onTap: () => _setPlaybackSpeed(speed),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppColors.violet
-                      : Colors.transparent,
+                  color: isSelected ? AppColors.violet : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Center(
-                  child: Text(
-                    '$speed×',
+                  child: Text('$speed×',
                     style: GoogleFonts.dmMono(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? Colors.white
-                          : AppColors.textMuted,
-                    ),
-                  ),
+                      fontSize: 12, fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.white : AppColors.textMuted)),
                 ),
               ),
             ),
@@ -558,13 +541,10 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// Up next section showing other lessons in this module
+  /// Up next section
   Widget _buildUpNext(bool isDark) {
     final currentIdx = widget.module.lessons.indexOf(widget.lesson);
-    final remaining = widget.module.lessons
-        .skip(currentIdx + 1)
-        .take(3)
-        .toList();
+    final remaining = widget.module.lessons.skip(currentIdx + 1).take(3).toList();
     if (remaining.isEmpty) return const SizedBox();
 
     return Column(
@@ -589,28 +569,20 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.darkSurface
-                    : AppColors.lightSurface,
+                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.04)
-                      : Colors.black.withValues(alpha: 0.04),
-                ),
+                border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04)),
               ),
               child: Row(
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: SizedBox(
-                      width: 72,
-                      height: 42,
+                      width: 72, height: 42,
                       child: Image.network(
                         'https://img.youtube.com/vi/${lesson.youtubeVideoId}/mqdefault.jpg',
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            Container(color: AppColors.darkSurface2),
+                        errorBuilder: (_, __, ___) => Container(color: AppColors.darkSurface2),
                       ),
                     ),
                   ),
@@ -619,24 +591,14 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          lesson.title,
+                        Text(lesson.title,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w500,
-                                color: isDark
-                                    ? AppColors.textLight
-                                    : AppColors.textDark,
-                              ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          lesson.duration,
-                          style: GoogleFonts.dmMono(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? AppColors.textLight : AppColors.textDark,
                           ),
-                        ),
+                          maxLines: 2, overflow: TextOverflow.ellipsis),
+                        Text(lesson.duration,
+                          style: GoogleFonts.dmMono(fontSize: 11, color: AppColors.textMuted)),
                       ],
                     ),
                   ),
@@ -649,44 +611,33 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// AI Chat panel — Gemini powered doubt resolution
+  /// AI Chat panel
   Widget _buildAiChatPanel(bool isDark) {
     return Column(
       children: [
-        // Chat messages
         Expanded(
           child: _chatMessages.isEmpty
               ? _buildChatEmptyState(isDark)
               : ListView.builder(
                   controller: _chatScrollController,
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
-                  itemCount:
-                      _chatMessages.length + (_isAiTyping ? 1 : 0),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  itemCount: _chatMessages.length + (_isAiTyping ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == _chatMessages.length && _isAiTyping) {
                       return _TypingIndicator(isDark: isDark);
                     }
-                    return _ChatBubble(
-                      message: _chatMessages[index],
-                      isDark: isDark,
-                    );
+                    return _ChatBubble(message: _chatMessages[index], isDark: isDark);
                   },
                 ),
         ),
 
         // Input
-        // Input Content
         Container(
           padding: const EdgeInsets.fromLTRB(14, 4, 8, 14),
           decoration: BoxDecoration(
             border: Border(
-              top: BorderSide(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
+              top: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
             ),
           ),
           child: Column(
@@ -695,21 +646,12 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                 children: [
                   Checkbox(
                     value: _includeTimestamp,
-                    onChanged: (val) {
-                      setState(() {
-                        _includeTimestamp = val ?? false;
-                      });
-                    },
+                    onChanged: (val) => setState(() => _includeTimestamp = val ?? false),
                     activeColor: AppColors.violet,
                     visualDensity: VisualDensity.compact,
                   ),
-                  Text(
-                    'Include video timestamp',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.white70 : Colors.black87,
-                    ),
-                  ),
+                  Text('Include video timestamp',
+                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
                 ],
               ),
               Row(
@@ -721,14 +663,10 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
                         hintText: 'Ask a doubt about this lesson...',
-                        hintStyle:
-                            const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                         filled: true,
-                        fillColor: isDark
-                            ? AppColors.darkSurface
-                            : AppColors.lightSurface,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
+                        fillColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
@@ -738,31 +676,24 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-              GestureDetector(
-                onTap: _sendMessage,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: _isAiTyping
-                        ? AppColors.textMuted.withValues(alpha: 0.3)
-                        : AppColors.violet,
-                    shape: BoxShape.circle,
+                  GestureDetector(
+                    onTap: _sendMessage,
+                    child: Container(
+                      width: 40, height: 40,
+                      decoration: BoxDecoration(
+                        color: _isAiTyping ? AppColors.textMuted.withValues(alpha: 0.3) : AppColors.violet,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
+                    ),
                   ),
-                  child: Icon(
-                    Icons.arrow_upward_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
-    ),
-  ],
-);
+        ),
+      ],
+    );
   }
 
   Widget _buildChatEmptyState(bool isDark) {
@@ -775,58 +706,47 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 56,
-              height: 56,
+              width: 56, height: 56,
               decoration: BoxDecoration(
                 color: AppColors.violet.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(Icons.auto_awesome,
-                  color: AppColors.violet, size: 28),
+              child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 28),
             ),
             const SizedBox(height: 16),
-            Text(
-              'AI Tutor',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            Text('AI Tutor', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 6),
             Text(
               isConfigured
                   ? 'Ask any doubt about "${widget.lesson.title}" and get instant help.'
-                  : 'Add your Gemini API key in api_config.dart to enable AI features.',
+                  : 'Add your Gemini API key in .env to enable AI features.',
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    height: 1.5,
-                  ),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5),
             ),
             if (isConfigured) ...[
               const SizedBox(height: 20),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 8, runSpacing: 8,
                 alignment: WrapAlignment.center,
                 children: [
                   _SuggestionChip(
                     text: 'Explain the key concepts',
                     onTap: () {
-                      _chatController.text =
-                          'Explain the key concepts in this lesson';
+                      _chatController.text = 'Explain the key concepts in this lesson';
                       _sendMessage();
                     },
                   ),
                   _SuggestionChip(
                     text: 'Give me a quick summary',
                     onTap: () {
-                      _chatController.text =
-                          'Give me a quick summary of this lesson';
+                      _chatController.text = 'Give me a quick summary of this lesson';
                       _sendMessage();
                     },
                   ),
                   _SuggestionChip(
                     text: 'Show me an example',
                     onTap: () {
-                      _chatController.text =
-                          'Show me a practical example related to this lesson';
+                      _chatController.text = 'Show me a practical example related to this lesson';
                       _sendMessage();
                     },
                   ),
@@ -846,28 +766,18 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkBg : AppColors.lightBg,
         border: Border(
-          top: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
+          top: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
         ),
       ),
       child: SizedBox(
-        width: double.infinity,
-        height: 48,
+        width: double.infinity, height: 48,
         child: ElevatedButton(
           onPressed: () => _completeAndContinue(context),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                'Complete & Continue',
-                style: GoogleFonts.dmSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              Text('Complete & Continue',
+                style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w600)),
               const SizedBox(width: 6),
               const Icon(Icons.arrow_forward, size: 16),
             ],
@@ -884,6 +794,47 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           lesson: widget.lesson,
           course: widget.course,
           module: widget.module,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Interaction Button Widget ──────────────────────────────────────────────
+
+class _InteractionButton extends StatelessWidget {
+  final IconData icon;
+  final bool isActive;
+  final Color activeColor;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  const _InteractionButton({
+    required this.icon,
+    required this.isActive,
+    required this.activeColor,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: Icon(
+              icon,
+              key: ValueKey(isActive),
+              size: 20,
+              color: isActive ? activeColor : AppColors.textMuted,
+            ),
+          ),
         ),
       ),
     );
@@ -920,18 +871,10 @@ class _TabButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: 15,
-                  color: isActive ? Colors.white : AppColors.textMuted),
+              Icon(icon, size: 15, color: isActive ? Colors.white : AppColors.textMuted),
               const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.dmSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppColors.textMuted,
-                ),
-              ),
+              Text(label,
+                style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: isActive ? Colors.white : AppColors.textMuted)),
             ],
           ),
         ),
@@ -961,62 +904,37 @@ class _ChapterTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: isActive
             ? AppColors.violet.withValues(alpha: 0.08)
-            : isDark
-                ? AppColors.darkSurface
-                : AppColors.lightSurface,
+            : isDark ? AppColors.darkSurface : AppColors.lightSurface,
         borderRadius: BorderRadius.circular(10),
         border: isActive
             ? Border.all(color: AppColors.violet.withValues(alpha: 0.2))
-            : Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.04)
-                    : Colors.black.withValues(alpha: 0.04),
-              ),
+            : Border.all(color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04)),
       ),
       child: Row(
         children: [
           Container(
-            width: 24,
-            height: 24,
+            width: 24, height: 24,
             decoration: BoxDecoration(
               color: isActive
                   ? AppColors.violet.withValues(alpha: 0.15)
-                  : isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : Colors.black.withValues(alpha: 0.05),
+                  : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Center(
-              child: Text(
-                '${index + 1}',
-                style: GoogleFonts.dmMono(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? AppColors.violet : AppColors.textMuted,
-                ),
-              ),
+              child: Text('${index + 1}',
+                style: GoogleFonts.dmMono(fontSize: 11, fontWeight: FontWeight.w600, color: isActive ? AppColors.violet : AppColors.textMuted)),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              chapter.title,
+            child: Text(chapter.title,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: isActive
-                        ? (isDark ? AppColors.textLight : AppColors.textDark)
-                        : AppColors.textMuted,
-                  ),
-            ),
+                fontWeight: FontWeight.w500,
+                color: isActive ? (isDark ? AppColors.textLight : AppColors.textDark) : AppColors.textMuted,
+              )),
           ),
-          Text(
-            chapter.timestamp,
-            style: GoogleFonts.dmMono(
-              fontSize: 11,
-              color: isActive ? AppColors.violet : AppColors.textMuted,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          Text(chapter.timestamp,
+            style: GoogleFonts.dmMono(fontSize: 11, color: isActive ? AppColors.violet : AppColors.textMuted, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -1032,35 +950,22 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Align(
-      alignment:
-          message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.78,
-        ),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
         decoration: BoxDecoration(
           color: message.isUser
               ? AppColors.violet
-              : isDark
-                  ? AppColors.darkSurface
-                  : AppColors.lightSurface,
+              : isDark ? AppColors.darkSurface : AppColors.lightSurface,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
-            bottomLeft:
-                message.isUser ? const Radius.circular(16) : Radius.zero,
-            bottomRight:
-                message.isUser ? Radius.zero : const Radius.circular(16),
+            bottomLeft: message.isUser ? const Radius.circular(16) : Radius.zero,
+            bottomRight: message.isUser ? Radius.zero : const Radius.circular(16),
           ),
-          border: message.isUser
-              ? null
-              : Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : Colors.black.withValues(alpha: 0.06),
-                ),
+          border: message.isUser ? null : Border.all(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1071,32 +976,18 @@ class _ChatBubble extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.auto_awesome,
-                        size: 12, color: AppColors.violet),
+                    Icon(Icons.auto_awesome, size: 12, color: AppColors.violet),
                     const SizedBox(width: 4),
-                    Text(
-                      'AI Tutor',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.violet,
-                      ),
-                    ),
+                    Text('AI Tutor',
+                      style: GoogleFonts.dmSans(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.violet)),
                   ],
                 ),
               ),
-            Text(
-              message.text,
+            Text(message.text,
               style: GoogleFonts.dmSans(
-                fontSize: 13,
-                height: 1.5,
-                color: message.isUser
-                    ? Colors.white
-                    : isDark
-                        ? AppColors.textLight
-                        : AppColors.textDark,
-              ),
-            ),
+                fontSize: 13, height: 1.5,
+                color: message.isUser ? Colors.white : isDark ? AppColors.textLight : AppColors.textDark,
+              )),
           ],
         ),
       ),
@@ -1119,10 +1010,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    )..repeat();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
   }
 
   @override
@@ -1139,19 +1027,13 @@ class _TypingIndicatorState extends State<_TypingIndicator>
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: widget.isDark
-              ? AppColors.darkSurface
-              : AppColors.lightSurface,
+          color: widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(16),
             topRight: Radius.circular(16),
             bottomRight: Radius.circular(16),
           ),
-          border: Border.all(
-            color: widget.isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
+          border: Border.all(color: widget.isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
         ),
         child: AnimatedBuilder(
           animation: _controller,
@@ -1162,8 +1044,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
                 final offset = (_controller.value + i * 0.2) % 1.0;
                 final opacity = (1 - (offset - 0.5).abs() * 2).clamp(0.3, 1.0);
                 return Container(
-                  width: 7,
-                  height: 7,
+                  width: 7, height: 7,
                   margin: const EdgeInsets.symmetric(horizontal: 2),
                   decoration: BoxDecoration(
                     color: AppColors.violet.withValues(alpha: opacity),
@@ -1194,22 +1075,12 @@ class _SuggestionChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.04),
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(100),
-          border: Border.all(
-            color: AppColors.violet.withValues(alpha: 0.2),
-          ),
+          border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
         ),
-        child: Text(
-          text,
-          style: GoogleFonts.dmSans(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.violet,
-          ),
-        ),
+        child: Text(text,
+          style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.violet)),
       ),
     );
   }

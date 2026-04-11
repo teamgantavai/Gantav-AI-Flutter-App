@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
+
+enum AuthStatus { unauthenticated, authenticated, skipped }
 
 /// Global app state using Provider — single source of truth
 class AppState extends ChangeNotifier {
@@ -15,16 +19,20 @@ class AppState extends ChangeNotifier {
   int _currentTabIndex = 0;
   Dream? _dream;
   final List<Course> _generatedCourses = [];
+  AuthStatus _authStatus = AuthStatus.unauthenticated;
+  bool _isGeneratingCourse = false;
+  String? _authError;
+
+  // Services
+  final FirestoreService _firestoreService = FirestoreService();
 
   // Getters
   ThemeMode get themeMode => _themeMode;
   UserProfile? get user => _user;
   String? get profileImagePath => _profileImagePath;
   List<Course> get courses => [..._courses, ..._generatedCourses];
-  List<Course> get activeCourses =>
-      courses.where((c) => c.isInProgress).toList();
-  List<Course> get suggestedCourses =>
-      courses.where((c) => !c.isInProgress).toList();
+  List<Course> get activeCourses => courses.where((c) => c.isInProgress).toList();
+  List<Course> get suggestedCourses => courses.where((c) => !c.isInProgress).toList();
   List<PulseEvent> get pulseEvents => _pulseEvents;
   bool get isLoading => _isLoading;
   int get currentTabIndex => _currentTabIndex;
@@ -32,43 +40,279 @@ class AppState extends ChangeNotifier {
   Dream? get dream => _dream;
   List<Course> get generatedCourses => _generatedCourses;
   bool get hasDream => _dream != null;
+  AuthStatus get authStatus => _authStatus;
+  bool get isAuthenticated => _authStatus != AuthStatus.unauthenticated;
+  bool get isGeneratingCourse => _isGeneratingCourse;
+  String? get authError => _authError;
 
   /// Initialize the app state
   Future<void> init() async {
     await _loadThemePreference();
+    await _loadAuthStatus();
     await _loadDream();
-    await _loadGeneratedCourses();
-    await refresh();
+
+    // Check if user is already logged in via Firebase
+    final firebaseUser = AuthService.currentUser;
+    if (firebaseUser != null && _authStatus == AuthStatus.unauthenticated) {
+      _authStatus = AuthStatus.authenticated;
+      await _loadUserFromFirebase(firebaseUser);
+    }
+
+    if (_authStatus != AuthStatus.unauthenticated) {
+      await refresh();
+    } else {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  /// Set the active bottom nav tab
+  /// Load user data from Firebase Auth user object
+  Future<void> _loadUserFromFirebase(dynamic firebaseUser) async {
+    // Try to load from Firestore first
+    final firestoreProfile = await _firestoreService.getUserProfile();
+    if (firestoreProfile != null) {
+      _user = firestoreProfile;
+    } else {
+      _user = UserProfile(
+        id: firebaseUser.uid,
+        name: firebaseUser.displayName ?? 'Learner',
+        handle: (firebaseUser.displayName ?? 'learner').toLowerCase().replaceAll(' ', ''),
+        email: firebaseUser.email ?? '',
+        gantavScore: 0,
+        streakDays: 0,
+        lessonsCompleted: 0,
+        quizzesPassed: 0,
+        weekActivity: List.filled(7, false),
+      );
+    }
+
+    // Load generated courses from Firestore
+    final storedCourses = await _firestoreService.getActiveCourses();
+    if (storedCourses.isNotEmpty) {
+      _generatedCourses.clear();
+      _generatedCourses.addAll(storedCourses);
+    }
+  }
+
+  /// Sign in with Google
+  Future<bool> signInWithGoogle() async {
+    _authError = null;
+    _isLoading = true;
+    notifyListeners();
+
+    final result = await AuthService.signInWithGoogle();
+
+    if (!result.success) {
+      _authError = result.error;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    _authStatus = AuthStatus.authenticated;
+    await _loadUserFromFirebase(result.user);
+    await _saveAuthStatus();
+
+    if (result.isNewUser) {
+      // Save new user to Firestore
+      if (_user != null) {
+        await _firestoreService.saveUserProfile(_user!);
+      }
+    }
+
+    _isLoading = false;
+    notifyListeners();
+    await refresh();
+    return true;
+  }
+
+  /// Sign in with email/password
+  Future<bool> signInWithEmail({required String email, required String password}) async {
+    _authError = null;
+    _isLoading = true;
+    notifyListeners();
+
+    final result = await AuthService.signInWithEmail(
+      email: email,
+      password: password,
+    );
+
+    if (!result.success) {
+      _authError = result.error;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    _authStatus = AuthStatus.authenticated;
+    await _loadUserFromFirebase(result.user);
+    await _saveAuthStatus();
+    _isLoading = false;
+    notifyListeners();
+    await refresh();
+    return true;
+  }
+
+  /// Sign up with email/password
+  Future<bool> signUpWithEmail({
+    required String email,
+    required String password,
+    required String name,
+  }) async {
+    _authError = null;
+    _isLoading = true;
+    notifyListeners();
+
+    final result = await AuthService.signUpWithEmail(
+      email: email,
+      password: password,
+      name: name,
+    );
+
+    if (!result.success) {
+      _authError = result.error;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
+    _authStatus = AuthStatus.authenticated;
+    _user = UserProfile(
+      id: result.user!.uid,
+      name: name,
+      handle: name.toLowerCase().replaceAll(' ', ''),
+      email: email,
+      gantavScore: 0,
+      streakDays: 0,
+      lessonsCompleted: 0,
+      quizzesPassed: 0,
+      weekActivity: List.filled(7, false),
+    );
+
+    await _firestoreService.saveUserProfile(_user!);
+    await _saveAuthStatus();
+    _isLoading = false;
+    notifyListeners();
+    await refresh();
+    return true;
+  }
+
+  /// Sign in and trigger course generation (legacy flow)
+  Future<void> signInAndGenerate({required String dream, String? name}) async {
+    _isLoading = true;
+    notifyListeners();
+
+    _authStatus = AuthStatus.authenticated;
+    _user = UserProfile(
+      id: AuthService.currentUser?.uid ?? 'user_001',
+      name: name ?? AuthService.currentUser?.displayName ?? 'Learner',
+      handle: (name ?? 'learner').toLowerCase().replaceAll(' ', ''),
+      email: AuthService.currentUser?.email ?? 'user@gantavai.com',
+      gantavScore: 0,
+      streakDays: 0,
+      lessonsCompleted: 0,
+      quizzesPassed: 0,
+      weekActivity: List.filled(7, false),
+    );
+
+    await _saveAuthStatus();
+    await setDream(dream);
+
+    // Generate course with AI
+    _isGeneratingCourse = true;
+    _isLoading = false;
+    notifyListeners();
+
+    await _generateCourse(dream);
+    await refresh();
+
+    _isGeneratingCourse = false;
+    notifyListeners();
+  }
+
+  /// Skip auth — use app without sign in
+  Future<void> skipAuth() async {
+    _authStatus = AuthStatus.skipped;
+    _user = UserProfile.mock();
+    await _saveAuthStatus();
+    await refresh();
+    notifyListeners();
+  }
+
+  Future<void> _generateCourse(String dream) async {
+    final course = await ApiService.suggestPath(dream);
+    if (course != null) {
+      _generatedCourses.add(course);
+      // Save to Firestore
+      await _firestoreService.saveActiveCourse(course);
+      notifyListeners();
+    }
+  }
+
+  /// Generate and save a course from a category prompt
+  Future<Course?> generateCourseFromCategory(String prompt) async {
+    _isGeneratingCourse = true;
+    notifyListeners();
+
+    final course = await ApiService.suggestPath(prompt);
+    if (course != null) {
+      _generatedCourses.add(course);
+      await _firestoreService.saveActiveCourse(course);
+    }
+
+    _isGeneratingCourse = false;
+    notifyListeners();
+    return course;
+  }
+
+  Future<void> _saveAuthStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('authStatus', _authStatus.name);
+      if (_user != null) {
+        await prefs.setString('user', jsonEncode(_user!.toJson()));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadAuthStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final status = prefs.getString('authStatus');
+      if (status == AuthStatus.authenticated.name) {
+        _authStatus = AuthStatus.authenticated;
+        final userJson = prefs.getString('user');
+        if (userJson != null) {
+          _user = UserProfile.fromJson(jsonDecode(userJson));
+        }
+      } else if (status == AuthStatus.skipped.name) {
+        _authStatus = AuthStatus.skipped;
+        _user = UserProfile.mock();
+      }
+    } catch (_) {}
+  }
+
   void setTabIndex(int index) {
     _currentTabIndex = index;
     notifyListeners();
   }
 
-  /// Toggle between dark and light theme
   Future<void> toggleTheme() async {
-    _themeMode =
-        _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', _themeMode == ThemeMode.dark);
   }
 
-  /// Load saved theme preference
   Future<void> _loadThemePreference() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final isDark = prefs.getBool('isDarkMode') ?? true;
       _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
       notifyListeners();
-    } catch (_) {
-      // Default to dark mode
-    }
+    } catch (_) {}
   }
 
-  /// Set the user's dream/goal
   Future<void> setDream(String dreamText, {String? courseId}) async {
     _dream = Dream(
       text: dreamText,
@@ -79,7 +323,6 @@ class AppState extends ChangeNotifier {
     await _saveDream();
   }
 
-  /// Clear the dream
   Future<void> clearDream() async {
     _dream = null;
     notifyListeners();
@@ -87,14 +330,12 @@ class AppState extends ChangeNotifier {
     await prefs.remove('dream');
   }
 
-  /// Add an AI-generated course
   Future<void> addGeneratedCourse(Course course) async {
     _generatedCourses.add(course);
+    await _firestoreService.saveActiveCourse(course);
     notifyListeners();
-    await _saveGeneratedCourses();
   }
 
-  /// Save dream to SharedPreferences
   Future<void> _saveDream() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -104,7 +345,6 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Load dream from SharedPreferences
   Future<void> _loadDream() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -115,30 +355,19 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Save generated courses to SharedPreferences
-  Future<void> _saveGeneratedCourses() async {
-    // For now, generated courses are only in memory
-    // Could be persisted with JSON serialization in the future
-  }
-
-  /// Load generated courses from SharedPreferences
-  Future<void> _loadGeneratedCourses() async {
-    // Placeholder for future persistence
-  }
-
-  /// Refresh all data — pull to refresh
   Future<void> refresh() async {
     _isLoading = true;
     notifyListeners();
 
-    // Parallel fetches with mock fallback
     final results = await Future.wait([
       ApiService.fetchUser('user_001'),
       ApiService.fetchUserCourses('user_001'),
       ApiService.fetchPulse('user_001'),
     ]);
 
-    _user = results[0] as UserProfile;
+    if (_user == null || _authStatus == AuthStatus.skipped) {
+      _user = results[0] as UserProfile;
+    }
     _courses = results[1] as List<Course>;
     _pulseEvents = results[2] as List<PulseEvent>;
 
@@ -154,11 +383,11 @@ class AppState extends ChangeNotifier {
   void updateUserProfile({required String name, required String handle}) {
     if (_user != null) {
       _user = _user!.copyWith(name: name, handle: handle);
+      _firestoreService.saveUserProfile(_user!);
       notifyListeners();
     }
   }
 
-  /// Get greeting based on time of day
   String get greeting {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning';
@@ -166,7 +395,6 @@ class AppState extends ChangeNotifier {
     return 'Good evening';
   }
 
-  /// Get the current pulse event to display (cycles)
   int _pulseIndex = 0;
   PulseEvent? get currentPulseEvent {
     if (_pulseEvents.isEmpty) return null;
@@ -175,6 +403,24 @@ class AppState extends ChangeNotifier {
 
   void nextPulseEvent() {
     _pulseIndex++;
+    notifyListeners();
+  }
+
+  void clearAuthError() {
+    _authError = null;
+    notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    await AuthService.signOut();
+    _authStatus = AuthStatus.unauthenticated;
+    _user = null;
+    _dream = null;
+    _generatedCourses.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('authStatus');
+    await prefs.remove('user');
+    await prefs.remove('dream');
     notifyListeners();
   }
 }

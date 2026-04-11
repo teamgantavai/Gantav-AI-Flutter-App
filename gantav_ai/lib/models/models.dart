@@ -38,15 +38,15 @@ class UserProfile {
     String? email,
   }) {
     return UserProfile(
-      id: this.id,
+      id: id,
       name: name ?? this.name,
       handle: handle ?? this.handle,
       email: email ?? this.email,
-      gantavScore: this.gantavScore,
-      streakDays: this.streakDays,
-      lessonsCompleted: this.lessonsCompleted,
-      quizzesPassed: this.quizzesPassed,
-      weekActivity: this.weekActivity,
+      gantavScore: gantavScore,
+      streakDays: streakDays,
+      lessonsCompleted: lessonsCompleted,
+      quizzesPassed: quizzesPassed,
+      weekActivity: weekActivity,
     );
   }
 

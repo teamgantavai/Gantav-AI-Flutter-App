@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import 'api_config.dart';
@@ -13,7 +14,10 @@ class GeminiService {
     required String topic,
     int count = 5,
   }) async {
-    if (!ApiConfig.isConfigured) return QuizQuestion.mockQuestions();
+    if (!ApiConfig.isConfigured) {
+      debugPrint('[Gemini] API key not configured — falling back to mock quiz');
+      return QuizQuestion.mockQuestions();
+    }
 
     final prompt = '''
 You are an expert educator creating quiz questions for a learning app.
@@ -38,13 +42,17 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
 ''';
 
     try {
-      final response = await _callGemini(prompt);
-      if (response == null) return QuizQuestion.mockQuestions();
+      final response = await callGemini(prompt);
+      if (response == null) {
+        debugPrint('[Gemini] Quiz generation returned null — using mock');
+        return QuizQuestion.mockQuestions();
+      }
 
-      final jsonStr = _extractJson(response);
+      final jsonStr = extractJson(response);
       final List<dynamic> data = jsonDecode(jsonStr);
       return data.map((json) => QuizQuestion.fromJson(json)).toList();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Gemini] Quiz generation error: $e');
       return QuizQuestion.mockQuestions();
     }
   }
@@ -57,7 +65,7 @@ Return ONLY valid JSON in this exact format (no markdown, no code fences):
     List<ChatMessage> history = const [],
   }) async {
     if (!ApiConfig.isConfigured) {
-      return 'Please configure your Gemini API key in api_config.dart to use AI features.';
+      return 'Please configure your Gemini API key in .env to use AI features.';
     }
 
     final historyText = history.map((m) {
@@ -79,9 +87,10 @@ Provide a clear, helpful answer. Use bullet points or code examples when relevan
 ''';
 
     try {
-      final response = await _callGemini(prompt);
+      final response = await callGemini(prompt);
       return response ?? 'Sorry, I could not process your question. Please try again.';
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Gemini] Doubt error: $e');
       return 'Something went wrong. Please check your internet connection and try again.';
     }
   }
@@ -90,7 +99,10 @@ Provide a clear, helpful answer. Use bullet points or code examples when relevan
   static Future<Course?> generateLearningPath({
     required String dream,
   }) async {
-    if (!ApiConfig.isConfigured) return null;
+    if (!ApiConfig.isConfigured) {
+      debugPrint('[Gemini] API key not configured — cannot generate path');
+      return null;
+    }
 
     final prompt = '''
 You are an expert curriculum designer. A student wants to achieve this goal: "$dream"
@@ -144,19 +156,23 @@ Important: Use realistic YouTube video IDs from well-known educational channels 
 ''';
 
     try {
-      final response = await _callGemini(prompt);
-      if (response == null) return null;
+      final response = await callGemini(prompt);
+      if (response == null) {
+        debugPrint('[Gemini] Learning path generation returned null');
+        return null;
+      }
 
-      final jsonStr = _extractJson(response);
+      final jsonStr = extractJson(response);
       final Map<String, dynamic> data = jsonDecode(jsonStr);
       return Course.fromJson(data);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Gemini] Learning path error: $e');
       return null;
     }
   }
 
-  /// Core Gemini API call
-  static Future<String?> _callGemini(String prompt) async {
+  /// Core Gemini API call — made public for other services to use
+  static Future<String?> callGemini(String prompt) async {
     final url = Uri.parse(
       '${ApiConfig.geminiBaseUrl}/${ApiConfig.geminiModel}:generateContent?key=${ApiConfig.geminiApiKey}',
     );
@@ -175,31 +191,39 @@ Important: Use realistic YouTube video IDs from well-known educational channels 
       },
     });
 
-    final response = await http
-        .post(
-          url,
-          headers: {'Content-Type': 'application/json'},
-          body: body,
-        )
-        .timeout(const Duration(seconds: 30));
+    try {
+      debugPrint('[Gemini] Calling API...');
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 45));
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final candidates = data['candidates'] as List?;
-      if (candidates != null && candidates.isNotEmpty) {
-        final content = candidates[0]['content'];
-        final parts = content['parts'] as List?;
-        if (parts != null && parts.isNotEmpty) {
-          return parts[0]['text'] as String?;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final candidates = data['candidates'] as List?;
+        if (candidates != null && candidates.isNotEmpty) {
+          final content = candidates[0]['content'];
+          final parts = content['parts'] as List?;
+          if (parts != null && parts.isNotEmpty) {
+            debugPrint('[Gemini] Success — got response');
+            return parts[0]['text'] as String?;
+          }
         }
+        debugPrint('[Gemini] Response had no content parts');
+      } else {
+        debugPrint('[Gemini] API error ${response.statusCode}: ${response.body}');
       }
+    } catch (e) {
+      debugPrint('[Gemini] Network error: $e');
     }
     return null;
   }
 
   /// Extract JSON from a response that might contain markdown code fences
-  static String _extractJson(String text) {
-    // Remove markdown code fences if present
+  static String extractJson(String text) {
     var cleaned = text.trim();
     if (cleaned.startsWith('```json')) {
       cleaned = cleaned.substring(7);

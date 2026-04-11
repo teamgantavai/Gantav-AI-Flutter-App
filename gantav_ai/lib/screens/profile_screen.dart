@@ -430,9 +430,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   height: 50,
                   child: OutlinedButton.icon(
                     onPressed: () {
-                      Share.share(
-                        'Check out my learning profile on Gantav AI! \\nhttps://gantav.ai/u/${user.handle}',
-                        subject: 'My Gantav AI Profile',
+                      SharePlus.instance.share(
+                        ShareParams(
+                          text: 'Check out my learning profile on Gantav AI! \nhttps://gantav.ai/u/${user.handle}',
+                          subject: 'My Gantav AI Profile',
+                        ),
                       );
                     },
                     icon: const Icon(Icons.share_outlined, size: 18),

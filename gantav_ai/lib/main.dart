@@ -7,6 +7,7 @@ import 'screens/home_screen.dart';
 import 'screens/explore_screen.dart';
 import 'screens/progress_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/auth_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
@@ -15,9 +16,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }
@@ -42,9 +41,251 @@ class GantavAIApp extends StatelessWidget {
           theme: AppTheme.lightTheme(),
           darkTheme: AppTheme.darkTheme(),
           themeMode: appState.themeMode,
-          home: const AppShell(),
+          home: const _AppRouter(),
         );
       },
+    );
+  }
+}
+
+class _AppRouter extends StatelessWidget {
+  const _AppRouter();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AppState>(
+      builder: (context, appState, _) {
+        // Still loading initial state
+        if (appState.isLoading && !appState.isAuthenticated) {
+          return const _SplashScreen();
+        }
+
+        // Not authenticated → onboarding
+        if (!appState.isAuthenticated) {
+          return const AuthScreen();
+        }
+
+        // Generating course (psychological hook — show progress)
+        if (appState.isGeneratingCourse) {
+          return const _GeneratingScreen();
+        }
+
+        // Main app
+        return const AppShell();
+      },
+    );
+  }
+}
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 72, height: 72,
+              child: CustomPaint(painter: _LogoPainter()),
+            ),
+            const SizedBox(height: 16),
+            Text('Gantav AI',
+              style: GoogleFonts.dmSans(
+                fontSize: 24, fontWeight: FontWeight.w800,
+                color: isDark ? AppColors.textLight : AppColors.textDark,
+              )),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown while AI generates the course — psychological hook
+class _GeneratingScreen extends StatefulWidget {
+  const _GeneratingScreen();
+
+  @override
+  State<_GeneratingScreen> createState() => _GeneratingScreenState();
+}
+
+class _GeneratingScreenState extends State<_GeneratingScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _pulseCtrl;
+  late AnimationController _progressCtrl;
+  late Animation<double> _progressAnim;
+
+  final List<String> _steps = [
+    'Analysing your dream...',
+    'Searching YouTube for the best content...',
+    'Curating top-rated videos...',
+    'Structuring your learning modules...',
+    'Building your personalised path...',
+    'Almost ready! ✨',
+  ];
+  int _stepIdx = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat(reverse: true);
+    _progressCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 6));
+    _progressAnim = Tween<double>(begin: 0, end: 0.92).animate(CurvedAnimation(parent: _progressCtrl, curve: Curves.easeInOut));
+    _progressCtrl.forward();
+
+    // Cycle through steps
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(milliseconds: 1100));
+      if (!mounted) return false;
+      setState(() => _stepIdx = (_stepIdx + 1) % _steps.length);
+      return true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    _progressCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dream = context.watch<AppState>().dream?.text ?? '';
+
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Animated logo
+              AnimatedBuilder(
+                animation: _pulseCtrl,
+                builder: (_, __) => Transform.scale(
+                  scale: 1.0 + _pulseCtrl.value * 0.06,
+                  child: SizedBox(
+                    width: 80, height: 80,
+                    child: CustomPaint(painter: _LogoPainter()),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              Text('Building your path',
+                style: GoogleFonts.dmSans(
+                  fontSize: 28, fontWeight: FontWeight.w800,
+                  color: isDark ? AppColors.textLight : AppColors.textDark,
+                  letterSpacing: -0.5,
+                )),
+
+              const SizedBox(height: 12),
+
+              // Dream chip
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.gold.withValues(alpha:0.1),
+                  borderRadius: BorderRadius.circular(100),
+                  border: Border.all(color: AppColors.gold.withValues(alpha:0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.flag_outlined, color: AppColors.gold, size: 16),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(dream,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13, fontWeight: FontWeight.w600,
+                          color: AppColors.gold,
+                        ),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 48),
+
+              // Progress bar
+              AnimatedBuilder(
+                animation: _progressAnim,
+                builder: (_, __) {
+                  return Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(100),
+                        child: LinearProgressIndicator(
+                          value: _progressAnim.value,
+                          minHeight: 6,
+                          backgroundColor: isDark
+                              ? AppColors.darkSurface2
+                              : AppColors.lightSurface2,
+                          valueColor: const AlwaysStoppedAnimation(AppColors.violet),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        child: Text(
+                          _steps[_stepIdx],
+                          key: ValueKey(_stepIdx),
+                          style: GoogleFonts.dmSans(
+                            fontSize: 15,
+                            color: isDark ? AppColors.textLightSub : AppColors.textDarkSub,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+
+              const SizedBox(height: 64),
+
+              // Social proof
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _ProofBadge(icon: Icons.people_outline, text: '10K+ learners'),
+                  const SizedBox(width: 24),
+                  _ProofBadge(icon: Icons.star_outline, text: '4.9 rating'),
+                  const SizedBox(width: 24),
+                  _ProofBadge(icon: Icons.play_circle_outline, text: 'YouTube powered'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProofBadge extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _ProofBadge({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: AppColors.textMuted, size: 18),
+        const SizedBox(height: 4),
+        Text(text, style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+      ],
     );
   }
 }
@@ -70,167 +311,40 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final useRail = isLandscape && screenWidth > 600;
-
     return Consumer<AppState>(
       builder: (context, appState, _) {
-        if (useRail) {
-          return _buildWithRail(context, appState, isDark);
-        }
-        return _buildWithBottomNav(context, appState, isDark);
+        return Scaffold(
+          backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+          body: SafeArea(
+            child: Column(
+              children: [
+                _GantavHeader(isDark: isDark),
+                Expanded(
+                  child: IndexedStack(
+                    index: appState.currentTabIndex,
+                    children: _screens,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          bottomNavigationBar: _buildBottomNav(context, appState, isDark),
+        );
       },
     );
   }
 
-  /// Standard portrait layout with bottom navigation
-  Widget _buildWithBottomNav(
-      BuildContext context, AppState appState, bool isDark) {
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ─── Header ──────────────────────────────────────────
-            _GantavHeader(isDark: isDark),
-            // ─── Content ─────────────────────────────────────────
-            Expanded(
-              child: IndexedStack(
-                index: appState.currentTabIndex,
-                children: _screens,
-              ),
-            ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNav(context, appState, isDark),
-    );
-  }
-
-  /// Landscape layout with side rail navigation
-  Widget _buildWithRail(
-      BuildContext context, AppState appState, bool isDark) {
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      body: SafeArea(
-        child: Row(
-          children: [
-            // ─── Side Rail ──────────────────────────────────────
-            _buildSideRail(context, appState, isDark),
-            // ─── Content ────────────────────────────────────────
-            Expanded(
-              child: Column(
-                children: [
-                  _GantavHeader(isDark: isDark, compact: true),
-                  Expanded(
-                    child: IndexedStack(
-                      index: appState.currentTabIndex,
-                      children: _screens,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSideRail(
-      BuildContext context, AppState appState, bool isDark) {
-    return Container(
-      width: 72,
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        border: Border(
-          right: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-        ),
-      ),
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          // Logo
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 36,
-              height: 36,
-              fit: BoxFit.cover,
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Nav items
-          ..._navItems.asMap().entries.map((entry) {
-            final i = entry.key;
-            final item = entry.value;
-            final isActive = appState.currentTabIndex == i;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: GestureDetector(
-                onTap: () => appState.setTabIndex(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? AppColors.violet.withValues(alpha: 0.12)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        isActive ? item.activeIcon : item.icon,
-                        size: 22,
-                        color:
-                            isActive ? AppColors.violet : AppColors.textMuted,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item.label,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: isActive
-                              ? AppColors.violet
-                              : AppColors.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomNav(
-      BuildContext context, AppState appState, bool isDark) {
+  Widget _buildBottomNav(BuildContext context, AppState appState, bool isDark) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         border: Border(
           top: BorderSide(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
           ),
         ),
       ),
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      padding: const EdgeInsets.only(top: 10, bottom: 10),
       child: SafeArea(
         top: false,
         child: Row(
@@ -250,7 +364,7 @@ class AppShell extends StatelessWidget {
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 250),
                       curve: Curves.easeOutCubic,
-                      width: isActive ? 48 : 0,
+                      width: isActive ? 32 : 0,
                       height: 3,
                       margin: const EdgeInsets.only(bottom: 6),
                       decoration: BoxDecoration(
@@ -260,19 +374,16 @@ class AppShell extends StatelessWidget {
                     ),
                     Icon(
                       isActive ? item.activeIcon : item.icon,
-                      size: 24,
-                      color:
-                          isActive ? AppColors.violet : AppColors.textMuted,
+                      size: 22,
+                      color: isActive ? AppColors.violet : AppColors.textMuted,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       item.label,
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        fontWeight:
-                            isActive ? FontWeight.w600 : FontWeight.w400,
-                        color:
-                            isActive ? AppColors.violet : AppColors.textMuted,
+                        fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                        color: isActive ? AppColors.violet : AppColors.textMuted,
                       ),
                     ),
                   ],
@@ -286,55 +397,73 @@ class AppShell extends StatelessWidget {
   }
 }
 
-/// Gantav AI header with logo, title, and theme toggle
 class _GantavHeader extends StatelessWidget {
   final bool isDark;
-  final bool compact;
-
-  const _GantavHeader({required this.isDark, this.compact = false});
+  const _GantavHeader({required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        compact ? 12 : 20,
-        compact ? 8 : 12,
-        compact ? 12 : 16,
-        compact ? 4 : 8,
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 14, 16, 10),
       child: Row(
         children: [
-          // Logo
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: compact ? 28 : 32,
-              height: compact ? 28 : 32,
-              fit: BoxFit.cover,
-            ),
+          SizedBox(
+            width: 32, height: 32,
+            child: CustomPaint(painter: _LogoPainter()),
           ),
-          SizedBox(width: compact ? 8 : 10),
-          Text(
-            'Gantav AI',
+          const SizedBox(width: 10),
+          Text('Gantav',
             style: GoogleFonts.dmSans(
-              fontSize: compact ? 16 : 18,
-              fontWeight: FontWeight.w700,
+              fontSize: 18, fontWeight: FontWeight.w800,
               color: isDark ? AppColors.textLight : AppColors.textDark,
-            ),
-          ),
-          const Spacer(),
-          // Profile setting gear will go in the profile tab instead
+            )),
+          Text(' AI',
+            style: GoogleFonts.dmSans(
+              fontSize: 18, fontWeight: FontWeight.w300,
+              color: AppColors.violetLight,
+            )),
         ],
       ),
     );
   }
 }
 
+class _LogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bg = Paint()..color = const Color(0xFF070C1A);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        Radius.circular(size.width * 0.24),
+      ),
+      bg,
+    );
+    final stroke = Paint()
+      ..color = Colors.white
+      ..strokeWidth = size.width * 0.068
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final path = Path();
+    final cx = size.width * 0.54;
+    final cy = size.height * 0.46;
+    final r = size.width * 0.265;
+    path.addArc(
+      Rect.fromCircle(center: Offset(cx, cy), radius: r),
+      3.14159 * 0.35, 3.14159 * 1.7,
+    );
+    path.lineTo(cx, cy);
+    canvas.drawPath(path, stroke);
+    canvas.drawCircle(Offset(cx, cy), size.width * 0.048, Paint()..color = AppColors.gold);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
 class _NavItem {
   final IconData activeIcon;
   final IconData icon;
   final String label;
-
   const _NavItem(this.activeIcon, this.icon, this.label);
 }

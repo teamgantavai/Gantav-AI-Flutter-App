@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
+import '../services/recommendation_service.dart';
 import '../widgets/widgets.dart';
 import 'course_detail_screen.dart';
 import 'dream_input_screen.dart';
@@ -17,6 +19,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Timer? _pulseTimer;
+  List<RecommendationVideo> _recommendations = [];
+  bool _loadingRecs = true;
 
   @override
   void initState() {
@@ -27,6 +31,21 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<AppState>().nextPulseEvent();
       }
     });
+    _loadRecommendations();
+  }
+
+  Future<void> _loadRecommendations() async {
+    final appState = context.read<AppState>();
+    final recs = await RecommendationService.fetchRecommendations(
+      dream: appState.dream?.text,
+      activeCategories: appState.activeCourses.map((c) => c.category).toList(),
+    );
+    if (mounted) {
+      setState(() {
+        _recommendations = recs;
+        _loadingRecs = false;
+      });
+    }
   }
 
   @override
@@ -50,7 +69,10 @@ class _HomeScreenState extends State<HomeScreen> {
         if (user == null) return const SizedBox();
 
         return RefreshIndicator(
-          onRefresh: appState.refresh,
+          onRefresh: () async {
+            await appState.refresh();
+            await _loadRecommendations();
+          },
           color: AppColors.violet,
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(
@@ -162,6 +184,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ],
+
+              // ─── Today's Picks (Daily Recommendations) ────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: SectionHeader(
+                    title: "Today's Picks 🔥",
+                    actionText: 'Refresh',
+                    onAction: () async {
+                      setState(() => _loadingRecs = true);
+                      // Clear cache to force refresh
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.remove('recommendation_date');
+                      await _loadRecommendations();
+                    },
+                  ),
+                ),
+              ),
+              if (_loadingRecs)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.violet)),
+                  ),
+                )
+              else
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 200,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: _recommendations.length,
+                      itemBuilder: (context, index) {
+                        final rec = _recommendations[index];
+                        return _RecommendationCard(rec: rec);
+                      },
+                    ),
+                  ),
+                ),
 
               // ─── Suggested for you ────────────────────────────────
               SliverToBoxAdapter(
@@ -276,6 +339,104 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+  }
+}
+
+/// Recommendation video card
+class _RecommendationCard extends StatelessWidget {
+  final RecommendationVideo rec;
+  const _RecommendationCard({required this.rec});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: 240,
+      margin: const EdgeInsets.only(right: 14, top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Thumbnail
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+            child: Stack(
+              children: [
+                Image.network(
+                  rec.thumbnailUrl,
+                  height: 110,
+                  width: 240,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 110, width: 240,
+                    color: AppColors.darkSurface2,
+                    child: const Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 32),
+                  ),
+                ),
+                // Duration badge
+                Positioned(
+                  bottom: 6, right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(rec.duration,
+                      style: GoogleFonts.dmMono(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                // Category badge
+                Positioned(
+                  top: 6, left: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.violet.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(rec.category,
+                      style: GoogleFonts.dmSans(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Info
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(rec.title,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12, fontWeight: FontWeight.w600, height: 1.3,
+                    color: isDark ? AppColors.textLight : AppColors.textDark,
+                  ),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Text(rec.channel,
+                  style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
