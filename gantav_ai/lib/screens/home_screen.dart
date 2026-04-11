@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
@@ -10,6 +11,8 @@ import '../services/recommendation_service.dart';
 import '../widgets/widgets.dart';
 import 'course_detail_screen.dart';
 import 'dream_input_screen.dart';
+import 'lesson_player_screen.dart';
+import '../models/models.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -376,42 +379,76 @@ class _RecommendationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final videoId = rec['video_id'] ?? '';
-    final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/mqdefault.jpg';
+    final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
 
-    return Container(
-      width: 240,
-      margin: const EdgeInsets.only(right: 14, top: 8, bottom: 8),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+    return GestureDetector(
+      onTap: () {
+        if (videoId.isEmpty) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => LessonPlayerScreen(
+              course: Course(
+                id: 'rec_$videoId',
+                title: 'Recommendation: ${rec['category'] ?? 'Pick'}',
+                description: 'A recommended video based on your interests.',
+                category: rec['category'] ?? '',
+                thumbnailUrl: thumbnailUrl,
+              ),
+              module: const Module(
+                id: 'mod_rec',
+                title: 'Recommendations',
+                lessonCount: 1,
+              ),
+              lesson: Lesson(
+                id: 'les_rec_$videoId',
+                title: rec['title'] ?? 'Video',
+                duration: rec['duration'] ?? '',
+                youtubeVideoId: videoId,
+              ),
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        );
+      },
+      child: Container(
+        width: 240,
+        margin: const EdgeInsets.only(right: 14, top: 8, bottom: 8),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Thumbnail
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
             child: Stack(
               children: [
-                Image.network(
-                  thumbnailUrl,
+                CachedNetworkImage(
+                  imageUrl: 'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
                   height: 110,
                   width: 240,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 110, width: 240,
-                    color: AppColors.darkSurface2,
-                    child: const Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 32),
+                  errorWidget: (context, url, error) => CachedNetworkImage(
+                    imageUrl: 'https://img.youtube.com/vi/$videoId/0.jpg',
+                    height: 110,
+                    width: 240,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Container(
+                      height: 110, width: 240,
+                      color: AppColors.darkSurface2,
+                      child: const Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 32),
+                    ),
                   ),
                 ),
                 // Duration badge
@@ -463,8 +500,9 @@ class _RecommendationCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 /// Dream card — shows current dream or prompts to set one

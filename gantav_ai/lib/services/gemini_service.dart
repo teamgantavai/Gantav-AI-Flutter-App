@@ -240,7 +240,7 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
       attempts++;
       try {
         debugPrint('[AI] Trying ${provider.name} for ${task.name}...');
-        final result = await _callProvider(
+        final result = await _callProviderWithBackoff(
           provider,
           prompt,
           maxTokens: maxTokens,
@@ -264,6 +264,44 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
     }
 
     debugPrint('[AI] All providers exhausted for task: ${task.name}');
+    return null;
+  }
+
+  /// Dispatches to the correct provider implementation with exponential backoff on rate limits
+  static Future<String?> _callProviderWithBackoff(
+    AIProvider provider,
+    String prompt, {
+    int maxTokens = 2048,
+    double temperature = 0.7,
+  }) async {
+    int attempts = 0;
+    const maxRetries = 3;
+
+    while (attempts < maxRetries) {
+      attempts++;
+      try {
+        return await _callProvider(
+          provider,
+          prompt,
+          maxTokens: maxTokens,
+          temperature: temperature,
+        );
+      } catch (e) {
+        final errorString = e.toString();
+        if (errorString.contains('Rate limited') || errorString.contains('429')) {
+          if (attempts >= maxRetries) {
+            debugPrint('[AI] ${provider.name} rate limited after $maxRetries attempts.');
+            _setRateLimited(provider);
+            rethrow;
+          }
+          final delaySeconds = 2 * attempts; // e.g., 2s, 4s
+          debugPrint('[AI] ${provider.name} rate limited. Retrying in ${delaySeconds}s (Attempt $attempts/$maxRetries)...');
+          await Future.delayed(Duration(seconds: delaySeconds));
+        } else {
+          rethrow;
+        }
+      }
+    }
     return null;
   }
 
@@ -336,7 +374,6 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
     } else {
       debugPrint('[Gemini] API status ${response.statusCode}');
       if (response.statusCode == 429) {
-        _setRateLimited(AIProvider.gemini);
         throw Exception('Rate limited');
       }
       if (response.statusCode >= 500) {
@@ -385,7 +422,6 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
     } else {
       debugPrint('[Groq] API status ${response.statusCode}');
       if (response.statusCode == 429) {
-        _setRateLimited(AIProvider.groq);
         throw Exception('Rate limited');
       }
     }
@@ -433,7 +469,6 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
     } else {
       debugPrint('[OpenRouter] API status ${response.statusCode}');
       if (response.statusCode == 429) {
-        _setRateLimited(AIProvider.openRouter);
         throw Exception('Rate limited');
       }
     }

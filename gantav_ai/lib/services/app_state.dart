@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import '../services/gemini_service.dart';
 
 enum AuthStatus { unauthenticated, authenticated, skipped }
 
@@ -24,6 +25,8 @@ class AppState extends ChangeNotifier {
   bool _isLoadingMore = false;
   int _courseBatchIndex = 0;
   String? _authError;
+  String? _notificationMessage;
+
   
   // FIXED: Track if onboarding dream was collected
   bool _dreamCollectedInOnboarding = false;
@@ -51,6 +54,20 @@ class AppState extends ChangeNotifier {
   bool get isGeneratingCourse => _isGeneratingCourse;
   bool get isLoadingMore => _isLoadingMore;
   String? get authError => _authError;
+  String? get notificationMessage => _notificationMessage;
+
+  void clearNotification() {
+    if (_notificationMessage != null) {
+      _notificationMessage = null;
+      notifyListeners();
+    }
+  }
+
+  void showNotification(String message) {
+    _notificationMessage = message;
+    notifyListeners();
+  }
+
 
   /// Initialize the app state
   Future<void> init() async {
@@ -284,6 +301,30 @@ class AppState extends ChangeNotifier {
     _isGeneratingCourse = false;
     notifyListeners();
   }
+
+  /// Generate learning path in background (no UI blocking)
+  Future<void> generateCourseInBackground(String prompt, String dreamTopic) async {
+    _isGeneratingCourse = true;
+    showNotification('AI is creating your learning path in the background. You will be notified when it is ready!');
+    notifyListeners();
+
+    try {
+      final course = await GeminiService.generateLearningPath(dream: prompt);
+      if (course != null) {
+        await addGeneratedCourse(course);
+        await setDream(dreamTopic, courseId: course.id);
+        showNotification('Success: Your new course "${course.title}" is ready in My Courses!');
+      } else {
+        showNotification('Error: Failed to generate course. Please try again.');
+      }
+    } catch (e) {
+      showNotification('Error: Something went wrong generating your course.');
+    } finally {
+      _isGeneratingCourse = false;
+      notifyListeners();
+    }
+  }
+
 
   /// Generate next batch of AI courses for infinite scroll
   Future<void> generateNextCourseBatch() async {

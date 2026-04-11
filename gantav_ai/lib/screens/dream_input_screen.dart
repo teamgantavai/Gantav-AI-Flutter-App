@@ -75,7 +75,7 @@ class _DreamInputScreenState extends State<DreamInputScreen>
     }
   }
 
-  Future<void> _generatePath() async {
+  void _generatePath() {
     final topic = _topicController.text.trim();
     if (topic.isEmpty) return;
     
@@ -89,37 +89,15 @@ class _DreamInputScreenState extends State<DreamInputScreen>
       return;
     }
 
-    setState(() {
-      _isGenerating = true;
-      _error = null;
-      _generatedCourse = null;
-    });
-
-    final course = await GeminiService.generateLearningPath(dream: combinedPrompt);
-
-    if (!mounted) return;
-
-    if (course != null) {
-      setState(() {
-        _generatedCourse = course;
-        _isGenerating = false;
-      });
-    } else {
-      setState(() {
-        _error = 'Could not generate a path. Please try again.';
-        _isGenerating = false;
-      });
-    }
+    final appState = context.read<AppState>();
+    appState.generateCourseInBackground(combinedPrompt, topic);
+    Navigator.of(context).pop(true);
   }
 
   void _acceptPath() {
-    if (_generatedCourse == null) return;
-    final appState = context.read<AppState>();
-    appState.addGeneratedCourse(_generatedCourse!);
-    appState.setDream(_topicController.text.trim(),
-        courseId: _generatedCourse!.id);
-    Navigator.of(context).pop(true);
+    // Legacy method, not used anymore if generated in background.
   }
+
 
   @override
   Widget build(BuildContext context) {

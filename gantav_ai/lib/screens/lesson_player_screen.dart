@@ -58,7 +58,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       autoPlay: false,
       params: const YoutubePlayerParams(
         showControls: true,
-        showFullscreenButton: true,
+        showFullscreenButton: false,
         enableCaption: false,
         playsInline: true,
         showVideoAnnotations: false,
@@ -134,10 +134,42 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
 
   @override
   void dispose() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     _ytController.close();
     _chatController.dispose();
     _chatScrollController.dispose();
     super.dispose();
+  }
+
+  void _toggleFocusMode() {
+    setState(() => _isFocusMode = !_isFocusMode);
+    if (_isFocusMode) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+      // Allow rotation again after returning to portrait
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_isFocusMode) {
+          SystemChrome.setPreferredOrientations([
+            DeviceOrientation.portraitUp,
+            DeviceOrientation.portraitDown,
+            DeviceOrientation.landscapeLeft,
+            DeviceOrientation.landscapeRight,
+          ]);
+        }
+      });
+    }
   }
 
   Future<void> _setPlaybackSpeed(double speed) async {
@@ -227,7 +259,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               _buildVideoPlayer(),
               // Tap to exit focus mode
               GestureDetector(
-                onTap: () => setState(() => _isFocusMode = false),
+                onTap: _toggleFocusMode,
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   child: Text('Tap to exit focus mode',
@@ -263,6 +295,27 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   }
 
   Widget _buildLandscapeLayout(bool isDark, double screenWidth) {
+    if (_isFocusMode) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Center(child: _buildVideoPlayer()),
+              Positioned(
+                top: 8,
+                left: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 32),
+                  onPressed: _toggleFocusMode,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
       body: SafeArea(
@@ -306,10 +359,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                         const SizedBox(width: 8),
                         // Fullscreen toggle
                         IconButton(
-                          onPressed: () {
-                            // Toggle to fullscreen video
-                            setState(() => _isFocusMode = !_isFocusMode);
-                          },
+                          onPressed: _toggleFocusMode,
                           icon: Icon(
                             _isFocusMode ? Icons.fullscreen_exit : Icons.fullscreen,
                             size: 22,
@@ -466,7 +516,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                     icon: _isFocusMode ? Icons.center_focus_strong : Icons.center_focus_weak,
                     isActive: _isFocusMode,
                     activeColor: AppColors.violet,
-                    onTap: () => setState(() => _isFocusMode = !_isFocusMode),
+                    onTap: _toggleFocusMode,
                     tooltip: 'Focus mode',
                   ),
                 ],
@@ -654,7 +704,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                     child: SizedBox(
                       width: 72, height: 42,
                       child: Image.network(
-                        'https://img.youtube.com/vi/${lesson.youtubeVideoId}/mqdefault.jpg',
+                        'https://img.youtube.com/vi/${lesson.youtubeVideoId}/0.jpg',
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(color: AppColors.darkSurface2),
                       ),

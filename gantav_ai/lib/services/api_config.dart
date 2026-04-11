@@ -32,9 +32,9 @@ class ApiConfig {
   static AIProvider? primaryProvider(AITask task) {
     switch (task) {
       case AITask.recommendations:
-        // Use OpenRouter or Groq for recommendations (Gemini free is too slow/limited)
-        if (hasOpenRouter) return AIProvider.openRouter;
+        // Use OpenRouter or Groq for recommendations
         if (hasGroq) return AIProvider.groq;
+        if (hasOpenRouter) return AIProvider.openRouter;
         return hasGemini ? AIProvider.gemini : null;
 
       case AITask.chat:
@@ -44,10 +44,10 @@ class ApiConfig {
         return hasGemini ? AIProvider.gemini : null;
 
       case AITask.courseGeneration:
-        // Use Gemini for heavy JSON logic, but fall back to Groq if possible
-        if (hasGemini) return AIProvider.gemini;
+        // Use Groq first for course gen, then OpenRouter, then Gemini as a last resort
         if (hasGroq) return AIProvider.groq;
-        return hasOpenRouter ? AIProvider.openRouter : null;
+        if (hasOpenRouter) return AIProvider.openRouter;
+        return hasGemini ? AIProvider.gemini : null;
     }
   }
 

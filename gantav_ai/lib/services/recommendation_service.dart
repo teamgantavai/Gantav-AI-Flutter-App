@@ -144,7 +144,7 @@ class RecommendationVideo {
     required this.reason,
   });
 
-  String get thumbnailUrl => 'https://img.youtube.com/vi/$youtubeVideoId/mqdefault.jpg';
+  String get thumbnailUrl => 'https://img.youtube.com/vi/$youtubeVideoId/hqdefault.jpg';
 
   factory RecommendationVideo.fromJson(Map<String, dynamic> json) {
     return RecommendationVideo(

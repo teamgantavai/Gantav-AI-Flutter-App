@@ -132,43 +132,7 @@ class _SplashScreen extends StatelessWidget {
                       color: isDark ? AppColors.textLight : AppColors.textDark,
                       letterSpacing: -1,
                     )),
-                  const SizedBox(height: 8),
-                  Text('गंतव्य · Your Destination',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 13, 
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textMuted,
-                      letterSpacing: 2,
-                    )),
                 ],
-              ),
-            ),
-            // Bottom loading indicator
-            Positioned(
-              bottom: 64,
-              left: 0, right: 0,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 32,
-                      child: LinearProgressIndicator(
-                        backgroundColor: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.violet),
-                        minHeight: 2,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('Loading your experience',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11, 
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textMuted,
-                      )),
-                  ],
-                ),
               ),
             ),
           ],
@@ -407,9 +371,14 @@ class _ProofBadge extends StatelessWidget {
 }
 
 /// Main app shell with persistent header + bottom nav / side rail
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
   static const _screens = [
     HomeScreen(),
     ExploreScreen(),
@@ -423,6 +392,40 @@ class AppShell extends StatelessWidget {
     _NavItem(Icons.bar_chart_rounded, Icons.bar_chart_outlined, 'Progress'),
     _NavItem(Icons.person_rounded, Icons.person_outline, 'Profile'),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Use post frame callback to set up the listener so context is fully constructed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = context.read<AppState>();
+      appState.addListener(_onStateChange);
+    });
+  }
+
+  @override
+  void dispose() {
+    final appState = context.read<AppState>();
+    appState.removeListener(_onStateChange);
+    super.dispose();
+  }
+
+  void _onStateChange() {
+    if (!mounted) return;
+    final appState = context.read<AppState>();
+    if (appState.notificationMessage != null) {
+      final msg = appState.notificationMessage!;
+      appState.clearNotification();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg, style: GoogleFonts.dmSans()),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          backgroundColor: AppColors.violet,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -449,6 +452,7 @@ class AppShell extends StatelessWidget {
       },
     );
   }
+
 
   Widget _buildBottomNav(BuildContext context, AppState appState, bool isDark) {
     return Container(
