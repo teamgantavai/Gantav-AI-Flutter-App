@@ -190,21 +190,27 @@ class AppTheme {
   }
 
   static TextTheme _buildTextTheme(Color primary, Color secondary) {
+    // Shared fallback list to handle missing characters (emojis, non-latin scripts, etc.)
+    final List<String> fontFallbacks = [
+      'NotoSans',
+      GoogleFonts.notoSans().fontFamily!,
+    ];
+
     return TextTheme(
-      displayLarge: GoogleFonts.dmSans(fontSize: 40, fontWeight: FontWeight.w800, color: primary, letterSpacing: -1.5),
-      displayMedium: GoogleFonts.dmSans(fontSize: 32, fontWeight: FontWeight.w700, color: primary, letterSpacing: -1),
-      headlineLarge: GoogleFonts.dmSans(fontSize: 26, fontWeight: FontWeight.w700, color: primary, letterSpacing: -0.5),
-      headlineMedium: GoogleFonts.dmSans(fontSize: 22, fontWeight: FontWeight.w700, color: primary, letterSpacing: -0.5),
-      headlineSmall: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w600, color: primary),
-      titleLarge: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w600, color: primary),
-      titleMedium: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: primary),
-      titleSmall: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500, color: primary),
-      bodyLarge: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w400, color: primary, height: 1.6),
-      bodyMedium: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w400, color: secondary, height: 1.6),
-      bodySmall: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w400, color: secondary, height: 1.5),
-      labelLarge: GoogleFonts.dmMono(fontSize: 13, fontWeight: FontWeight.w600, color: primary),
-      labelMedium: GoogleFonts.dmMono(fontSize: 11, fontWeight: FontWeight.w500, color: secondary),
-      labelSmall: GoogleFonts.dmMono(fontSize: 10, fontWeight: FontWeight.w400, color: AppColors.textMuted),
+      displayLarge: GoogleFonts.dmSans(fontSize: 40, fontWeight: FontWeight.w800, color: primary, letterSpacing: -1.5).copyWith(fontFamilyFallback: fontFallbacks),
+      displayMedium: GoogleFonts.dmSans(fontSize: 32, fontWeight: FontWeight.w700, color: primary, letterSpacing: -1).copyWith(fontFamilyFallback: fontFallbacks),
+      headlineLarge: GoogleFonts.dmSans(fontSize: 26, fontWeight: FontWeight.w700, color: primary, letterSpacing: -0.5).copyWith(fontFamilyFallback: fontFallbacks),
+      headlineMedium: GoogleFonts.dmSans(fontSize: 22, fontWeight: FontWeight.w700, color: primary, letterSpacing: -0.5).copyWith(fontFamilyFallback: fontFallbacks),
+      headlineSmall: GoogleFonts.dmSans(fontSize: 18, fontWeight: FontWeight.w600, color: primary).copyWith(fontFamilyFallback: fontFallbacks),
+      titleLarge: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w600, color: primary).copyWith(fontFamilyFallback: fontFallbacks),
+      titleMedium: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: primary).copyWith(fontFamilyFallback: fontFallbacks),
+      titleSmall: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500, color: primary).copyWith(fontFamilyFallback: fontFallbacks),
+      bodyLarge: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w400, color: primary, height: 1.6).copyWith(fontFamilyFallback: fontFallbacks),
+      bodyMedium: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w400, color: secondary, height: 1.6).copyWith(fontFamilyFallback: fontFallbacks),
+      bodySmall: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w400, color: secondary, height: 1.5).copyWith(fontFamilyFallback: fontFallbacks),
+      labelLarge: GoogleFonts.dmMono(fontSize: 13, fontWeight: FontWeight.w600, color: primary).copyWith(fontFamilyFallback: fontFallbacks),
+      labelMedium: GoogleFonts.dmMono(fontSize: 11, fontWeight: FontWeight.w500, color: secondary).copyWith(fontFamilyFallback: fontFallbacks),
+      labelSmall: GoogleFonts.dmMono(fontSize: 10, fontWeight: FontWeight.w400, color: AppColors.textMuted).copyWith(fontFamilyFallback: fontFallbacks),
     );
   }
 }

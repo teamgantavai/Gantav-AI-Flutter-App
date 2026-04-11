@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'gemini_service.dart';
 import 'api_config.dart';
 
@@ -56,6 +57,40 @@ class RecommendationService {
   }
 
   static Future<List<RecommendationVideo>> _generateRecommendations(List<String> topics) async {
+    // 1. Try real YouTube API if configured
+    if (ApiConfig.hasYoutube) {
+      try {
+        final query = topics.take(2).join(' '); // Search using best topics
+        final url = Uri.parse(
+          'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=6&q=${Uri.encodeComponent(query)}&type=video&key=${ApiConfig.youtubeApiKey}'
+        );
+        final response = await http.get(url);
+        
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final items = data['items'] as List<dynamic>? ?? [];
+          if (items.isNotEmpty) {
+            return items.map((item) {
+              final snippet = item['snippet'];
+              return RecommendationVideo(
+                title: snippet['title'] ?? 'YouTube Video',
+                channel: snippet['channelTitle'] ?? 'YouTube',
+                youtubeVideoId: item['id']['videoId'] ?? '',
+                duration: '10:00', // Duration requires an extra API call in v3, so mock for speed
+                category: topics.first,
+                reason: 'Based on your interest in ${topics.first}',
+              );
+            }).toList();
+          }
+        } else {
+          debugPrint('YouTube API Error: ${response.statusCode} - ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('YouTube API exception: $e');
+      }
+    }
+
+    // 2. Fall back to AI-generated mock IDs if YouTube API is not configured or failed
     final prompt = '''
 You are a learning recommendation engine. Based on these learning interests: ${topics.join(', ')}
 
@@ -78,7 +113,7 @@ Use REAL YouTube video IDs from popular educational channels like 3Blue1Brown, f
 ''';
 
     try {
-      final response = await GeminiService.callGemini(prompt);
+      final response = await GeminiService.callAI(prompt, task: AITask.recommendations);
       if (response == null) return RecommendationVideo.mockRecommendations();
 
       final jsonStr = GeminiService.extractJson(response);

@@ -16,7 +16,9 @@ class AuthResult {
 /// Firebase Auth wrapper with Google Sign-In
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
-  static final GoogleSignIn _googleSignIn = GoogleSignIn();
+  static final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: kIsWeb ? '88076839712-2i6p18rnb1bgs2u7b69cvb8m5lp3ck6l.apps.googleusercontent.com' : null,
+  );
 
   /// Current user
   static User? get currentUser => _auth.currentUser;

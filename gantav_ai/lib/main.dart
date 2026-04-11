@@ -12,10 +12,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'widgets/connectivity_wrapper.dart';
+import 'services/api_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+  ApiConfig.printStatus(); // Show which AI providers are configured
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (e) {
@@ -85,20 +87,90 @@ class _SplashScreen extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            colors: isDark 
+              ? [AppColors.violet.withValues(alpha: 0.12), Colors.transparent]
+              : [AppColors.violet.withValues(alpha: 0.08), Colors.transparent],
+            center: Alignment.center,
+            radius: 1.2,
+          ),
+        ),
+        child: Stack(
           children: [
-            SizedBox(
-              width: 72, height: 72,
-              child: Image.asset('assets/images/logo.png'),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Animated-style logo container
+                  Container(
+                    width: 96, height: 96,
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : Colors.white,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.violet.withValues(alpha: isDark ? 0.3 : 0.1),
+                          blurRadius: 40,
+                          offset: const Offset(0, 12),
+                          spreadRadius: -10,
+                        )
+                      ],
+                    ),
+                    child: Image.asset('assets/images/logo.png'),
+                  ),
+                  const SizedBox(height: 32),
+                  // App Title with premium look
+                  Text('Gantav AI',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 32, 
+                      fontWeight: FontWeight.w900,
+                      color: isDark ? AppColors.textLight : AppColors.textDark,
+                      letterSpacing: -1,
+                    )),
+                  const SizedBox(height: 8),
+                  Text('गंतव्य · Your Destination',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13, 
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMuted,
+                      letterSpacing: 2,
+                    )),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            Text('Gantav AI',
-              style: GoogleFonts.dmSans(
-                fontSize: 24, fontWeight: FontWeight.w800,
-                color: isDark ? AppColors.textLight : AppColors.textDark,
-              )),
+            // Bottom loading indicator
+            Positioned(
+              bottom: 64,
+              left: 0, right: 0,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      child: LinearProgressIndicator(
+                        backgroundColor: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.violet),
+                        minHeight: 2,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Loading your experience',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 11, 
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textMuted,
+                      )),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),

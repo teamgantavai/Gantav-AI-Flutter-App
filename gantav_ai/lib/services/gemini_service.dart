@@ -4,20 +4,43 @@ import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import 'api_config.dart';
 
-/// Multi-provider AI Service
-/// Uses different free APIs for different tasks to stay within limits
+/// Multi-provider AI Service with automatic fallback.
+///
+/// Provider chain:
+///   1. Try the best provider for the task type
+///   2. On failure (429/5xx/timeout), fall back to next provider
+///   3. If all fail, return mock data
+///
+/// Task routing:
+///   • JSON tasks (courses, quizzes, recs) → Gemini first (best at structured output)
+///   • Chat tasks (doubt resolution)     → Groq first (fastest inference)
 class GeminiService {
-  
-  // ── Quiz Generation — use Gemini Flash (fast + free) ────────────────────
+  /// Track rate-limited providers to skip them temporarily
+  static final Map<AIProvider, DateTime> _rateLimitExpirations = {};
+
+  static bool _isRateLimited(AIProvider provider) {
+    if (!_rateLimitExpirations.containsKey(provider)) return false;
+    if (DateTime.now().isAfter(_rateLimitExpirations[provider]!)) {
+      _rateLimitExpirations.remove(provider);
+      return false;
+    }
+    return true;
+  }
+
+  static void _setRateLimited(AIProvider provider) {
+    debugPrint('[AI] ! ${provider.name} rate limited. Cooling down for 2 mins.');
+    _rateLimitExpirations[provider] = DateTime.now().add(const Duration(minutes: 2));
+  }
+
+
+  // ── Quiz Generation ────────────────────────────────────────────────────────
   static Future<List<QuizQuestion>> generateQuiz({
     required String lessonTitle,
     required String courseTitle,
     required String topic,
     int count = 5,
   }) async {
-    if (!ApiConfig.isConfigured) {
-      return QuizQuestion.mockQuestions();
-    }
+    if (!ApiConfig.isConfigured) return QuizQuestion.mockQuestions();
 
     final prompt = '''You are an expert educator creating quiz questions.
 Course: $courseTitle
@@ -30,7 +53,11 @@ Return ONLY valid JSON array (no markdown):
 [{"id":"q_1","question":"...?","options":["A","B","C","D"],"correct_index":0,"explanation":"..."}]''';
 
     try {
-      final response = await _callWithRetry(prompt, maxTokens: 2048);
+      final response = await _smartCall(
+        prompt,
+        task: AITask.courseGeneration,
+        maxTokens: 2048,
+      );
       if (response == null) return QuizQuestion.mockQuestions();
       final jsonStr = extractJson(response);
       final List<dynamic> data = jsonDecode(jsonStr);
@@ -42,7 +69,7 @@ Return ONLY valid JSON array (no markdown):
     }
   }
 
-  // ── Doubt Resolution — conversational AI ────────────────────────────────
+  // ── Doubt Resolution — conversational AI ──────────────────────────────────
   static Future<String> askDoubt({
     required String question,
     required String lessonTitle,
@@ -50,7 +77,7 @@ Return ONLY valid JSON array (no markdown):
     List<ChatMessage> history = const [],
   }) async {
     if (!ApiConfig.isConfigured) {
-      return 'Please add GEMINI_API_KEY to your .env file to enable AI features.';
+      return 'Please add at least one AI API key (GEMINI_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY) to your .env file.';
     }
 
     final historyText = history.takeLast(6).map((m) {
@@ -65,14 +92,18 @@ Student: $question
 Give a clear answer under 150 words. Use examples when helpful.''';
 
     try {
-      final response = await _callWithRetry(prompt, maxTokens: 512);
+      final response = await _smartCall(
+        prompt,
+        task: AITask.chat,
+        maxTokens: 512,
+      );
       return response ?? 'Sorry, I could not answer that. Please try again.';
     } catch (e) {
       return 'Connection error. Please check your internet and try again.';
     }
   }
 
-  // ── Learning Path Generation — primary feature ───────────────────────────
+  // ── Learning Path Generation ──────────────────────────────────────────────
   static Future<Course?> generateLearningPath({required String dream}) async {
     if (!ApiConfig.isConfigured) return null;
 
@@ -122,12 +153,16 @@ Rules:
 - Total lessons should match sum of module lesson counts''';
 
     try {
-      final response = await _callWithRetry(prompt, maxTokens: 4096, temperature: 0.3);
+      final response = await _smartCall(
+        prompt,
+        task: AITask.courseGeneration,
+        maxTokens: 4096,
+        temperature: 0.3,
+      );
       if (response == null) return null;
       final jsonStr = extractJson(response);
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
       final course = Course.fromJson(data);
-      // Validate course has modules
       if (course.modules.isEmpty) return null;
       return course;
     } catch (e) {
@@ -143,8 +178,10 @@ Rules:
   }) async {
     if (!ApiConfig.isConfigured) return _mockRecommendations();
 
-    final context = [dream, ...categories].where((s) => s != null && s!.isNotEmpty).join(', ');
-    
+    final context = [dream, ...categories]
+        .where((s) => s != null && s!.isNotEmpty)
+        .join(', ');
+
     final prompt = '''Recommend 8 educational YouTube videos for someone learning: $context
 
 Return ONLY valid JSON array:
@@ -162,7 +199,11 @@ Return ONLY valid JSON array:
 Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3Blue1Brown, Fireship, Traversy Media, The Coding Train, Veritasium, Khan Academy.''';
 
     try {
-      final response = await _callWithRetry(prompt, maxTokens: 2048);
+      final response = await _smartCall(
+        prompt,
+        task: AITask.recommendations,
+        maxTokens: 2048,
+      );
       if (response == null) return _mockRecommendations();
       final jsonStr = extractJson(response);
       final List<dynamic> data = jsonDecode(jsonStr);
@@ -172,36 +213,83 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
     }
   }
 
-  // ── Core API call with retry & timeout ───────────────────────────────────
-  static Future<String?> _callWithRetry(
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SMART ROUTING ENGINE
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Calls the best provider for the task, automatically falling back on error.
+  static Future<String?> _smartCall(
     String prompt, {
+    required AITask task,
     int maxTokens = 2048,
     double temperature = 0.7,
-    int maxRetries = 2,
   }) async {
-    for (int attempt = 0; attempt < maxRetries; attempt++) {
+    // Pick the best starting provider based on task type
+    AIProvider? provider = ApiConfig.primaryProvider(task);
+
+    int attempts = 0;
+    const maxAttempts = 3;
+
+    while (provider != null && attempts < maxAttempts) {
+      if (_isRateLimited(provider)) {
+        debugPrint('[AI] Skipping ${provider.name} (cooling down)');
+        provider = ApiConfig.fallbackAfter(provider);
+        continue;
+      }
+
+      attempts++;
       try {
-        final result = await callGemini(
+        debugPrint('[AI] Trying ${provider.name} for ${task.name}...');
+        final result = await _callProvider(
+          provider,
           prompt,
           maxTokens: maxTokens,
           temperature: temperature,
         );
-        if (result != null) return result;
-        
-        // Wait before retry
-        if (attempt < maxRetries - 1) {
-          await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
+        if (result != null) {
+          debugPrint('[AI] ✓ ${provider.name} responded successfully');
+          return result;
         }
       } catch (e) {
-        debugPrint('[AI] Attempt ${attempt + 1} failed: $e');
-        if (attempt == maxRetries - 1) rethrow;
+        debugPrint('[AI] ✗ ${provider.name} failed: $e');
+      }
+
+      // Try next fallback
+      provider = ApiConfig.fallbackAfter(provider);
+      if (provider != null) {
+        debugPrint('[AI] → Falling back to ${provider.name}');
+        // Subtle delay before fallback
+        await Future.delayed(const Duration(milliseconds: 300));
       }
     }
+
+    debugPrint('[AI] All providers exhausted for task: ${task.name}');
     return null;
   }
 
-  // ── Public Gemini REST call ────────────────────────────────────────────
-  static Future<String?> callGemini(
+  /// Dispatches to the correct provider implementation
+  static Future<String?> _callProvider(
+    AIProvider provider,
+    String prompt, {
+    int maxTokens = 2048,
+    double temperature = 0.7,
+  }) {
+    switch (provider) {
+      case AIProvider.gemini:
+        return _callGemini(prompt, maxTokens: maxTokens, temperature: temperature);
+      case AIProvider.groq:
+        return _callGroq(prompt, maxTokens: maxTokens, temperature: temperature);
+      case AIProvider.openRouter:
+        return _callOpenRouter(prompt, maxTokens: maxTokens, temperature: temperature);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PROVIDER IMPLEMENTATIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── 1. Google Gemini ──────────────────────────────────────────────────────
+  static Future<String?> _callGemini(
     String prompt, {
     int maxTokens = 2048,
     double temperature = 0.7,
@@ -211,7 +299,13 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
     );
 
     final body = jsonEncode({
-      'contents': [{'parts': [{'text': prompt}]}],
+      'contents': [
+        {
+          'parts': [
+            {'text': prompt}
+          ]
+        }
+      ],
       'generationConfig': {
         'temperature': temperature,
         'maxOutputTokens': maxTokens,
@@ -223,51 +317,167 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
       ],
     });
 
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: body,
-    ).timeout(const Duration(seconds: 45));
+    final response = await http
+        .post(url, headers: {'Content-Type': 'application/json'}, body: body)
+        .timeout(const Duration(seconds: 45));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final candidates = data['candidates'] as List?;
       if (candidates != null && candidates.isNotEmpty) {
         final content = candidates[0]['content'];
-        final parts = content['parts'] as List?;
-        if (parts != null && parts.isNotEmpty) {
-          return parts[0]['text'] as String?;
+        if (content != null) {
+          final parts = content['parts'] as List?;
+          if (parts != null && parts.isNotEmpty) {
+            return parts[0]['text'] as String?;
+          }
         }
       }
-      
-      // Check for safety filter
-      final promptFeedback = data['promptFeedback'];
-      if (promptFeedback != null) {
-        debugPrint('[AI] Prompt blocked: $promptFeedback');
-      }
     } else {
-      debugPrint('[AI] HTTP ${response.statusCode}: ${response.body.substring(0, 200)}');
-      
-      // Handle quota exceeded
+      debugPrint('[Gemini] API status ${response.statusCode}');
       if (response.statusCode == 429) {
-        await Future.delayed(const Duration(seconds: 5));
+        _setRateLimited(AIProvider.gemini);
+        throw Exception('Rate limited');
+      }
+      if (response.statusCode >= 500) {
+        throw Exception('Server error');
       }
     }
     return null;
   }
+
+  // ── 2. Groq (OpenAI-compatible) ───────────────────────────────────────────
+  static Future<String?> _callGroq(
+    String prompt, {
+    int maxTokens = 2048,
+    double temperature = 0.7,
+  }) async {
+    final url = Uri.parse(ApiConfig.groqBaseUrl);
+
+    final body = jsonEncode({
+      'model': ApiConfig.groqModel,
+      'messages': [
+        {
+          'role': 'user',
+          'content': prompt,
+        }
+      ],
+      'max_tokens': maxTokens,
+      'temperature': temperature,
+      'top_p': 0.8,
+    });
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${ApiConfig.groqApiKey}',
+      },
+      body: body,
+    ).timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final choices = data['choices'] as List?;
+      if (choices != null && choices.isNotEmpty) {
+        return choices[0]['message']['content'] as String?;
+      }
+    } else {
+      debugPrint('[Groq] API status ${response.statusCode}');
+      if (response.statusCode == 429) {
+        _setRateLimited(AIProvider.groq);
+        throw Exception('Rate limited');
+      }
+    }
+    return null;
+  }
+
+  // ── 3. OpenRouter (OpenAI-compatible) ─────────────────────────────────────
+  static Future<String?> _callOpenRouter(
+    String prompt, {
+    int maxTokens = 2048,
+    double temperature = 0.7,
+  }) async {
+    final url = Uri.parse(ApiConfig.openRouterBaseUrl);
+
+    final body = jsonEncode({
+      'model': ApiConfig.openRouterModel,
+      'messages': [
+        {
+          'role': 'user',
+          'content': prompt,
+        }
+      ],
+      'max_tokens': maxTokens,
+      'temperature': temperature,
+      'top_p': 0.8,
+    });
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${ApiConfig.openRouterApiKey}',
+        'HTTP-Referer': 'https://gantavai.com',
+        'X-Title': 'Gantav AI Learning',
+      },
+      body: body,
+    ).timeout(const Duration(seconds: 45));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final choices = data['choices'] as List?;
+      if (choices != null && choices.isNotEmpty) {
+        return choices[0]['message']['content'] as String?;
+      }
+    } else {
+      debugPrint('[OpenRouter] API status ${response.statusCode}');
+      if (response.statusCode == 429) {
+        _setRateLimited(AIProvider.openRouter);
+        throw Exception('Rate limited');
+      }
+    }
+    return null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC API (backward compatibility)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Public method for external callers — routes through smart engine
+  static Future<String?> callAI(
+    String prompt, {
+    required AITask task,
+    int maxTokens = 2048,
+    double temperature = 0.7,
+  }) async {
+    return _smartCall(
+      prompt,
+      task: task,
+      maxTokens: maxTokens,
+      temperature: temperature,
+    );
+  }
+
+  /// Backward compatibility
+  static Future<String?> callGemini(String prompt) => callAI(prompt, task: AITask.courseGeneration);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UTILITIES
+  // ═══════════════════════════════════════════════════════════════════════════
 
   static String extractJson(String text) {
     var cleaned = text.trim();
     // Remove markdown code fences
     cleaned = cleaned.replaceAll(RegExp(r'```json\s*'), '');
     cleaned = cleaned.replaceAll(RegExp(r'```\s*'), '');
-    
+
     // Find first [ or {
     final arrayStart = cleaned.indexOf('[');
     final objStart = cleaned.indexOf('{');
-    
+
     if (arrayStart == -1 && objStart == -1) return cleaned;
-    
+
     if (arrayStart != -1 && (objStart == -1 || arrayStart < objStart)) {
       final end = cleaned.lastIndexOf(']');
       if (end != -1) return cleaned.substring(arrayStart, end + 1);
@@ -275,20 +485,20 @@ Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3B
       final end = cleaned.lastIndexOf('}');
       if (end != -1) return cleaned.substring(objStart, end + 1);
     }
-    
+
     return cleaned;
   }
 
   static List<Map<String, String>> _mockRecommendations() => [
-    {'title': 'Neural Networks Explained', 'channel': '3Blue1Brown', 'video_id': 'aircAruvnKk', 'duration': '19:13', 'category': 'AI & ML', 'description': 'Beautiful visual explanation of neural networks'},
-    {'title': 'JavaScript in 100 Seconds', 'channel': 'Fireship', 'video_id': 'DHjqpvDnNGE', 'duration': '2:17', 'category': 'Web Dev', 'description': 'Quick JS overview'},
-    {'title': 'Learn Python - Full Course', 'channel': 'freeCodeCamp', 'video_id': 'rfscVS0vtbw', 'duration': '4:26:51', 'category': 'Python', 'description': 'Complete Python for beginners'},
-    {'title': 'React JS Crash Course', 'channel': 'Traversy Media', 'video_id': 'sBws8MSXN7A', 'duration': '1:48:42', 'category': 'React', 'description': 'Build React apps from scratch'},
-    {'title': 'Flutter Tutorial for Beginners', 'channel': 'Net Ninja', 'video_id': '1ukSR1GRtMU', 'duration': '15:04', 'category': 'Mobile', 'description': 'Start building Flutter apps'},
-    {'title': 'CSS Grid in 20 Minutes', 'channel': 'Traversy Media', 'video_id': 'jV8B24rSN5o', 'duration': '28:05', 'category': 'CSS', 'description': 'Master CSS Grid layout'},
-    {'title': 'TypeScript Full Course', 'channel': 'Jack Herrington', 'video_id': 'TNCoGHB7wqY', 'duration': '2:57:17', 'category': 'TypeScript', 'description': 'Complete TypeScript guide'},
-    {'title': 'System Design Interview', 'channel': 'ByteByteGo', 'video_id': 'm8Icp_Cid5o', 'duration': '7:38', 'category': 'Architecture', 'description': 'Design scalable systems'},
-  ];
+        {'title': 'Neural Networks Explained', 'channel': '3Blue1Brown', 'video_id': 'aircAruvnKk', 'duration': '19:13', 'category': 'AI & ML', 'description': 'Beautiful visual explanation of neural networks'},
+        {'title': 'JavaScript in 100 Seconds', 'channel': 'Fireship', 'video_id': 'DHjqpvDnNGE', 'duration': '2:17', 'category': 'Web Dev', 'description': 'Quick JS overview'},
+        {'title': 'Learn Python - Full Course', 'channel': 'freeCodeCamp', 'video_id': 'rfscVS0vtbw', 'duration': '4:26:51', 'category': 'Python', 'description': 'Complete Python for beginners'},
+        {'title': 'React JS Crash Course', 'channel': 'Traversy Media', 'video_id': 'sBws8MSXN7A', 'duration': '1:48:42', 'category': 'React', 'description': 'Build React apps from scratch'},
+        {'title': 'Flutter Tutorial for Beginners', 'channel': 'Net Ninja', 'video_id': '1ukSR1GRtMU', 'duration': '15:04', 'category': 'Mobile', 'description': 'Start building Flutter apps'},
+        {'title': 'CSS Grid in 20 Minutes', 'channel': 'Traversy Media', 'video_id': 'jV8B24rSN5o', 'duration': '28:05', 'category': 'CSS', 'description': 'Master CSS Grid layout'},
+        {'title': 'TypeScript Full Course', 'channel': 'Jack Herrington', 'video_id': 'TNCoGHB7wqY', 'duration': '2:57:17', 'category': 'TypeScript', 'description': 'Complete TypeScript guide'},
+        {'title': 'System Design Interview', 'channel': 'ByteByteGo', 'video_id': 'm8Icp_Cid5o', 'duration': '7:38', 'category': 'Architecture', 'description': 'Design scalable systems'},
+      ];
 }
 
 extension ListExtension<T> on List<T> {

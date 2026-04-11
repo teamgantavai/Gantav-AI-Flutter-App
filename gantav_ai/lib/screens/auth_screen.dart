@@ -17,13 +17,9 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
+class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
   late final AnimationController _fadeCtrl;
-  late final AnimationController _slideCtrl;
 
-  final PageController _pageCtrl = PageController();
-
-  final _dreamCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -37,51 +33,20 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
   String? _passError;
   String? _nameError;
 
-  final List<String> _dreamSuggestions = [
-    '🤖 ML Engineer at Google',
-    '🌐 Full-Stack Developer',
-    '📊 Data Scientist',
-    '📱 Flutter App Developer',
-    '☁️ Cloud Architect',
-    '🔐 Cybersecurity Expert',
-    '🎨 UI/UX Designer',
-    '🚀 AI Researcher',
-  ];
-
   @override
   void initState() {
     super.initState();
-    _fadeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-    _slideCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
+    _fadeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
     _fadeCtrl.forward();
   }
 
   @override
   void dispose() {
     _fadeCtrl.dispose();
-    _slideCtrl.dispose();
-    _pageCtrl.dispose();
-    _dreamCtrl.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _nameCtrl.dispose();
     super.dispose();
-  }
-
-  void _goToSignIn() {
-    if (_dreamCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'Please enter your dream first');
-      return;
-    }
-    
-    // Save dream text to prefs immediately so it survives navigation
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setString('onboarding_dream', _dreamCtrl.text.trim());
-      prefs.setBool('dream_collected', true);
-    });
-    
-    setState(() => _error = null);
-    _pageCtrl.animateToPage(1, duration: const Duration(milliseconds: 400), curve: Curves.easeInOutCubic);
   }
 
   bool _validateFields() {
@@ -99,6 +64,19 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
       }
     });
     return valid;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+      body: FadeTransition(
+        opacity: _fadeCtrl,
+        child: _buildAuthPage(isDark),
+      ),
+    );
   }
 
   Future<void> _authenticate() async {
@@ -130,13 +108,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
 
     if (!mounted) return;
 
-    if (success) {
-      // Now generate course
-      await appState.signInAndGenerate(
-        dream: _dreamCtrl.text.trim(),
-        name: _isSignUp ? name : null,
-      );
-    } else {
+    if (!success) {
       setState(() {
         _error = appState.authError;
         _loading = false;
@@ -152,14 +124,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
 
     if (!mounted) return;
 
-    if (success) {
-      final dream = _dreamCtrl.text.trim();
-      if (dream.isNotEmpty) {
-        await appState.signInAndGenerate(dream: dream);
-      } else {
-        await appState.refresh();
-      }
-    } else {
+    if (!success) {
       setState(() {
         _error = appState.authError;
         _googleLoading = false;
@@ -167,215 +132,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      body: PageView(
-        controller: _pageCtrl,
-        physics: const NeverScrollableScrollPhysics(),
-        children: [
-          _buildDreamPage(isDark),
-          _buildAuthPage(isDark),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDreamPage(bool isDark) {
-    return SafeArea(
-      child: FadeTransition(
-        opacity: _fadeCtrl,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 32),
-              // Logo + wordmark
-              Row(
-                children: [
-                  _GantavLogo(size: 40),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Gantav AI',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 20, fontWeight: FontWeight.w800,
-                          color: isDark ? AppColors.textLight : AppColors.textDark,
-                        )),
-                      Text('गंतव्य · Your Destination',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11, color: AppColors.textMuted,
-                        )),
-                    ],
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 48),
-
-              // Headline
-              Text('What do you\nwant to become?',
-                style: GoogleFonts.dmSans(
-                  fontSize: 34, fontWeight: FontWeight.w800, height: 1.15,
-                  color: isDark ? AppColors.textLight : AppColors.textDark,
-                  letterSpacing: -1,
-                )),
-              const SizedBox(height: 12),
-              Text('Tell us your dream. We\'ll curate the best YouTube content and build your personalised learning path — completely free.',
-                style: GoogleFonts.dmSans(
-                  fontSize: 15, height: 1.6,
-                  color: isDark ? AppColors.textLightSub : AppColors.textDarkSub,
-                )),
-
-              const SizedBox(height: 32),
-
-              // Dream input
-              Container(
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: _dreamCtrl.text.isNotEmpty
-                        ? AppColors.gold.withValues(alpha: 0.4)
-                        : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
-                    width: _dreamCtrl.text.isNotEmpty ? 2 : 1,
-                  ),
-                  boxShadow: [
-                    if (_dreamCtrl.text.isNotEmpty)
-                      BoxShadow(
-                        color: AppColors.gold.withValues(alpha: 0.08),
-                        blurRadius: 20, offset: const Offset(0, 4),
-                      ),
-                  ],
-                ),
-                child: TextField(
-                  controller: _dreamCtrl,
-                  onChanged: (_) => setState(() => _error = null),
-                  maxLines: 3,
-                  minLines: 2,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 16, fontWeight: FontWeight.w500,
-                    color: isDark ? AppColors.textLight : AppColors.textDark,
-                    height: 1.5,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'e.g. I want to become an AI engineer and work at a top tech company...',
-                    hintStyle: GoogleFonts.dmSans(
-                      fontSize: 14, color: AppColors.textMuted, height: 1.5,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.all(18),
-                    prefixIcon: Padding(
-                      padding: const EdgeInsets.only(left: 16, top: 16),
-                      child: Icon(Icons.auto_awesome_rounded,
-                        color: _dreamCtrl.text.isNotEmpty ? AppColors.gold : AppColors.textMuted,
-                        size: 20,
-                      ),
-                    ),
-                    prefixIconConstraints: const BoxConstraints(minWidth: 52, minHeight: 0),
-                  ),
-                ),
-              ),
-
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.info_outline, size: 14, color: AppColors.error),
-                    const SizedBox(width: 6),
-                    Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 13)),
-                  ],
-                ),
-              ],
-
-              const SizedBox(height: 20),
-
-              // Suggestion chips
-              Text('Popular goals',
-                style: GoogleFonts.dmSans(
-                  fontSize: 12, fontWeight: FontWeight.w600,
-                  color: AppColors.textMuted, letterSpacing: 0.5,
-                )),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: _dreamSuggestions.map((s) {
-                  return GestureDetector(
-                    onTap: () {
-                      _dreamCtrl.text = s.substring(2); // remove emoji
-                      setState(() => _error = null);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(
-                          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                        ),
-                      ),
-                      child: Text(s,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12, fontWeight: FontWeight.w500,
-                          color: isDark ? AppColors.textLightSub : AppColors.textDarkSub,
-                        )),
-                    ),
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 40),
-
-              // CTA
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _goToSignIn,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.violet,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Build My Learning Path',
-                        style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700)),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_rounded, size: 20),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Trust signals
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _TrustBadge(icon: Icons.lock_outline, text: 'Free forever'),
-                  const SizedBox(width: 20),
-                  _TrustBadge(icon: Icons.play_circle_outline, text: 'YouTube powered'),
-                  const SizedBox(width: 20),
-                  _TrustBadge(icon: Icons.auto_awesome_outlined, text: 'AI curated'),
-                ],
-              ),
-
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildAuthPage(bool isDark) {
     return SafeArea(
@@ -384,80 +140,28 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
+            const SizedBox(height: 48),
 
-            // Back button
-            GestureDetector(
-              onTap: () {
-                setState(() { _error = null; _emailError = null; _passError = null; _nameError = null; });
-                _pageCtrl.animateToPage(0,
-                  duration: const Duration(milliseconds: 400),
-                  curve: Curves.easeInOutCubic);
-              },
-              child: Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-                ),
-                child: Icon(Icons.arrow_back_rounded,
-                  color: isDark ? AppColors.textLight : AppColors.textDark, size: 18),
-              ),
-            ),
-
-            const SizedBox(height: 28),
-
-            // Dream preview card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.violet.withValues(alpha: isDark ? 0.15 : 0.08),
-                    AppColors.gold.withValues(alpha: isDark ? 0.08 : 0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
-              ),
-              child: Row(
+            // Logo + wordmark
+            Center(
+              child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.gold.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.auto_awesome, color: AppColors.gold, size: 20),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Your Dream',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 11, fontWeight: FontWeight.w600,
-                            color: AppColors.gold, letterSpacing: 0.5,
-                          )),
-                        const SizedBox(height: 2),
-                        Text(_dreamCtrl.text,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 14, fontWeight: FontWeight.w600,
-                            color: isDark ? AppColors.textLight : AppColors.textDark,
-                            height: 1.4,
-                          ),
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
-                      ],
-                    ),
-                  ),
+                  const _GantavLogo(size: 64),
+                  const SizedBox(height: 16),
+                  Text('Gantav AI',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 24, fontWeight: FontWeight.w800,
+                      color: isDark ? AppColors.textLight : AppColors.textDark,
+                    )),
+                  Text('गंतव्य · Your Destination',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12, color: AppColors.textMuted,
+                    )),
                 ],
               ),
             ),
 
-            const SizedBox(height: 28),
+            const SizedBox(height: 48),
 
             // Headline
             Text(_isSignUp ? 'Create your account' : 'Welcome back',
@@ -468,14 +172,14 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
               )),
             const SizedBox(height: 6),
             Text(_isSignUp
-                ? 'Sign up to save your path and track progress'
-                : 'Sign in to generate your personalised course',
+                ? 'Sign up to start your learning journey'
+                : 'Sign in to access your personalised courses',
               style: GoogleFonts.dmSans(
                 fontSize: 14, height: 1.5,
                 color: isDark ? AppColors.textLightSub : AppColors.textDarkSub,
               )),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
             // ─── Google Sign-In Button ───────────────────────
             SizedBox(
@@ -629,7 +333,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
 
             const SizedBox(height: 28),
 
-            // Generate + Sign in button
+            // Sign in / Sign up button
             SizedBox(
               width: double.infinity,
               height: 56,
@@ -648,10 +352,10 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.auto_awesome, size: 18),
+                          Icon(_isSignUp ? Icons.person_add_rounded : Icons.login_rounded, size: 18),
                           const SizedBox(width: 8),
                           Text(
-                            _isSignUp ? 'Create Account & Generate Path' : 'Sign In & Generate Path',
+                            _isSignUp ? 'Create Account' : 'Sign In',
                             style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700),
                           ),
                         ],

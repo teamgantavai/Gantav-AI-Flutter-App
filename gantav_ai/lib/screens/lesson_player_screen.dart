@@ -53,21 +53,20 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   void initState() {
     super.initState();
     
-    _ytController = YoutubePlayerController(
+    _ytController = YoutubePlayerController.fromVideoId(
+      videoId: widget.lesson.youtubeVideoId,
+      autoPlay: false,
       params: const YoutubePlayerParams(
         showControls: true,
         showFullscreenButton: true,
-        enableCaption: false, // Disable to reduce errors
+        enableCaption: false,
         playsInline: true,
         showVideoAnnotations: false,
         pointerEvents: PointerEvents.auto,
       ),
     );
     
-    // Load video after frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ytController.loadVideoById(videoId: widget.lesson.youtubeVideoId);
-    });
+    // Video is now loaded via fromVideoId
     
     _loadInteractionState();
   }
