@@ -1,4 +1,4 @@
-package com.example.gantav_ai
+package com.gantavai.gantav_ai
 
 import io.flutter.embedding.android.FlutterActivity
 

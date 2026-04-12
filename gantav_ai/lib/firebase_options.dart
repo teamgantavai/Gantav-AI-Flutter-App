@@ -61,7 +61,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyC8t7zu_AiCD8XYHjBOaMIgeECjOit6Hgw',
-    appId: '1:88076839712:android:f6aad7aae2a54154510545',
+    appId: '1:88076839712:android:954f9e961732609b510545',
     messagingSenderId: '88076839712',
     projectId: 'gantav-ai',
     storageBucket: 'gantav-ai.firebasestorage.app',

@@ -63,6 +63,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
         playsInline: true,
         showVideoAnnotations: false,
         pointerEvents: PointerEvents.auto,
+        origin: 'https://www.youtube.com',
       ),
     );
     
