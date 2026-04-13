@@ -69,12 +69,15 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final appState = context.watch<AppState>();
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
       body: FadeTransition(
         opacity: _fadeCtrl,
-        child: _buildAuthPage(isDark),
+        child: appState.authStatus == AuthStatus.needsVerification
+            ? _buildVerificationPage(isDark, appState)
+            : _buildAuthPage(isDark),
       ),
     );
   }
@@ -113,6 +116,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         _error = appState.authError;
         _loading = false;
       });
+    } else {
+      setState(() {
+         _loading = false;
+         _error = null;
+      });
     }
   }
 
@@ -130,6 +138,105 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         _googleLoading = false;
       });
     }
+  }
+
+  Widget _buildVerificationPage(bool isDark, AppState appState) {
+    return SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 80, height: 80,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.violet.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.mark_email_read_rounded, size: 40, color: AppColors.violet),
+              ),
+              const SizedBox(height: 32),
+              Text('Verify your email',
+                style: GoogleFonts.dmSans(
+                  fontSize: 28, fontWeight: FontWeight.w800,
+                  color: isDark ? AppColors.textLight : AppColors.textDark,
+                )),
+              const SizedBox(height: 12),
+              Text('We\'ve sent a verification link to:',
+                style: GoogleFonts.dmSans(
+                  fontSize: 15, color: isDark ? AppColors.textLightSub : AppColors.textDarkSub,
+                )),
+              Text(_emailCtrl.text,
+                style: GoogleFonts.dmSans(
+                  fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.violet,
+                )),
+              const SizedBox(height: 48),
+
+              // "OTP" Style info box
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                ),
+                child: Column(
+                  children: [
+                    Text('Click the link in your email to verify your account. Once done, tap the button below.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14, height: 1.5,
+                        color: isDark ? AppColors.textLightSub : AppColors.textDarkSub,
+                      )),
+                  ],
+                ),
+              ),
+
+              if (appState.authError != null) ...[
+                const SizedBox(height: 16),
+                Text(appState.authError!,
+                  style: const TextStyle(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.w500)),
+              ],
+
+              const SizedBox(height: 40),
+
+              SizedBox(
+                width: double.infinity, height: 56,
+                child: ElevatedButton(
+                  onPressed: () => appState.checkEmailVerification(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.violet,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  child: Text('I have verified my email',
+                    style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              TextButton(
+                onPressed: () => appState.resendVerification(),
+                child: Text('Didn\'t get the email? Resend',
+                  style: GoogleFonts.dmSans(
+                    color: AppColors.violet, fontWeight: FontWeight.w700,
+                  )),
+              ),
+
+              TextButton(
+                onPressed: () => appState.signOut(),
+                child: Text('Use a different email',
+                  style: GoogleFonts.dmSans(
+                    color: AppColors.textMuted, fontSize: 13,
+                  )),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
 
@@ -310,23 +417,52 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
             ],
 
             if (_error != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   color: AppColors.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: AppColors.error, size: 16),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 20),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(_error!,
-                        style: const TextStyle(color: AppColors.error, fontSize: 13)),
+                        style: GoogleFonts.dmSans(
+                          color: AppColors.error, 
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1.4,
+                        )),
                     ),
                   ],
+                ),
+              ),
+            ],
+
+            if (!_isSignUp) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    if (_emailCtrl.text.isEmpty) {
+                      setState(() => _emailError = 'Enter your email first');
+                      return;
+                    }
+                    // TODO: Implement forgot password
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Password reset link sent to your email'))
+                    );
+                  },
+                  child: Text('Forgot password?',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13, color: AppColors.violet,
+                      fontWeight: FontWeight.w600,
+                    )),
                 ),
               ),
             ],

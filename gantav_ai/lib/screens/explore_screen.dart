@@ -355,7 +355,7 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
         crossAxisCount: 2,
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
-        childAspectRatio: 1.4,
+        childAspectRatio: 1.25,
       ),
       itemCount: CatalogData.categories.length,
       itemBuilder: (context, index) {

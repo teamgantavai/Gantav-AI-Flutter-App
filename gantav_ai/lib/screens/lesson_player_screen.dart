@@ -788,7 +788,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
 
         Expanded(
           child: _chatMessages.isEmpty
-              ? _buildChatEmptyState(isDark)
+              ? SingleChildScrollView(child: _buildChatEmptyState(isDark))
               : ListView.builder(
                   controller: _chatScrollController,
                   physics: const BouncingScrollPhysics(),

@@ -60,7 +60,7 @@ class _AppRouter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AppState>(
       builder: (context, appState, _) {
-        if (appState.isLoading && !appState.isAuthenticated) {
+        if (appState.isInitialLoading && !appState.isAuthenticated) {
           return const _SplashScreen();
         }
 

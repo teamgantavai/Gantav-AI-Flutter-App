@@ -117,6 +117,23 @@ class AuthService {
     }
   }
 
+  /// Send email verification
+  static Future<AuthResult> sendEmailVerification() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        await user.sendEmailVerification();
+        return AuthResult(user: user);
+      }
+      return AuthResult(error: 'No user signed in');
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(error: _mapFirebaseError(e.code));
+    } catch (e) {
+      debugPrint('Email verification error: $e');
+      return AuthResult(error: 'Failed to send verification email.');
+    }
+  }
+
   /// Map Firebase error codes to user-friendly messages
   static String _mapFirebaseError(String code) {
     switch (code) {
@@ -135,13 +152,17 @@ class AuthService {
       case 'wrong-password':
         return 'Incorrect password. Please try again.';
       case 'invalid-credential':
-        return 'Invalid credentials. Please check your email and password.';
+        return 'Invalid email or password. Please try again.';
       case 'too-many-requests':
         return 'Too many attempts. Please wait a moment and try again.';
       case 'network-request-failed':
         return 'Network error. Check your internet connection.';
       case 'account-exists-with-different-credential':
         return 'An account already exists with this email using a different sign-in method.';
+      case 'requires-recent-login':
+        return 'Please sign out and sign in again to perform this action.';
+      case 'channel-error':
+        return 'Please fill in all fields.';
       default:
         return 'Authentication failed ($code). Please try again.';
     }

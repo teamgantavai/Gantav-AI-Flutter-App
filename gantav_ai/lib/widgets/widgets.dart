@@ -206,7 +206,7 @@ class SuggestedCourseRow extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _CatPill(category: course.category, small: true),
+                      Flexible(child: _CatPill(category: course.category, small: true)),
                       const SizedBox(width: 8),
                       const Icon(Icons.star_rounded, color: AppColors.gold, size: 12),
                       const SizedBox(width: 3),
@@ -635,17 +635,21 @@ class StatChip extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(value,
-                  style: GoogleFonts.dmMono(
-                    fontSize: 16, fontWeight: FontWeight.w700, color: color)),
-                Text(label,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    color: isDark ? AppColors.textLightSub : AppColors.textDarkSub)),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(value,
+                    style: GoogleFonts.dmSans( // Changed from dmMono for better fit
+                      fontSize: 16, fontWeight: FontWeight.w700, color: color),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(label,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      color: isDark ? AppColors.textLightSub : AppColors.textDarkSub),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
             ),
           ],
         ),

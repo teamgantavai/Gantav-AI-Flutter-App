@@ -7,7 +7,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/gemini_service.dart';
 
-enum AuthStatus { unauthenticated, authenticated, skipped }
+enum AuthStatus { unauthenticated, authenticated, skipped, needsVerification }
 
 /// Global app state using Provider — single source of truth
 class AppState extends ChangeNotifier {
@@ -17,6 +17,7 @@ class AppState extends ChangeNotifier {
   List<Course> _courses = [];
   List<PulseEvent> _pulseEvents = [];
   bool _isLoading = true;
+  bool _isInitialLoading = true;
   int _currentTabIndex = 0;
   Dream? _dream;
   final List<Course> _generatedCourses = [];
@@ -44,6 +45,7 @@ class AppState extends ChangeNotifier {
   List<Course> get suggestedCourses => courses.where((c) => !c.isInProgress).toList();
   List<PulseEvent> get pulseEvents => _pulseEvents;
   bool get isLoading => _isLoading;
+  bool get isInitialLoading => _isInitialLoading;
   int get currentTabIndex => _currentTabIndex;
   bool get isDarkMode => _themeMode == ThemeMode.dark;
   Dream? get dream => _dream;
@@ -71,6 +73,9 @@ class AppState extends ChangeNotifier {
 
   /// Initialize the app state
   Future<void> init() async {
+    _isInitialLoading = true;
+    notifyListeners();
+    
     await _loadThemePreference();
     await _loadAuthStatus();
     await _loadDream();
@@ -86,6 +91,7 @@ class AppState extends ChangeNotifier {
       await refresh();
     } else {
       _isLoading = false;
+      _isInitialLoading = false;
       notifyListeners();
     }
   }
@@ -161,11 +167,19 @@ class AppState extends ChangeNotifier {
       password: password,
     );
 
-    if (!result.success) {
+    if (!result.success || result.user == null) {
       _authError = result.error;
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+
+    // Check if email is verified
+    if (!result.user!.emailVerified) {
+      _authStatus = AuthStatus.needsVerification;
+      _isLoading = false;
+      notifyListeners();
+      return true; // Login was technically successful but needs verification
     }
 
     _authStatus = AuthStatus.authenticated;
@@ -193,14 +207,17 @@ class AppState extends ChangeNotifier {
       name: name,
     );
 
-    if (!result.success) {
+    if (!result.success || result.user == null) {
       _authError = result.error;
       _isLoading = false;
       notifyListeners();
       return false;
     }
 
-    _authStatus = AuthStatus.authenticated;
+    // Send verification email
+    await AuthService.sendEmailVerification();
+
+    _authStatus = AuthStatus.needsVerification;
     _user = UserProfile(
       id: result.user!.uid,
       name: name,
@@ -214,11 +231,37 @@ class AppState extends ChangeNotifier {
     );
 
     await _firestoreService.saveUserProfile(_user!);
-    await _saveAuthStatus();
     _isLoading = false;
     notifyListeners();
-    await refresh();
     return true;
+  }
+
+  /// Check if email is verified
+  Future<void> checkEmailVerification() async {
+    final user = AuthService.currentUser;
+    if (user != null) {
+      await user.reload();
+      if (user.emailVerified) {
+        _authStatus = AuthStatus.authenticated;
+        await _loadUserFromFirebase(user);
+        await _saveAuthStatus();
+        await refresh();
+      } else {
+        _authError = 'Email not yet verified. Please check your inbox.';
+      }
+      notifyListeners();
+    }
+  }
+
+  /// Resend verification email
+  Future<void> resendVerification() async {
+    final result = await AuthService.sendEmailVerification();
+    if (result.success) {
+      showNotification('Verification email resent! Please check your inbox.');
+    } else {
+      _authError = result.error;
+    }
+    notifyListeners();
   }
 
   /// Sign in and trigger course generation (legacy flow)
@@ -534,6 +577,7 @@ class AppState extends ChangeNotifier {
     }
 
     _isLoading = false;
+    _isInitialLoading = false;
     notifyListeners();
   }
 
