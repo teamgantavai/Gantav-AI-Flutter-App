@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import 'gemini_service.dart';
+import 'youtube_api_service.dart';
 
 /// API Service with mock fallback — offline-first architecture
 class ApiService {
@@ -98,7 +99,14 @@ class ApiService {
 
   /// POST get AI-suggested learning path (now powered by Gemini)
   static Future<Course?> suggestPath(String dream) async {
-    return GeminiService.generateLearningPath(dream: dream);
+    // 1. Fetch pre-filtered, verified YouTube videos based on the prompt/dream
+    final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: dream);
+    
+    // 2. Pass those exact videos to Gemini to structure into a learning path
+    return GeminiService.generateLearningPath(
+      dream: dream,
+      preFilteredVideos: preFilteredVideos,
+    );
   }
 
   /// GET quiz questions — now AI-generated via Gemini with mock fallback

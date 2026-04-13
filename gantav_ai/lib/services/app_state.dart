@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/gemini_service.dart';
 import '../services/onboarding_service.dart';
+import '../services/youtube_api_service.dart';
 
 enum AuthStatus { unauthenticated, authenticated, skipped, needsVerification, needsOnboarding }
 
@@ -509,7 +510,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final course = await GeminiService.generateLearningPath(dream: prompt);
+      final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: prompt);
+      final course = await GeminiService.generateLearningPath(
+        dream: prompt,
+        preFilteredVideos: preFilteredVideos,
+      );
       if (course != null) {
         await addGeneratedCourse(course);
         await setDream(dreamTopic, courseId: course.id);

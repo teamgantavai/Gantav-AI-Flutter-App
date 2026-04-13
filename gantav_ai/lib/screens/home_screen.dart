@@ -56,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final recs = await GeminiService.generateRecommendations(
       dream: appState.dream?.text,
       categories: appState.activeCourses.map((c) => c.category).toList(),
+      page: _recPage,
     );
     
     if (mounted) {

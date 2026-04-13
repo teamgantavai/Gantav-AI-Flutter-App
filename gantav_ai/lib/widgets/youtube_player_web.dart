@@ -20,11 +20,21 @@ class AppYoutubePlayer extends StatefulWidget {
 class AppYoutubePlayerState extends State<AppYoutubePlayer> {
   late YoutubePlayerController _controller;
 
+  String _getSafeVideoId(String input) {
+    if (input.contains('youtube.com/watch?v=')) {
+      return input.split('v=')[1].split('&')[0];
+    }
+    if (input.contains('youtu.be/')) {
+      return input.split('youtu.be/')[1].split('?')[0];
+    }
+    return input;
+  }
+
   @override
   void initState() {
     super.initState();
     _controller = YoutubePlayerController.fromVideoId(
-      videoId: widget.videoId,
+      videoId: _getSafeVideoId(widget.videoId),
       autoPlay: widget.autoPlay,
       params: const YoutubePlayerParams(
         showControls: true,

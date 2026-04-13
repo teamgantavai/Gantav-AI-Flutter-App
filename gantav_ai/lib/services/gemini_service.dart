@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import 'api_config.dart';
+import 'youtube_api_service.dart';
 
 /// Multi-provider AI Service with automatic fallback.
 ///
@@ -104,18 +105,29 @@ Give a clear answer under 150 words. Use examples when helpful.''';
   }
 
   // ── Learning Path Generation ──────────────────────────────────────────────
-  static Future<Course?> generateLearningPath({required String dream}) async {
+  static Future<Course?> generateLearningPath({
+    required String dream,
+    List<YouTubeVideoStats>? preFilteredVideos,
+  }) async {
     if (!ApiConfig.isConfigured) return null;
 
-    final prompt = '''You are a curriculum designer. Goal: "$dream"
+    final String verifiedVideosContext;
+    if (preFilteredVideos != null && preFilteredVideos.isNotEmpty) {
+      verifiedVideosContext = 'IMPORTANT: You MUST use ONLY the following verified YouTube videos for this course:\n' +
+          preFilteredVideos.map((v) => '- Title: "${v.title}", Video ID: ${v.id}, Duration: ${v.durationText}, Channel: ${v.channelTitle}').join('\n');
+    } else {
+      verifiedVideosContext = 'Use REAL YouTube video IDs from channels like freeCodeCamp, 3Blue1Brown, Fireship, etc.';
+    }
+
+    final prompt = '''You are a highly skilled curriculum designer. Goal: "$dream"
 
 Create a structured YouTube-based learning course. Return ONLY valid JSON:
 {
-  "id": "gen_${DateTime.now().millisecondsSinceEpoch}",
+  "id": "gen_\${DateTime.now().millisecondsSinceEpoch}",
   "title": "Complete [Topic] Course",
   "description": "Two sentence description of what students will learn.",
   "category": "Machine Learning",
-  "thumbnail_url": "https://img.youtube.com/vi/aircAruvnKk/maxresdefault.jpg",
+  "thumbnail_url": "https://img.youtube.com/vi/[FirstVideoId]/maxresdefault.jpg",
   "rating": 4.7,
   "learner_count": 1234,
   "total_lessons": 20,
@@ -133,7 +145,7 @@ Create a structured YouTube-based learning course. Return ONLY valid JSON:
         {
           "id": "les_1",
           "title": "Lesson Title",
-          "youtube_video_id": "aircAruvnKk",
+          "youtube_video_id": "real_video_id",
           "duration": "15:30",
           "is_completed": false,
           "chapters": [
@@ -147,9 +159,9 @@ Create a structured YouTube-based learning course. Return ONLY valid JSON:
 }
 
 Rules:
-- Use REAL YouTube video IDs from: 3Blue1Brown(aircAruvnKk), freeCodeCamp(rfscVS0vtbw), Traversy(nu_pCVPKzTk), Fireship(DHjqpvDnNGE), Sentdex(7eh4d6sabA0), Corey Schafer(YYXdXT2l7Tc), TechWithTim(nLRL_NcnK-4)
+$verifiedVideosContext
 - First module: is_locked: false. Rest: is_locked: true
-- 3-4 modules, 4-6 lessons each
+- 3-4 modules, 4-6 lessons each (or evenly distribute standard content)
 - Total lessons should match sum of module lesson counts''';
 
     try {
@@ -175,6 +187,7 @@ Rules:
   static Future<List<Map<String, String>>> generateRecommendations({
     required String? dream,
     required List<String> categories,
+    int page = 0,
   }) async {
     if (!ApiConfig.isConfigured) return _mockRecommendations();
 
@@ -183,6 +196,8 @@ Rules:
         .join(', ');
 
     final prompt = '''Recommend 8 educational YouTube videos for someone learning: $context
+    
+This is Page $page of recommendations. Ensure you do not repeat obvious or introductory suggestions. Provide diverse and deeper content since the user is paginating.
 
 Return ONLY valid JSON array:
 [
@@ -196,7 +211,7 @@ Return ONLY valid JSON array:
   }
 ]
 
-Use REAL video IDs. Mix difficulty levels. Prioritize channels: freeCodeCamp, 3Blue1Brown, Fireship, Traversy Media, The Coding Train, Veritasium, Khan Academy.''';
+Use REAL video IDs. Mix difficulty levels based on the page depth. Prioritize channels: freeCodeCamp, 3Blue1Brown, Fireship, Traversy Media, The Coding Train, Veritasium, Khan Academy.''';
 
     try {
       final response = await _smartCall(

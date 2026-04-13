@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/onboarding_models.dart';
 import 'gemini_service.dart';
 import 'api_config.dart';
+import 'youtube_api_service.dart';
 
 /// Service responsible for generating AI-powered learning roadmaps
 /// based on user preferences collected during onboarding.
@@ -21,6 +22,15 @@ class OnboardingService {
     final teacherHint = prefs.preferredTeacher != null && prefs.preferredTeacher!.isNotEmpty
         ? 'The user prefers learning from "${prefs.preferredTeacher}". Try to include content from this teacher/channel when relevant.'
         : '';
+        
+    final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: prefs.learningGoal);
+    final String verifiedVideosContext;
+    if (preFilteredVideos.isNotEmpty) {
+      verifiedVideosContext = 'IMPORTANT: You MUST use ONLY the following verified YouTube videos for tasks:\n' +
+          preFilteredVideos.map((v) => '- Title: "${v.title}", Video ID: ${v.id}, Duration: ${v.durationText}, Channel: ${v.channelTitle}').join('\n');
+    } else {
+      verifiedVideosContext = 'Use REAL YouTube video IDs from: freeCodeCamp(rfscVS0vtbw), 3Blue1Brown(aircAruvnKk), Traversy(nu_pCVPKzTk), Fireship(DHjqpvDnNGE), Corey Schafer(YYXdXT2l7Tc), TechWithTim(nLRL_NcnK-4), Khan Academy(HvMSRWTE2mI)';
+    }
 
     final prompt = '''You are an expert education curriculum designer.
 
@@ -34,11 +44,11 @@ $languageInstruction
 Create a personalized day-by-day learning roadmap. The roadmap should span 14-21 days.
 Each day should have 1-3 tasks that fit within the ${prefs.dailyStudyMinutes}-minute daily budget.
 Tasks should be specific and actionable (e.g., "Watch: Introduction to Variables", "Practice: Write 5 programs using loops").
-Include real YouTube video IDs when applicable from popular educational channels.
+Include highly rated YouTube videos based on the verified list below.
 
 Return ONLY valid JSON (no markdown):
 {
-  "id": "roadmap_${DateTime.now().millisecondsSinceEpoch}",
+  "id": "roadmap_\${DateTime.now().millisecondsSinceEpoch}",
   "title": "Descriptive Roadmap Title",
   "goal": "${prefs.learningGoal}",
   "language": "${prefs.language}",
@@ -72,7 +82,7 @@ Return ONLY valid JSON (no markdown):
 
 Rules:
 - Each day's total duration should be ~${prefs.dailyStudyMinutes} minutes
-- Use REAL YouTube video IDs from: freeCodeCamp(rfscVS0vtbw), 3Blue1Brown(aircAruvnKk), Traversy(nu_pCVPKzTk), Fireship(DHjqpvDnNGE), Corey Schafer(YYXdXT2l7Tc), TechWithTim(nLRL_NcnK-4), Khan Academy(HvMSRWTE2mI)
+- $verifiedVideosContext
 - Tasks should progress logically from basics to advanced
 - Include a mix of watching, practicing, and reviewing
 - Day numbers must be sequential starting from 1''';
