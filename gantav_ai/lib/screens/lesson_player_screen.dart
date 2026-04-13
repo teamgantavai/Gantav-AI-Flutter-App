@@ -6,7 +6,7 @@ import '../models/models.dart';
 import '../services/gemini_service.dart';
 import '../services/api_config.dart';
 import 'quiz_screen.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import '../widgets/youtube_player_wrapper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -44,7 +44,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   bool _isDisliked = false;
   bool _isStarred = false;
 
-  late YoutubePlayerController _ytController;
+  final GlobalKey<AppYoutubePlayerState> _ytKey = GlobalKey();
 
   int get _currentLessonIndex =>
       widget.module.lessons.indexOf(widget.lesson) + 1;
@@ -53,18 +53,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   void initState() {
     super.initState();
     
-    _ytController = YoutubePlayerController.fromVideoId(
-      videoId: widget.lesson.youtubeVideoId,
-      autoPlay: false,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        showFullscreenButton: false,
-        enableCaption: false,
-        playsInline: true,
-        showVideoAnnotations: false,
-        pointerEvents: PointerEvents.auto,
-      ),
-    );
+    // Video player initializes itself using the wrapper now.
     
     // Video is now loaded via fromVideoId
     
@@ -140,7 +129,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    _ytController.close();
+    // controller is handled by the wrapper.
     _chatController.dispose();
     _chatScrollController.dispose();
     super.dispose();
@@ -174,7 +163,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
 
   Future<void> _setPlaybackSpeed(double speed) async {
     setState(() => _playbackSpeed = speed);
-    await _ytController.setPlaybackRate(speed);
+    await _ytKey.currentState?.setPlaybackRate(speed);
   }
 
   Future<void> _sendMessage() async {
@@ -182,7 +171,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     if (text.isEmpty || _isAiTyping) return;
 
     if (_includeTimestamp) {
-      final time = (await _ytController.currentTime).toInt();
+      final time = (await _ytKey.currentState?.getCurrentTime() ?? 0.0).toInt();
       final minutes = (time / 60).floor();
       final seconds = (time % 60).floor().toString().padLeft(2, '0');
       text = '[At $minutes:$seconds]: $text';
@@ -427,14 +416,12 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// YouTube iframe player
+  /// YouTube custom player wrapper
   Widget _buildVideoPlayer() {
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: YoutubePlayer(
-        controller: _ytController,
-        aspectRatio: 16 / 9,
-      ),
+    return AppYoutubePlayer(
+      key: _ytKey,
+      videoId: widget.lesson.youtubeVideoId,
+      autoPlay: false,
     );
   }
 
@@ -803,63 +790,75 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
         ),
 
         // Input
-        Container(
-          padding: const EdgeInsets.fromLTRB(14, 4, 8, 14),
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
-            ),
+        Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom > 0 ? 4 : 4,
           ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Checkbox(
-                    value: _includeTimestamp,
-                    onChanged: (val) => setState(() => _includeTimestamp = val ?? false),
-                    activeColor: AppColors.violet,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  Text('Include video timestamp',
-                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
-                ],
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 4, 8, 14),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
               ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _chatController,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: InputDecoration(
-                        hintText: 'Ask a doubt about this lesson...',
-                        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-                        filled: true,
-                        fillColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      height: 32,
+                      child: Checkbox(
+                        value: _includeTimestamp,
+                        onChanged: (val) => setState(() => _includeTimestamp = val ?? false),
+                        activeColor: AppColors.violet,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    Text('Include video timestamp',
+                      style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 40,
+                        child: TextField(
+                          controller: _chatController,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13),
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: InputDecoration(
+                            hintText: 'Ask a doubt...',
+                            hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                            filled: true,
+                            fillColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          onSubmitted: (_) => _sendMessage(),
                         ),
                       ),
-                      onSubmitted: (_) => _sendMessage(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _sendMessage,
-                    child: Container(
-                      width: 40, height: 40,
-                      decoration: BoxDecoration(
-                        color: _isAiTyping ? AppColors.textMuted.withValues(alpha: 0.3) : AppColors.violet,
-                        shape: BoxShape.circle,
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _sendMessage,
+                      child: Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                          color: _isAiTyping ? AppColors.textMuted.withValues(alpha: 0.3) : AppColors.violet,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 18),
                       ),
-                      child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -869,62 +868,60 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   Widget _buildChatEmptyState(bool isDark) {
     final isConfigured = ApiConfig.isConfigured;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56, height: 56,
-              decoration: BoxDecoration(
-                color: AppColors.violet.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 28),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48, height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.violet.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
             ),
+            child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 24),
+          ),
+          const SizedBox(height: 12),
+          Text('AI Tutor', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            isConfigured
+                ? 'Ask any doubt and get instant help.'
+                : 'Add Gemini API key to enable AI.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
+          ),
+          if (isConfigured) ...[
             const SizedBox(height: 16),
-            Text('AI Tutor', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 6),
-            Text(
-              isConfigured
-                  ? 'Ask any doubt about "${widget.lesson.title}" and get instant help.'
-                  : 'Add your Gemini API key in .env to enable AI features.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5),
+            Wrap(
+              spacing: 6, runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                _SuggestionChip(
+                  text: 'Key concepts',
+                  onTap: () {
+                    _chatController.text = 'Explain the key concepts in this lesson';
+                    _sendMessage();
+                  },
+                ),
+                _SuggestionChip(
+                  text: 'Summary',
+                  onTap: () {
+                    _chatController.text = 'Give me a quick summary of this lesson';
+                    _sendMessage();
+                  },
+                ),
+                _SuggestionChip(
+                  text: 'Example',
+                  onTap: () {
+                    _chatController.text = 'Show me a practical example related to this lesson';
+                    _sendMessage();
+                  },
+                ),
+              ],
             ),
-            if (isConfigured) ...[
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  _SuggestionChip(
-                    text: 'Explain the key concepts',
-                    onTap: () {
-                      _chatController.text = 'Explain the key concepts in this lesson';
-                      _sendMessage();
-                    },
-                  ),
-                  _SuggestionChip(
-                    text: 'Give me a quick summary',
-                    onTap: () {
-                      _chatController.text = 'Give me a quick summary of this lesson';
-                      _sendMessage();
-                    },
-                  ),
-                  _SuggestionChip(
-                    text: 'Show me an example',
-                    onTap: () {
-                      _chatController.text = 'Show me a practical example related to this lesson';
-                      _sendMessage();
-                    },
-                  ),
-                ],
-              ),
-            ],
           ],
-        ),
+        ],
       ),
     );
   }

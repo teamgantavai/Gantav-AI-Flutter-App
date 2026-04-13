@@ -485,11 +485,10 @@ class _AppShellState extends State<AppShell> {
             final i = entry.key;
             final item = entry.value;
             final isActive = appState.currentTabIndex == i;
-            return GestureDetector(
-              onTap: () => appState.setTabIndex(i),
-              behavior: HitTestBehavior.opaque,
-              child: SizedBox(
-                width: 64,
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => appState.setTabIndex(i),
+                behavior: HitTestBehavior.opaque,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -517,6 +516,8 @@ class _AppShellState extends State<AppShell> {
                         fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                         color: isActive ? AppColors.violet : AppColors.textMuted,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
