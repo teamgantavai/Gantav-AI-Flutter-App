@@ -28,6 +28,10 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
   Timer? _seekOverlayTimer;
   Alignment _seekOverlayAlignment = Alignment.center;
 
+  // Modern Fade Overlay states
+  bool _showControls = true;
+  Timer? _controlsTimer;
+
   String _getSafeVideoId(String input) {
     if (input.contains('youtube.com/watch?v=')) {
       return input.split('v=')[1].split('&')[0];
@@ -50,13 +54,36 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
         forceHD: true,
       ),
     );
+    _startControlsTimer();
   }
 
   @override
   void dispose() {
     _seekOverlayTimer?.cancel();
+    _controlsTimer?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _toggleControls() {
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _startControlsTimer();
+  }
+
+  void _startControlsTimer() {
+    _controlsTimer?.cancel();
+    _controlsTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showControls = false);
+    });
+  }
+
+  void _togglePlayPause() {
+    if (_controller.value.isPlaying) {
+      _controller.pause();
+    } else {
+      _controller.play();
+    }
+    _startControlsTimer(); // Keep controls visible when interacting
   }
 
   Future<void> setPlaybackRate(double rate) async {
@@ -244,45 +271,73 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
               // 1. Native Video Player
               player,
               
-              // 2. Invisible hit boxes for double tap & long press
-              // We leave the middle 20% empty so standard Play/Pause taps reliably pass through instantly!
-              Positioned.fill(
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onDoubleTap: _seekBackward,
-                        onLongPressStart: _startLongPress2x,
-                        onLongPressEnd: _endLongPress2x,
-                        child: Container(color: Colors.transparent),
+              // 2. Main Interaction Overlay (Fades on single tap)
+              GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _toggleControls,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  color: _showControls ? Colors.black.withValues(alpha: 0.4) : Colors.transparent,
+                  child: Stack(
+                    children: [
+                      // Large smooth Play/Pause in center
+                      if (_showControls)
+                        Center(
+                          child: GestureDetector(
+                            onTap: _togglePlayPause,
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 48,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // Invisible side panels for Double Tap (10s seek) and Long Press (2x)
+                      // These sit on top of the black fade but don't block taps to center
+                      Positioned.fill(
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 1, // 20% left side
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onDoubleTap: _seekBackward,
+                                onLongPressStart: _startLongPress2x,
+                                onLongPressEnd: _endLongPress2x,
+                                child: Container(color: Colors.transparent),
+                              ),
+                            ),
+                            const Expanded(flex: 3, child: SizedBox.shrink()), // Center gap
+                            Expanded(
+                              flex: 1, // 20% right side
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onDoubleTap: _seekForward,
+                                onLongPressStart: _startLongPress2x,
+                                onLongPressEnd: _endLongPress2x,
+                                child: Container(color: Colors.transparent),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      flex: 1,
-                      child: IgnorePointer(child: Container()), // Center gap
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onDoubleTap: _seekForward,
-                        onLongPressStart: _startLongPress2x,
-                        onLongPressEnd: _endLongPress2x,
-                        child: Container(color: Colors.transparent),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 
               // 3. Beautiful 2x Speed Long Press Overlay Indicator
               if (_isLongPressing)
                 Positioned(
-                  top: 10,
-                  left: 0,
-                  right: 0,
+                  top: 10, left: 0, right: 0,
                   child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -290,11 +345,11 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
                         color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(100),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('2x Speed ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                          const Icon(Icons.fast_forward, color: Colors.white, size: 16),
+                          Text('2x Speed ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                          Icon(Icons.fast_forward, color: Colors.white, size: 16),
                         ],
                       ),
                     ),
@@ -316,17 +371,12 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
                           color: Colors.black.withValues(alpha: 0.6),
                           shape: BoxShape.circle,
                         ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _seekOverlayAlignment == Alignment.centerRight 
-                                 ? Icons.forward_10_rounded 
-                                 : Icons.replay_10_rounded,
-                              color: Colors.white,
-                              size: 32,
-                            ),
-                          ],
+                        child: Icon(
+                          _seekOverlayAlignment == Alignment.centerRight 
+                             ? Icons.forward_10_rounded 
+                             : Icons.replay_10_rounded,
+                          color: Colors.white,
+                          size: 32,
                         ),
                       ),
                     ),

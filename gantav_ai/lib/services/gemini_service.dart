@@ -123,7 +123,7 @@ Give a clear answer under 150 words. Use examples when helpful.''';
 
 Create a structured YouTube-based learning course. Return ONLY valid JSON:
 {
-  "id": "gen_\${DateTime.now().millisecondsSinceEpoch}",
+  "id": "gen_12345",
   "title": "Complete [Topic] Course",
   "description": "Two sentence description of what students will learn.",
   "category": "Machine Learning",

@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
-import '../services/gemini_service.dart';
 import '../services/api_config.dart';
 import '../models/models.dart';
 

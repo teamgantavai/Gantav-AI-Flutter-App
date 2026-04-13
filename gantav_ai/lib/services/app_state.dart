@@ -384,22 +384,26 @@ class AppState extends ChangeNotifier {
     _authStatus = AuthStatus.authenticated;
     notifyListeners();
 
-    // Save preferences
-    await _saveLocalPreferences();
-    await _firestoreService.saveUserPreferences(prefs);
+    try {
+      // Save preferences
+      await _saveLocalPreferences();
+      await _firestoreService.saveUserPreferences(prefs).catchError((_) {});
 
-    // Generate the roadmap
-    final roadmap = await OnboardingService.generateRoadmap(prefs);
-    if (roadmap != null) {
-      _roadmaps.insert(0, roadmap);
-      await _saveLocalRoadmaps();
-      await _firestoreService.saveRoadmap(roadmap);
+      // Generate the roadmap
+      final roadmap = await OnboardingService.generateRoadmap(prefs);
+      if (roadmap != null) {
+        _roadmaps.insert(0, roadmap);
+        await _saveLocalRoadmaps();
+        await _firestoreService.saveRoadmap(roadmap).catchError((_) {});
+      }
+    } catch (e) {
+      debugPrint('[AppState] Error completing onboarding: $e');
+    } finally {
+      _isGeneratingRoadmap = false;
+      await _saveAuthStatus();
+      notifyListeners();
+      refresh(); // Run asynchronously without awaiting to ensure UI updates immediately
     }
-
-    _isGeneratingRoadmap = false;
-    await _saveAuthStatus();
-    notifyListeners();
-    await refresh();
   }
 
   /// Mark a specific task in a roadmap day as completed

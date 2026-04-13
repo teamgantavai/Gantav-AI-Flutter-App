@@ -86,6 +86,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
               // ── Tab Content ──────────────────────────────────────
               SliverFillRemaining(
+                hasScrollBody: true,
                 child: TabBarView(
                   controller: _tabController,
                   children: [
@@ -175,11 +176,11 @@ class _ProfileHero extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDark
-              ? [AppColors.violet.withOpacity(0.15), AppColors.darkSurface]
-              : [AppColors.violet.withOpacity(0.05), AppColors.lightSurface],
+              ? [AppColors.violet.withValues(alpha: 0.15), AppColors.darkSurface]
+              : [AppColors.violet.withValues(alpha: 0.05), AppColors.lightSurface],
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.violet.withOpacity(0.2)),
+        border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -192,9 +193,9 @@ class _ProfileHero extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppColors.gold.withOpacity(0.12),
+                    color: AppColors.gold.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(100),
-                    border: Border.all(color: AppColors.gold.withOpacity(0.3)),
+                    border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -211,9 +212,9 @@ class _ProfileHero extends StatelessWidget {
                   child: Container(
                     width: 38, height: 38,
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.08)),
+                      border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08)),
                     ),
                     child: Icon(Icons.settings_outlined, size: 18,
                       color: isDark ? AppColors.textLight : AppColors.textDark),
@@ -237,7 +238,7 @@ class _ProfileHero extends StatelessWidget {
                         begin: Alignment.topLeft, end: Alignment.bottomRight,
                       ),
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.violet.withOpacity(0.4), width: 3),
+                      border: Border.all(color: AppColors.violet.withValues(alpha: 0.4), width: 3),
                       image: appState.profileImagePath != null
                           ? DecorationImage(image: FileImage(File(appState.profileImagePath!)), fit: BoxFit.cover)
                           : null,
@@ -273,9 +274,9 @@ class _ProfileHero extends StatelessWidget {
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppColors.violet.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(100),
-                  border: Border.all(color: AppColors.violet.withOpacity(0.2)),
+                  color: AppColors.violet.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -307,7 +308,7 @@ class _ProfileHero extends StatelessWidget {
                 label: Text('Share Profile', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.violet,
-                  side: BorderSide(color: AppColors.violet.withOpacity(0.4)),
+                  side: BorderSide(color: AppColors.violet.withValues(alpha: 0.4)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
@@ -354,9 +355,9 @@ class _StatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: color.withOpacity(isDark ? 0.1 : 0.07),
+          color: color.withValues(alpha: isDark ? 0.1 : 0.07),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [
@@ -422,17 +423,22 @@ class _ActivePathsTab extends StatelessWidget {
     final courses = appState.activeCourses;
 
     if (roadmaps.isEmpty && courses.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.route_outlined, color: AppColors.textMuted, size: 56),
-            const SizedBox(height: 16),
-            Text('No roadmaps yet', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text('Complete onboarding to get your first roadmap',
-              style: Theme.of(context).textTheme.bodySmall),
-          ],
+      return SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.route_outlined, color: AppColors.textMuted, size: 56),
+              const SizedBox(height: 16),
+              Text('No roadmaps yet', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text('Complete onboarding to get your first roadmap',
+                style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
         ),
       );
     }
@@ -469,7 +475,7 @@ class _ActivePathsTab extends StatelessWidget {
                       Container(
                         width: 40, height: 40,
                         decoration: BoxDecoration(
-                          color: AppColors.violet.withOpacity(0.12),
+                          color: AppColors.violet.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(Icons.route_rounded, size: 20, color: AppColors.violet),
@@ -585,10 +591,10 @@ class _AchievementsTab extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: earned
-                ? color.withOpacity(isDark ? 0.12 : 0.08)
-                : isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: earned ? color.withOpacity(0.3) : isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                ? color.withValues(alpha: isDark ? 0.12 : 0.08)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: earned ? color.withValues(alpha: 0.3) : isDark ? AppColors.darkBorder : AppColors.lightBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -602,7 +608,7 @@ class _AchievementsTab extends StatelessWidget {
                 fontSize: 11, color: AppColors.textMuted, height: 1.3)),
               if (!earned) ...[
                 const SizedBox(height: 6),
-                Text('Locked', style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted.withOpacity(0.6))),
+                Text('Locked', style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted.withValues(alpha: 0.6))),
               ],
             ],
           ),
@@ -682,7 +688,7 @@ class _SettingsSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.textMuted.withOpacity(0.3), borderRadius: BorderRadius.circular(2))),
+          Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.textMuted.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 20),
           Text('Settings', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 20),
@@ -716,7 +722,7 @@ class _SettingsTile extends StatelessWidget {
       leading: Container(
         width: 38, height: 38,
         decoration: BoxDecoration(
-          color: isDestructive ? AppColors.error.withOpacity(0.1) : isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
+          color: isDestructive ? AppColors.error.withValues(alpha: 0.1) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, size: 18, color: color),

@@ -284,134 +284,53 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   }
 
   Widget _buildLandscapeLayout(bool isDark, double screenWidth) {
-    if (_isFocusMode) {
-      return Scaffold(
-        backgroundColor: Colors.black,
-        body: SafeArea(
-          child: Stack(
-            children: [
-              Center(child: _buildVideoPlayer()),
-              Positioned(
-                top: 8,
-                left: 8,
-                child: IconButton(
-                  icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 32),
-                  onPressed: _toggleFocusMode,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
+    // Landscape is always immersive Focus Mode
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      body: SafeArea(
-        child: Row(
-          children: [
-            // Left: Video — takes more space in landscape
-            Expanded(
-              flex: 3,
-              child: Column(
-                children: [
-                  // Top bar with back button
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          onPressed: () {
-                            // Reset orientation and pop
-                            SystemChrome.setPreferredOrientations([
-                              DeviceOrientation.portraitUp,
-                              DeviceOrientation.portraitDown,
-                              DeviceOrientation.landscapeLeft,
-                              DeviceOrientation.landscapeRight,
-                            ]);
-                            Navigator.of(context).pop();
-                          },
-                          icon: const Icon(Icons.arrow_back, size: 22),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(100),
-                          ),
-                          child: Text(
-                            '${widget.module.title} · $_currentLessonIndex/${widget.module.lessonCount}',
-                            style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textMuted),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Fullscreen toggle
-                        IconButton(
-                          onPressed: _toggleFocusMode,
-                          icon: Icon(
-                            _isFocusMode ? Icons.fullscreen_exit : Icons.fullscreen,
-                            size: 22,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // YouTube Player
-                  _buildVideoPlayer(),
-                  // Interaction bar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.lesson.title,
-                            style: Theme.of(context).textTheme.titleSmall,
-                            maxLines: 1, overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        _InteractionButton(icon: _isLiked ? Icons.thumb_up : Icons.thumb_up_outlined, isActive: _isLiked, activeColor: AppColors.violet, onTap: _toggleLike, tooltip: 'Like'),
-                        _InteractionButton(icon: _isDisliked ? Icons.thumb_down : Icons.thumb_down_outlined, isActive: _isDisliked, activeColor: AppColors.error, onTap: _toggleDislike, tooltip: 'Dislike'),
-                        _InteractionButton(icon: _isStarred ? Icons.star : Icons.star_border, isActive: _isStarred, activeColor: AppColors.gold, onTap: _toggleStar, tooltip: 'Favorite'),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    child: _buildSpeedControls(isDark),
-                  ),
-                  const Spacer(),
-                  _buildBottomBar(isDark),
-                ],
-              ),
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: _buildVideoPlayer(),
             ),
-            // Right: Content / Chat
-            Expanded(
-              flex: 2,
+          ),
+          // Exit Fullscreen Button
+          Positioned(
+            top: 20,
+            left: 20,
+            child: GestureDetector(
+              onTap: () {
+                SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+                SystemChrome.setPreferredOrientations([
+                  DeviceOrientation.portraitUp,
+                  DeviceOrientation.portraitDown,
+                ]);
+                // Allow rotation again after returning to portrait
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  if (mounted) {
+                    SystemChrome.setPreferredOrientations([
+                      DeviceOrientation.portraitUp,
+                      DeviceOrientation.portraitDown,
+                      DeviceOrientation.landscapeLeft,
+                      DeviceOrientation.landscapeRight,
+                    ]);
+                  }
+                });
+              },
               child: Container(
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  border: Border(
-                    left: BorderSide(
-                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
-                    ),
-                  ),
+                  color: Colors.black.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
                 ),
-                child: Column(
-                  children: [
-                    _buildContentToggle(isDark),
-                    Expanded(
-                      child: _showAiChat
-                          ? _buildAiChatPanel(isDark)
-                          : _buildContentPanel(isDark),
-                    ),
-                  ],
-                ),
+                child: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 28),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -48,7 +48,7 @@ Include highly rated YouTube videos based on the verified list below.
 
 Return ONLY valid JSON (no markdown):
 {
-  "id": "roadmap_\${DateTime.now().millisecondsSinceEpoch}",
+  "id": "roadmap_12345",
   "title": "Descriptive Roadmap Title",
   "goal": "${prefs.learningGoal}",
   "language": "${prefs.language}",

@@ -97,15 +97,66 @@ class ApiService {
     }
   }
 
-  /// POST get AI-suggested learning path (now powered by Gemini)
   static Future<Course?> suggestPath(String dream) async {
-    // 1. Fetch pre-filtered, verified YouTube videos based on the prompt/dream
-    final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: dream);
+    try {
+      final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: dream);
+      
+      final course = await GeminiService.generateLearningPath(
+        dream: dream,
+        preFilteredVideos: preFilteredVideos,
+      );
+
+      if (course != null) return course;
+
+      // Fallback if AI fails completely
+      if (preFilteredVideos.isNotEmpty) {
+         return _buildFallbackCourse(dream, preFilteredVideos);
+      }
+    } catch (_) {}
+
+    return Course.mockCourses().first;
+  }
+
+  static Course _buildFallbackCourse(String dream, List<YouTubeVideoStats> videos) {
+    final modules = <Module>[];
+    int vidIdx = 0;
     
-    // 2. Pass those exact videos to Gemini to structure into a learning path
-    return GeminiService.generateLearningPath(
-      dream: dream,
-      preFilteredVideos: preFilteredVideos,
+    // Create 3 modules
+    for (int i = 0; i < 3; i++) {
+       final lessons = <Lesson>[];
+       // 3 videos per module or whatever remains
+       for (int j = 0; j < 3 && vidIdx < videos.length; j++) {
+         final v = videos[vidIdx];
+         lessons.add(Lesson(
+           id: 'f_les_$vidIdx',
+           title: v.title,
+           youtubeVideoId: v.id,
+           duration: v.durationText,
+         ));
+         vidIdx++;
+       }
+       if (lessons.isNotEmpty) {
+         modules.add(Module(
+           id: 'f_mod_$i',
+           title: 'Phase ${i+1}: $dream basics',
+           lessonCount: lessons.length,
+           isLocked: i > 0,
+           lessons: lessons,
+         ));
+       }
+    }
+
+    return Course(
+      id: 'fallback_\${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Complete \$dream Course',
+      description: 'A curated list of high quality tutorials for \$dream',
+      category: dream,
+      thumbnailUrl: videos.isNotEmpty ? 'https://img.youtube.com/vi/\${videos.first.id}/maxresdefault.jpg' : '',
+      rating: 4.8,
+      learnerCount: 154,
+      totalLessons: vidIdx,
+      skills: [dream],
+      modules: modules,
     );
   }
 
