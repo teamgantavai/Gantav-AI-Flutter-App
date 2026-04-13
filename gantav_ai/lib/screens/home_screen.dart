@@ -10,7 +10,7 @@ import '../services/gemini_service.dart';
 import '../services/recommendation_service.dart';
 import '../widgets/widgets.dart';
 import 'course_detail_screen.dart';
-import 'dream_input_screen.dart';
+import 'roadmap_screen.dart';
 import 'lesson_player_screen.dart';
 import '../models/models.dart';
 
@@ -130,17 +130,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // ─── Dream Card ───────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: _DreamCard(
-                    dream: appState.dream,
-                    onTap: () => _openDreamInput(context),
-                    onChangeDream: () => _openDreamInput(context),
+              // ─── Roadmap Progress Card ─────────────────────────
+              if (appState.activeRoadmap != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    child: _RoadmapCard(
+                      roadmap: appState.activeRoadmap!,
+                      todayDay: appState.todayRoadmapDay,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RoadmapScreen(roadmap: appState.activeRoadmap!),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
 
               // ─── Score + Streak Row ───────────────────────────────
               SliverToBoxAdapter(
@@ -346,28 +351,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openDreamInput(BuildContext context) async {
-    final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    final result = await navigator.push<bool>(
-      MaterialPageRoute(builder: (_) => const DreamInputScreen()),
-    );
-    // Result is true if user accepted a generated path
-    if (result == true && mounted) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Your learning path has been created! 🎉',
-            style: GoogleFonts.dmSans(),
-          ),
-          backgroundColor: AppColors.darkSurface,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-    }
-  }
 }
 
 /// Recommendation video card
@@ -505,100 +488,110 @@ class _RecommendationCard extends StatelessWidget {
 }
 }
 
-/// Dream card — shows current dream or prompts to set one
-class _DreamCard extends StatelessWidget {
-  final dynamic dream;
+/// Roadmap progress card — replaces DreamCard on the home screen
+class _RoadmapCard extends StatelessWidget {
+  final Roadmap roadmap;
+  final RoadmapDay? todayDay;
   final VoidCallback onTap;
-  final VoidCallback onChangeDream;
 
-  const _DreamCard({
-    required this.dream,
+  const _RoadmapCard({
+    required this.roadmap,
+    required this.todayDay,
     required this.onTap,
-    required this.onChangeDream,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hasDream = dream != null;
+    final pct = (roadmap.taskProgress * 100).round();
+    final todayDone = todayDay?.completedTaskCount ?? 0;
+    final todayTotal = todayDay?.tasks.length ?? 0;
+    final allDoneToday = todayDay?.allTasksCompleted ?? false;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: hasDream
-              ? LinearGradient(
-                  colors: [
-                    AppColors.violet.withValues(alpha: isDark ? 0.15 : 0.10),
-                    AppColors.teal.withValues(alpha: isDark ? 0.08 : 0.05),
-                  ],
-                )
-              : null,
-          color: hasDream
-              ? null
-              : isDark
-                  ? AppColors.darkSurface
-                  : AppColors.lightSurface,
+          gradient: LinearGradient(
+            colors: [
+              AppColors.violet.withValues(alpha: isDark ? 0.15 : 0.10),
+              AppColors.teal.withValues(alpha: isDark ? 0.08 : 0.05),
+            ],
+          ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: hasDream
-                ? AppColors.violet.withValues(alpha: 0.2)
-                : isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.06),
+            color: AppColors.violet.withValues(alpha: 0.2),
           ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: hasDream
-                    ? AppColors.violet.withValues(alpha: 0.15)
-                    : isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.black.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                hasDream ? Icons.auto_awesome : Icons.flag_outlined,
-                size: 20,
-                color: hasDream ? AppColors.violet : AppColors.textMuted,
+            Row(
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.violet.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.route_rounded, size: 20, color: AppColors.violet),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('My Roadmap',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet)),
+                      const SizedBox(height: 2),
+                      Text(roadmap.title,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 14, fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.textLight : AppColors.textDark),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                Text('$pct%',
+                  style: GoogleFonts.dmMono(
+                    fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.violet)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Progress bar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(100),
+              child: LinearProgressIndicator(
+                value: roadmap.taskProgress,
+                minHeight: 5,
+                backgroundColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                valueColor: const AlwaysStoppedAnimation(AppColors.violet),
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    hasDream ? 'Your Dream' : 'Set your dream',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: hasDream ? AppColors.violet : AppColors.textMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    hasDream
-                        ? dream.text
-                        : 'Tell us what you want to become',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              hasDream ? Icons.edit_outlined : Icons.chevron_right,
-              size: 18,
-              color: AppColors.textMuted,
+            const SizedBox(height: 10),
+            // Today's task status
+            Row(
+              children: [
+                Icon(
+                  allDoneToday ? Icons.check_circle : Icons.today_outlined,
+                  size: 14,
+                  color: allDoneToday ? AppColors.teal : AppColors.gold,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  allDoneToday
+                      ? 'Today\'s tasks complete! 🎉'
+                      : 'Today: $todayDone/$todayTotal tasks done',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12, fontWeight: FontWeight.w500,
+                    color: allDoneToday ? AppColors.teal : AppColors.textMuted),
+                ),
+                const Spacer(),
+                Text('Day ${roadmap.currentDayNumber}/${roadmap.totalDays}',
+                  style: GoogleFonts.dmMono(fontSize: 11, color: AppColors.textMuted)),
+              ],
             ),
           ],
         ),

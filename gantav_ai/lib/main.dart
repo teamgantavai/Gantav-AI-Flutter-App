@@ -8,6 +8,8 @@ import 'screens/explore_screen.dart';
 import 'screens/progress_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/auth_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/roadmap_generation_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
@@ -64,15 +66,25 @@ class _AppRouter extends StatelessWidget {
           return const _SplashScreen();
         }
 
-        // Already authenticated - skip dream entirely
+        // Check for onboarding (first-time users)
+        if (appState.authStatus == AuthStatus.needsOnboarding) {
+          return const OnboardingScreen();
+        }
+
+        // Roadmap is being generated after onboarding
+        if (appState.isGeneratingRoadmap) {
+          return const RoadmapGenerationScreen();
+        }
+
+        // Already authenticated
         if (appState.isAuthenticated) {
           if (appState.isGeneratingCourse) {
             return const _GeneratingScreen();
           }
-          return const AppShell(); // Go straight to app
+          return const AppShell();
         }
 
-        // Not authenticated - show auth (which includes dream input)
+        // Not authenticated - show auth
         return const AuthScreen();
       },
     );

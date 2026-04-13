@@ -8,6 +8,8 @@ import '../widgets/widgets.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'roadmap_screen.dart';
+import '../models/models.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -265,8 +267,8 @@ class _ProfileHero extends StatelessWidget {
               style: GoogleFonts.dmMono(fontSize: 13, color: AppColors.textMuted)),
             const SizedBox(height: 4),
 
-            // Dream badge
-            if (appState.dream != null)
+            // Roadmap progress badge
+            if (appState.activeRoadmap != null)
               Container(
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -278,11 +280,11 @@ class _ProfileHero extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.flag_outlined, color: AppColors.violet, size: 12),
+                    const Icon(Icons.route_rounded, color: AppColors.violet, size: 12),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        appState.dream!.text,
+                        '${(appState.activeRoadmap!.taskProgress * 100).round()}% • ${appState.activeRoadmap!.title}',
                         style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.violet),
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                       ),
@@ -396,7 +398,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
           unselectedLabelColor: AppColors.textMuted,
           labelStyle: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600),
           indicatorPadding: const EdgeInsets.all(3),
-          tabs: const [Tab(text: 'Courses'), Tab(text: 'Achievements'), Tab(text: 'Activity')],
+          tabs: const [Tab(text: 'Roadmaps'), Tab(text: 'Achievements'), Tab(text: 'Activity')],
         ),
       ),
     );
@@ -416,69 +418,139 @@ class _ActivePathsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final roadmaps = appState.roadmaps;
     final courses = appState.activeCourses;
-    if (courses.isEmpty) {
+
+    if (roadmaps.isEmpty && courses.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.school_outlined, color: AppColors.textMuted, size: 56),
+            Icon(Icons.route_outlined, color: AppColors.textMuted, size: 56),
             const SizedBox(height: 16),
-            Text('No active courses yet', style: Theme.of(context).textTheme.titleMedium),
+            Text('No roadmaps yet', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            Text('Start learning to see progress here', style: Theme.of(context).textTheme.bodySmall),
+            Text('Complete onboarding to get your first roadmap',
+              style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       );
     }
 
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       physics: const BouncingScrollPhysics(),
-      itemCount: courses.length,
-      itemBuilder: (ctx, i) {
-        final course = courses[i];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+      children: [
+        // Roadmaps section
+        if (roadmaps.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text('My Roadmaps',
+              style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.textLight : AppColors.textDark)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+          ...roadmaps.map((roadmap) => GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => RoadmapScreen(roadmap: roadmap)),
+            ),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.network(course.thumbnailUrl, width: 52, height: 40, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(width: 52, height: 40, color: AppColors.darkSurface2)),
+                  Row(
+                    children: [
+                      Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: AppColors.violet.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.route_rounded, size: 20, color: AppColors.violet),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(roadmap.title,
+                              style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600,
+                                color: isDark ? AppColors.textLight : AppColors.textDark),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('${roadmap.completedDays}/${roadmap.totalDays} days • ${roadmap.completedTasks}/${roadmap.totalTasks} tasks',
+                              style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
+                          ],
+                        ),
+                      ),
+                      Text('${(roadmap.taskProgress * 100).round()}%',
+                        style: GoogleFonts.dmMono(fontSize: 14, fontWeight: FontWeight.w700,
+                          color: AppColors.progressColor(roadmap.taskProgress))),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(course.title, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600,
-                          color: isDark ? AppColors.textLight : AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text('${course.completedLessons}/${course.totalLessons} lessons',
-                          style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
-                      ],
-                    ),
-                  ),
-                  Text('${(course.progress * 100).round()}%',
-                    style: GoogleFonts.dmMono(fontSize: 14, fontWeight: FontWeight.w700,
-                      color: AppColors.progressColor(course.progress))),
+                  const SizedBox(height: 10),
+                  SimpleProgressBar(progress: roadmap.taskProgress, height: 6),
                 ],
               ),
-              const SizedBox(height: 10),
-              SimpleProgressBar(progress: course.progress, height: 6),
-            ],
+            ),
+          )),
+        ],
+
+        // Legacy courses section (kept for users who have them)
+        if (courses.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 12),
+            child: Text('My Courses',
+              style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.textLight : AppColors.textDark)),
           ),
-        );
-      },
+          ...courses.map((course) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(course.thumbnailUrl, width: 52, height: 40, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(width: 52, height: 40, color: AppColors.darkSurface2)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(course.title, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600,
+                            color: isDark ? AppColors.textLight : AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('${course.completedLessons}/${course.totalLessons} lessons',
+                            style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
+                        ],
+                      ),
+                    ),
+                    Text('${(course.progress * 100).round()}%',
+                      style: GoogleFonts.dmMono(fontSize: 14, fontWeight: FontWeight.w700,
+                        color: AppColors.progressColor(course.progress))),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SimpleProgressBar(progress: course.progress, height: 6),
+              ],
+            ),
+          )),
+        ],
+      ],
     );
   }
 }

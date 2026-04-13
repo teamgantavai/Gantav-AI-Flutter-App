@@ -1,6 +1,8 @@
 /// Data models for Gantav AI
 library;
 
+export 'onboarding_models.dart';
+
 class UserProfile {
   final String id;
   final String name;
