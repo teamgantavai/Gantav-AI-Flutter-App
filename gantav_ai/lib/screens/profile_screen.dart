@@ -9,6 +9,9 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'roadmap_screen.dart';
 import 'course_detail_screen.dart';
+import '../services/auth_service.dart';
+import 'admin_panel_screen.dart';
+import '../models/models.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -17,7 +20,8 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
   final ImagePicker _picker = ImagePicker();
   late TabController _tabController;
 
@@ -47,13 +51,17 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     return Consumer<AppState>(
       builder: (context, appState, _) {
         final user = appState.user;
-        if (user == null) return const Center(child: CircularProgressIndicator(color: AppColors.violet));
+        if (user == null) {
+          return const Center(
+              child: CircularProgressIndicator(color: AppColors.violet));
+        }
 
         return RefreshIndicator(
           onRefresh: appState.refresh,
           color: AppColors.violet,
           child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics()),
             slivers: [
               SliverToBoxAdapter(
                 child: _ProfileHero(
@@ -61,7 +69,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   appState: appState,
                   isDark: isDark,
                   onAvatarTap: _pickImage,
-                  onSettingsTap: () => _showSettingsSheet(context, appState, isDark),
+                  onSettingsTap: () =>
+                      _showSettingsSheet(context, appState, isDark),
                 ),
               ),
               SliverToBoxAdapter(
@@ -72,15 +81,16 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               ),
               SliverPersistentHeader(
                 pinned: true,
-                delegate: _TabBarDelegate(tabController: _tabController, isDark: isDark),
+                delegate: _TabBarDelegate(
+                    tabController: _tabController, isDark: isDark),
               ),
               SliverFillRemaining(
                 hasScrollBody: true,
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _ActivePathsTab(appState: appState, isDark: isDark),
                     _GeneratedCoursesTab(appState: appState, isDark: isDark),
+                    _FavoritesTab(appState: appState, isDark: isDark),
                     _AchievementsTab(user: user, isDark: isDark),
                   ],
                 ),
@@ -92,43 +102,61 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  void _showSettingsSheet(BuildContext context, AppState appState, bool isDark) {
+  void _showSettingsSheet(
+      BuildContext context, AppState appState, bool isDark) {
     showModalBottomSheet(
       context: context,
       backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => _SettingsSheet(appState: appState, isDark: isDark, onEditProfile: () {
-        Navigator.pop(ctx);
-        _showEditProfileSheet(context, appState, isDark);
-      }),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => _SettingsSheet(
+          appState: appState,
+          isDark: isDark,
+          onEditProfile: () {
+            Navigator.pop(ctx);
+            _showEditProfileSheet(context, appState, isDark);
+          }),
     );
   }
 
-  void _showEditProfileSheet(BuildContext context, AppState appState, bool isDark) {
+  void _showEditProfileSheet(
+      BuildContext context, AppState appState, bool isDark) {
     final nameCtrl = TextEditingController(text: appState.user?.name ?? '');
     final handleCtrl = TextEditingController(text: appState.user?.handle ?? '');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 24, right: 24, top: 24),
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 24,
+            right: 24,
+            top: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Edit Profile', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 20),
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name')),
+            TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Full Name')),
             const SizedBox(height: 16),
-            TextField(controller: handleCtrl, decoration: const InputDecoration(labelText: 'Username', prefixText: '@')),
+            TextField(
+                controller: handleCtrl,
+                decoration: const InputDecoration(
+                    labelText: 'Username', prefixText: '@')),
             const SizedBox(height: 24),
             SizedBox(
-              width: double.infinity, height: 50,
+              width: double.infinity,
+              height: 50,
               child: ElevatedButton(
                 onPressed: () {
-                  appState.updateUserProfile(name: nameCtrl.text, handle: handleCtrl.text);
+                  appState.updateUserProfile(
+                      name: nameCtrl.text, handle: handleCtrl.text);
                   Navigator.pop(ctx);
                 },
                 child: const Text('Save Changes'),
@@ -151,7 +179,12 @@ class _ProfileHero extends StatelessWidget {
   final VoidCallback onAvatarTap;
   final VoidCallback onSettingsTap;
 
-  const _ProfileHero({required this.user, required this.appState, required this.isDark, required this.onAvatarTap, required this.onSettingsTap});
+  const _ProfileHero(
+      {required this.user,
+      required this.appState,
+      required this.isDark,
+      required this.onAvatarTap,
+      required this.onSettingsTap});
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +196,10 @@ class _ProfileHero extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: isDark
               ? [AppColors.violet.withValues(alpha: 0.15), AppColors.darkSurface]
-              : [AppColors.violet.withValues(alpha: 0.05), AppColors.lightSurface],
+              : [
+                  AppColors.violet.withValues(alpha: 0.05),
+                  AppColors.lightSurface
+                ],
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
@@ -176,31 +212,47 @@ class _ProfileHero extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
                     color: AppColors.gold.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(100),
-                    border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+                    border:
+                        Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.stars_rounded, color: AppColors.gold, size: 14),
+                      const Icon(Icons.stars_rounded,
+                          color: AppColors.gold, size: 14),
                       const SizedBox(width: 5),
-                      Text('${user.gantavScore} pts', style: GoogleFonts.dmMono(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.gold)),
+                      Text('${user.gantavScore} pts',
+                          style: GoogleFonts.dmMono(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.gold)),
                     ],
                   ),
                 ),
                 GestureDetector(
                   onTap: onSettingsTap,
                   child: Container(
-                    width: 38, height: 38,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08)),
+                      border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.black.withValues(alpha: 0.08)),
                     ),
-                    child: Icon(Icons.settings_outlined, size: 18, color: isDark ? AppColors.textLight : AppColors.textDark),
+                    child: Icon(Icons.settings_outlined,
+                        size: 18,
+                        color:
+                            isDark ? AppColors.textLight : AppColors.textDark),
                   ),
                 ),
               ],
@@ -212,43 +264,76 @@ class _ProfileHero extends StatelessWidget {
                 alignment: Alignment.bottomRight,
                 children: [
                   Container(
-                    width: 84, height: 84,
+                    width: 84,
+                    height: 84,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [AppColors.violet, AppColors.violetDark], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                      gradient: LinearGradient(
+                          colors: [AppColors.violet, AppColors.violetDark],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight),
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.violet.withValues(alpha: 0.4), width: 3),
+                      border: Border.all(
+                          color: AppColors.violet.withValues(alpha: 0.4),
+                          width: 3),
                       image: appState.profileImagePath != null
-                          ? DecorationImage(image: FileImage(File(appState.profileImagePath!)), fit: BoxFit.cover)
+                          ? DecorationImage(
+                              image: FileImage(File(appState.profileImagePath!)),
+                              fit: BoxFit.cover)
                           : null,
                     ),
                     child: appState.profileImagePath == null
-                        ? Center(child: Text(user.initials, style: GoogleFonts.dmSans(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)))
+                        ? Center(
+                            child: Text(user.initials,
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white)))
                         : null,
                   ),
-                  Container(padding: const EdgeInsets.all(5), decoration: const BoxDecoration(color: AppColors.violet, shape: BoxShape.circle), child: const Icon(Icons.camera_alt, color: Colors.white, size: 12)),
+                  Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: const BoxDecoration(
+                          color: AppColors.violet, shape: BoxShape.circle),
+                      child: const Icon(Icons.camera_alt,
+                          color: Colors.white, size: 12)),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            Text(user.name, style: GoogleFonts.dmSans(fontSize: 20, fontWeight: FontWeight.w800, color: isDark ? AppColors.textLight : AppColors.textDark)),
+            Text(user.name,
+                style: GoogleFonts.dmSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? AppColors.textLight : AppColors.textDark)),
             const SizedBox(height: 2),
-            Text('@${user.handle}', style: GoogleFonts.dmMono(fontSize: 13, color: AppColors.textMuted)),
+            Text('@${user.handle}',
+                style: GoogleFonts.dmMono(
+                    fontSize: 13, color: AppColors.textMuted)),
             const SizedBox(height: 4),
             if (appState.activeRoadmap != null)
               Container(
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.violet.withValues(alpha: 0.2))),
+                decoration: BoxDecoration(
+                    color: AppColors.violet.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: AppColors.violet.withValues(alpha: 0.2))),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.route_rounded, color: AppColors.violet, size: 12),
+                    const Icon(Icons.route_rounded,
+                        color: AppColors.violet, size: 12),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
                         '${(appState.activeRoadmap!.taskProgress * 100).round()}% • ${appState.activeRoadmap!.title}',
-                        style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.violet),
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.violet),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -256,17 +341,21 @@ class _ProfileHero extends StatelessWidget {
               ),
             const SizedBox(height: 16),
             SizedBox(
-              width: double.infinity, height: 44,
+              width: double.infinity,
+              height: 44,
               child: OutlinedButton(
                 onPressed: () {
                   SharePlus.instance.share(ShareParams(
-                    text: 'Check out my learning journey on Gantav AI! 🎯\nhttps://gantavai.com/u/${user.handle}',
+                    text:
+                        'Check out my learning journey on Gantav AI! 🎯\nhttps://gantavai.com/u/${user.handle}',
                   ));
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.violet,
-                  side: BorderSide(color: AppColors.violet.withValues(alpha: 0.4)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  side:
+                      BorderSide(color: AppColors.violet.withValues(alpha: 0.4)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                   padding: EdgeInsets.zero,
                 ),
                 child: Row(
@@ -274,7 +363,9 @@ class _ProfileHero extends StatelessWidget {
                   children: [
                     const Icon(Icons.share_outlined, size: 16),
                     const SizedBox(width: 8),
-                    Text('Share Profile', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text('Share Profile',
+                        style: GoogleFonts.dmSans(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -297,11 +388,26 @@ class _StatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _StatCard(value: '${user.lessonsCompleted}', label: 'Lessons', icon: Icons.play_lesson_outlined, color: AppColors.teal, isDark: isDark),
+        _StatCard(
+            value: '${user.lessonsCompleted}',
+            label: 'Lessons',
+            icon: Icons.play_lesson_outlined,
+            color: AppColors.teal,
+            isDark: isDark),
         const SizedBox(width: 10),
-        _StatCard(value: '${user.quizzesPassed}', label: 'Quizzes', icon: Icons.quiz_outlined, color: AppColors.violet, isDark: isDark),
+        _StatCard(
+            value: '${user.quizzesPassed}',
+            label: 'Quizzes',
+            icon: Icons.quiz_outlined,
+            color: AppColors.violet,
+            isDark: isDark),
         const SizedBox(width: 10),
-        _StatCard(value: '${user.streakDays}', label: 'Streak', icon: Icons.local_fire_department, color: AppColors.gold, isDark: isDark),
+        _StatCard(
+            value: '${user.streakDays}',
+            label: 'Streak',
+            icon: Icons.local_fire_department,
+            color: AppColors.gold,
+            isDark: isDark),
       ],
     );
   }
@@ -313,7 +419,12 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final bool isDark;
-  const _StatCard({required this.value, required this.label, required this.icon, required this.color, required this.isDark});
+  const _StatCard(
+      {required this.value,
+      required this.label,
+      required this.icon,
+      required this.color,
+      required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -329,8 +440,12 @@ class _StatCard extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(height: 6),
-            Text(value, style: GoogleFonts.dmMono(fontSize: 20, fontWeight: FontWeight.w700, color: color)),
-            Text(label, style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
+            Text(value,
+                style: GoogleFonts.dmMono(
+                    fontSize: 20, fontWeight: FontWeight.w700, color: color)),
+            Text(label,
+                style:
+                    GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
           ],
         ),
       ),
@@ -358,23 +473,31 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
         ),
         child: TabBar(
           controller: tabController,
-          indicator: BoxDecoration(color: AppColors.violet, borderRadius: BorderRadius.circular(10)),
+          indicator: BoxDecoration(
+              color: AppColors.violet, borderRadius: BorderRadius.circular(10)),
           indicatorSize: TabBarIndicatorSize.tab,
           dividerColor: Colors.transparent,
           labelColor: Colors.white,
           unselectedLabelColor: AppColors.textMuted,
-          labelStyle: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600),
+          labelStyle:
+              GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600),
           indicatorPadding: const EdgeInsets.all(3),
-          // ─── Tab 2 is now "My Courses" instead of "Activity"
-          tabs: const [Tab(text: 'Roadmaps'), Tab(text: 'My Courses'), Tab(text: 'Achievements')],
+          tabs: const [
+            Tab(text: 'Courses'),
+            Tab(text: 'Favorites'),
+            Tab(text: 'Badges'),
+          ],
         ),
       ),
     );
   }
 
-  @override double get maxExtent => 60;
-  @override double get minExtent => 60;
-  @override bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
+  @override
+  double get maxExtent => 60;
+  @override
+  double get minExtent => 60;
+  @override
+  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
 }
 
 // ─── Roadmaps Tab ─────────────────────────────────────────────────────────────
@@ -397,11 +520,14 @@ class _ActivePathsTab extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.route_outlined, color: AppColors.textMuted, size: 56),
+              const Icon(Icons.route_outlined,
+                  color: AppColors.textMuted, size: 56),
               const SizedBox(height: 16),
-              Text('No roadmaps yet', style: Theme.of(context).textTheme.titleMedium),
+              Text('No roadmaps yet',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              Text('Complete onboarding to get your first roadmap', style: Theme.of(context).textTheme.bodySmall),
+              Text('Complete onboarding to get your first roadmap',
+                  style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
         ),
@@ -414,47 +540,73 @@ class _ActivePathsTab extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
-          child: Text('My Roadmaps', style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? AppColors.textLight : AppColors.textDark)),
+          child: Text('My Roadmaps',
+              style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? AppColors.textLight : AppColors.textDark)),
         ),
         ...roadmaps.map((roadmap) => GestureDetector(
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RoadmapScreen(roadmap: roadmap))),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => RoadmapScreen(roadmap: roadmap))),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 40, height: 40,
-                      decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.route_rounded, size: 20, color: AppColors.violet),
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                              color: AppColors.violet.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.route_rounded,
+                              size: 20, color: AppColors.violet),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(roadmap.title,
+                                  style: GoogleFonts.dmSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark
+                                          ? AppColors.textLight
+                                          : AppColors.textDark),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                              Text(
+                                  '${roadmap.completedDays}/${roadmap.totalDays} days • ${roadmap.completedTasks}/${roadmap.totalTasks} tasks',
+                                  style: GoogleFonts.dmSans(
+                                      fontSize: 11, color: AppColors.textMuted)),
+                            ],
+                          ),
+                        ),
+                        Text('${(roadmap.taskProgress * 100).round()}%',
+                            style: GoogleFonts.dmMono(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.progressColor(
+                                    roadmap.taskProgress))),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(roadmap.title, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? AppColors.textLight : AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          Text('${roadmap.completedDays}/${roadmap.totalDays} days • ${roadmap.completedTasks}/${roadmap.totalTasks} tasks', style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
-                        ],
-                      ),
-                    ),
-                    Text('${(roadmap.taskProgress * 100).round()}%', style: GoogleFonts.dmMono(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.progressColor(roadmap.taskProgress))),
+                    const SizedBox(height: 10),
+                    SimpleProgressBar(progress: roadmap.taskProgress, height: 6),
                   ],
                 ),
-                const SizedBox(height: 10),
-                SimpleProgressBar(progress: roadmap.taskProgress, height: 6),
-              ],
-            ),
-          ),
-        )),
+              ),
+            )),
       ],
     );
   }
@@ -481,23 +633,32 @@ class _GeneratedCoursesTab extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 64, height: 64,
-                decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-                child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 32),
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                    color: AppColors.violet.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20)),
+                child: const Icon(Icons.auto_awesome,
+                    color: AppColors.violet, size: 32),
               ),
               const SizedBox(height: 16),
-              Text('No courses yet', style: Theme.of(context).textTheme.titleMedium),
+              Text('No courses yet',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              Text('Generate your first AI course from the Explore tab', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5)),
+              Text('Generate your first AI course from the Explore tab',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5)),
               const SizedBox(height: 20),
               ElevatedButton.icon(
                 onPressed: () => appState.setTabIndex(1),
                 icon: const Icon(Icons.explore_outlined, size: 16),
-                label: Text('Go to Explore', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+                label: Text('Go to Explore',
+                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.violet,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ],
@@ -517,17 +678,28 @@ class _GeneratedCoursesTab extends StatelessWidget {
             child: Row(
               children: [
                 Text('${courses.length} Course${courses.length != 1 ? 's' : ''}',
-                  style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700, color: isDark ? AppColors.textLight : AppColors.textDark)),
+                    style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.textLight : AppColors.textDark)),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(100)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                      color: AppColors.violet.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(100)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.auto_awesome, size: 12, color: AppColors.violet),
+                      const Icon(Icons.auto_awesome,
+                          size: 12, color: AppColors.violet),
                       const SizedBox(width: 4),
-                      Text('AI Generated', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet)),
+                      Text('AI Generated',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.violet)),
                     ],
                   ),
                 ),
@@ -540,27 +712,33 @@ class _GeneratedCoursesTab extends StatelessWidget {
         final displayTitle = course.title.replaceAll('\$dream', course.category);
 
         return GestureDetector(
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course))),
+          onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course))),
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
               color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+              border: Border.all(
+                  color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
             ),
             child: Row(
               children: [
                 // Thumbnail
                 ClipRRect(
-                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(16)),
+                  borderRadius:
+                      const BorderRadius.horizontal(left: Radius.circular(16)),
                   child: SizedBox(
-                    width: 90, height: 75,
+                    width: 90,
+                    height: 75,
                     child: Image.network(
                       course.thumbnailUrl,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
                         color: AppColors.darkSurface2,
-                        child: const Center(child: Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 28)),
+                        child: const Center(
+                            child: Icon(Icons.play_circle_outline,
+                                color: AppColors.textMuted, size: 28)),
                       ),
                     ),
                   ),
@@ -574,22 +752,47 @@ class _GeneratedCoursesTab extends StatelessWidget {
                       children: [
                         // Category pill
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(100)),
-                          child: Text(course.category, style: GoogleFonts.dmSans(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.violet), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: AppColors.violet.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(100)),
+                          child: Text(course.category,
+                              style: GoogleFonts.dmSans(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.violet),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
                         ),
                         const SizedBox(height: 4),
-                        Text(displayTitle, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? AppColors.textLight : AppColors.textDark), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        Text(displayTitle,
+                            style: GoogleFonts.dmSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.textLight
+                                    : AppColors.textDark),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.play_lesson_outlined, size: 12, color: AppColors.textMuted),
+                            const Icon(Icons.play_lesson_outlined,
+                                size: 12, color: AppColors.textMuted),
                             const SizedBox(width: 4),
-                            Text('${course.totalLessons} lessons', style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
+                            Text('${course.totalLessons} lessons',
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 11, color: AppColors.textMuted)),
                             const SizedBox(width: 10),
-                            const Icon(Icons.star_rounded, size: 12, color: AppColors.gold),
+                            const Icon(Icons.star_rounded,
+                                size: 12, color: AppColors.gold),
                             const SizedBox(width: 2),
-                            Text(course.rating.toStringAsFixed(1), style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.gold, fontWeight: FontWeight.w600)),
+                            Text(course.rating.toStringAsFixed(1),
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 11,
+                                    color: AppColors.gold,
+                                    fontWeight: FontWeight.w600)),
                           ],
                         ),
                         if (course.isInProgress) ...[
@@ -600,9 +803,10 @@ class _GeneratedCoursesTab extends StatelessWidget {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted.withValues(alpha: 0.5)),
+                const Padding(
+                  padding: EdgeInsets.only(right: 12),
+                  child: Icon(Icons.chevron_right,
+                      size: 18, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -623,17 +827,51 @@ class _AchievementsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final achievements = [
-      {'icon': Icons.rocket_launch_outlined, 'title': 'First Step', 'desc': 'Completed first lesson', 'earned': user.lessonsCompleted > 0, 'color': AppColors.violet},
-      {'icon': Icons.local_fire_department, 'title': '7 Day Streak', 'desc': 'Learned 7 days in a row', 'earned': user.streakDays >= 7, 'color': AppColors.gold},
-      {'icon': Icons.quiz_outlined, 'title': 'Quiz Master', 'desc': 'Passed 10 quizzes', 'earned': user.quizzesPassed >= 10, 'color': AppColors.teal},
-      {'icon': Icons.school_outlined, 'title': 'Scholar', 'desc': 'Completed 25 lessons', 'earned': user.lessonsCompleted >= 25, 'color': AppColors.violet},
-      {'icon': Icons.emoji_events_outlined, 'title': 'Champion', 'desc': 'Reached 1000 Gantav Score', 'earned': user.gantavScore >= 1000, 'color': AppColors.gold},
+      {
+        'icon': Icons.rocket_launch_outlined,
+        'title': 'First Step',
+        'desc': 'Completed first lesson',
+        'earned': user.lessonsCompleted > 0,
+        'color': AppColors.violet
+      },
+      {
+        'icon': Icons.local_fire_department,
+        'title': '7 Day Streak',
+        'desc': 'Learned 7 days in a row',
+        'earned': user.streakDays >= 7,
+        'color': AppColors.gold
+      },
+      {
+        'icon': Icons.quiz_outlined,
+        'title': 'Quiz Master',
+        'desc': 'Passed 10 quizzes',
+        'earned': user.quizzesPassed >= 10,
+        'color': AppColors.teal
+      },
+      {
+        'icon': Icons.school_outlined,
+        'title': 'Scholar',
+        'desc': 'Completed 25 lessons',
+        'earned': user.lessonsCompleted >= 25,
+        'color': AppColors.violet
+      },
+      {
+        'icon': Icons.emoji_events_outlined,
+        'title': 'Champion',
+        'desc': 'Reached 1000 Gantav Score',
+        'earned': user.gantavScore >= 1000,
+        'color': AppColors.gold
+      },
     ];
 
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       physics: const BouncingScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.1),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.1),
       itemCount: achievements.length,
       itemBuilder: (ctx, i) {
         final a = achievements[i];
@@ -642,18 +880,38 @@ class _AchievementsTab extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: earned ? color.withValues(alpha: isDark ? 0.12 : 0.08) : Colors.transparent,
+            color: earned
+                ? color.withValues(alpha: isDark ? 0.12 : 0.08)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: earned ? color.withValues(alpha: 0.3) : isDark ? AppColors.darkBorder : AppColors.lightBorder),
+            border: Border.all(
+                color: earned
+                    ? color.withValues(alpha: 0.3)
+                    : isDark ? AppColors.darkBorder : AppColors.lightBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(a['icon'] as IconData, color: earned ? color : AppColors.textMuted, size: 28),
+              Icon(a['icon'] as IconData,
+                  color: earned ? color : AppColors.textMuted, size: 28),
               const Spacer(),
-              Text(a['title'] as String, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: earned ? (isDark ? AppColors.textLight : AppColors.textDark) : AppColors.textMuted)),
-              Text(a['desc'] as String, style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted, height: 1.3)),
-              if (!earned) ...[const SizedBox(height: 6), Text('Locked', style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted.withValues(alpha: 0.6)))],
+              Text(a['title'] as String,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: earned
+                          ? (isDark ? AppColors.textLight : AppColors.textDark)
+                          : AppColors.textMuted)),
+              Text(a['desc'] as String,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 11, color: AppColors.textMuted, height: 1.3)),
+              if (!earned) ...[
+                const SizedBox(height: 6),
+                Text('Locked',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 10,
+                        color: AppColors.textMuted.withValues(alpha: 0.6)))
+              ],
             ],
           ),
         );
@@ -668,7 +926,8 @@ class _SettingsSheet extends StatelessWidget {
   final AppState appState;
   final bool isDark;
   final VoidCallback onEditProfile;
-  const _SettingsSheet({required this.appState, required this.isDark, required this.onEditProfile});
+  const _SettingsSheet(
+      {required this.appState, required this.isDark, required this.onEditProfile});
 
   @override
   Widget build(BuildContext context) {
@@ -677,21 +936,63 @@ class _SettingsSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.textMuted.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
+          Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.textMuted.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 20),
           Text('Settings', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 20),
-          _SettingsTile(icon: Icons.edit_outlined, title: 'Edit Profile', onTap: onEditProfile, isDark: isDark),
+          _SettingsTile(
+              icon: Icons.edit_outlined,
+              title: 'Edit Profile',
+              onTap: onEditProfile,
+              isDark: isDark),
           _SettingsTile(
             icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
             title: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-            onTap: () { appState.toggleTheme(); Navigator.pop(context); },
+            onTap: () {
+              appState.toggleTheme();
+              Navigator.pop(context);
+            },
             isDark: isDark,
           ),
-          _SettingsTile(icon: Icons.notifications_outlined, title: 'Notifications', onTap: () {}, isDark: isDark),
-          _SettingsTile(icon: Icons.help_outline, title: 'Help & Support', onTap: () {}, isDark: isDark),
+          if (AuthService.isAdmin)
+            _SettingsTile(
+              icon: Icons.admin_panel_settings_outlined,
+              title: 'Admin Panel',
+              color: AppColors.violet,
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const AdminPanelScreen()));
+              },
+              isDark: isDark,
+            ),
+          _SettingsTile(
+              icon: Icons.notifications_outlined,
+              title: 'Notifications',
+              onTap: () {},
+              isDark: isDark),
+          _SettingsTile(
+              icon: Icons.help_outline,
+              title: 'Help & Support',
+              onTap: () {},
+              isDark: isDark),
           const SizedBox(height: 8),
-          _SettingsTile(icon: Icons.logout_rounded, title: 'Sign Out', isDestructive: true, onTap: () async { Navigator.pop(context); await appState.signOut(); }, isDark: isDark),
+          _SettingsTile(
+              icon: Icons.logout_rounded,
+              title: 'Sign Out',
+              isDestructive: true,
+              onTap: () async {
+                Navigator.pop(context);
+                await appState.signOut();
+              },
+              isDark: isDark),
         ],
       ),
     );
@@ -704,24 +1005,195 @@ class _SettingsTile extends StatelessWidget {
   final VoidCallback onTap;
   final bool isDestructive;
   final bool isDark;
-  const _SettingsTile({required this.icon, required this.title, required this.onTap, this.isDestructive = false, required this.isDark});
+  final Color? color;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.isDestructive = false,
+    required this.isDark,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = isDestructive ? AppColors.error : (isDark ? AppColors.textLight : AppColors.textDark);
+    final finalColor = isDestructive
+        ? AppColors.error
+        : color ?? (isDark ? AppColors.textLight : AppColors.textDark);
     return ListTile(
       leading: Container(
-        width: 38, height: 38,
+        width: 38,
+        height: 38,
         decoration: BoxDecoration(
-          color: isDestructive ? AppColors.error.withValues(alpha: 0.1) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+          color: isDestructive
+              ? AppColors.error.withValues(alpha: 0.1)
+              : (color ?? (isDark ? Colors.white : Colors.black))
+                  .withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(icon, size: 18, color: color),
+        child: Icon(icon, size: 18, color: finalColor),
       ),
-      title: Text(title, style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w500, color: color)),
-      trailing: isDestructive ? null : const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+      title: Text(title,
+          style: GoogleFonts.dmSans(
+              fontSize: 15, fontWeight: FontWeight.w500, color: finalColor)),
+      trailing: isDestructive
+          ? null
+          : const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
       contentPadding: EdgeInsets.zero,
       onTap: onTap,
+    );
+  }
+}
+
+// ─── Favorite Courses Tab ──────────────────────────────────────────────────
+
+class _FavoritesTab extends StatelessWidget {
+  final AppState appState;
+  final bool isDark;
+  const _FavoritesTab({required this.appState, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final favorites = appState.favoriteCourses;
+    final starredLessons = appState.starredLessons;
+
+    if (favorites.isEmpty && starredLessons.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.favorite_border, size: 48, color: AppColors.textMuted),
+            const SizedBox(height: 16),
+            Text('No favorites yet', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text('Saved courses and starred videos will appear here.', 
+              style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      physics: const BouncingScrollPhysics(),
+      children: [
+        if (favorites.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12, top: 8),
+            child: Text('Saved Courses',
+                style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? AppColors.textLight : AppColors.textDark)),
+          ),
+          ...favorites.map((c) => _CourseListTile(course: c, isDark: isDark)),
+        ],
+        if (starredLessons.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12, top: 16),
+            child: Text('Starred Videos',
+                style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? AppColors.textLight : AppColors.textDark)),
+          ),
+          ...starredLessons.map((l) => _LessonListTile(lesson: l, isDark: isDark)),
+        ],
+      ],
+    );
+  }
+}
+
+class _LessonListTile extends StatelessWidget {
+  final Lesson lesson;
+  final bool isDark;
+  const _LessonListTile({required this.lesson, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    // We need the course and module to open LessonPlayerScreen
+    // For simplicity in this view, we might just show the video or warn
+    // But better if we can find them.
+    // For now, let's just make it a beautiful card.
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              'https://img.youtube.com/vi/${lesson.youtubeVideoId}/0.jpg',
+              width: 100, height: 60, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(color: AppColors.darkSurface2, width: 100, height: 60),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(lesson.title, 
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 13),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Text(lesson.duration, style: GoogleFonts.dmMono(color: AppColors.violet, fontSize: 10, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+          const Icon(Icons.star_rounded, size: 18, color: AppColors.gold),
+        ],
+      ),
+    );
+  }
+}
+
+class _CourseListTile extends StatelessWidget {
+  final Course course;
+  final bool isDark;
+  const _CourseListTile({required this.course, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course))),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(course.thumbnailUrl, width: 80, height: 60, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(course.title.replaceAll('\$dream', course.category), 
+                    style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 13),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(course.category, style: GoogleFonts.dmSans(color: AppColors.violet, fontSize: 10, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+          ],
+        ),
+      ),
     );
   }
 }

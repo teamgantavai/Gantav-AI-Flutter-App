@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'theme/app_theme.dart';
-import 'services/app_state.dart';
-import 'screens/home_screen.dart';
-import 'screens/explore_screen.dart';
-import 'screens/progress_screen.dart';
-import 'screens/profile_screen.dart';
-import 'screens/auth_screen.dart';
-import 'screens/onboarding_screen.dart';
-import 'screens/roadmap_generation_screen.dart';
-import 'screens/course_detail_screen.dart';
-import 'screens/roadmap_screen.dart';
+import 'package:gantav_ai/theme/app_theme.dart';
+import 'package:gantav_ai/services/app_state.dart';
+import 'package:gantav_ai/screens/home_screen.dart';
+import 'package:gantav_ai/screens/explore_screen.dart';
+import 'package:gantav_ai/screens/progress_screen.dart';
+import 'package:gantav_ai/screens/profile_screen.dart';
+import 'package:gantav_ai/screens/auth_screen.dart';
+import 'package:gantav_ai/screens/onboarding_screen.dart';
+import 'package:gantav_ai/screens/roadmap_generation_screen.dart';
+import 'package:gantav_ai/screens/course_detail_screen.dart';
+import 'package:gantav_ai/screens/roadmap_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'firebase_options.dart';
-import 'widgets/connectivity_wrapper.dart';
-import 'services/api_config.dart';
+import 'package:gantav_ai/firebase_options.dart';
+import 'package:gantav_ai/widgets/connectivity_wrapper.dart';
+import 'package:gantav_ai/services/api_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

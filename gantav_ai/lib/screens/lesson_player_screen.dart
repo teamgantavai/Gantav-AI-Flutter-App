@@ -8,6 +8,8 @@ import '../services/api_config.dart';
 import 'quiz_screen.dart';
 import '../widgets/youtube_player_wrapper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import '../services/app_state.dart';
 import 'dart:convert';
 
 class LessonPlayerScreen extends StatefulWidget {
@@ -42,6 +44,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   bool _isLiked = false;
   bool _isDisliked = false;
   bool _isStarred = false;
+  bool _isCompleted = false;
   int _likeCount = 0;
 
   final GlobalKey<AppYoutubePlayerState> _ytKey = GlobalKey();
@@ -63,6 +66,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           _isLiked = map['liked'] ?? false;
           _isDisliked = map['disliked'] ?? false;
           _isStarred = map['starred'] ?? false;
+          _isCompleted = map['completed'] ?? false;
           _likeCount = map['like_count'] ?? 0;
         });
       }
@@ -77,6 +81,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
         'liked': _isLiked,
         'disliked': _isDisliked,
         'starred': _isStarred,
+        'completed': _isCompleted,
         'like_count': _likeCount,
       }));
     } catch (_) {}
@@ -349,6 +354,26 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           key: _ytKey,
           videoId: widget.lesson.youtubeVideoId,
           autoPlay: false,
+          onVideoEnd: () {
+            if (!_isCompleted) {
+              setState(() => _isCompleted = true);
+              _saveInteractionState();
+              // Notify app state
+              context.read<AppState>().markLessonAsCompleted(
+                widget.course.id, 
+                widget.module.id, 
+                widget.lesson.id
+              );
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Video completed! You can now proceed.'),
+                  backgroundColor: AppColors.teal,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
         ),
       ),
     );
@@ -759,15 +784,27 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       child: SizedBox(
         width: double.infinity, height: 48,
         child: ElevatedButton(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => QuizScreen(
-                lesson: widget.lesson,
-                course: widget.course,
-                module: widget.module,
-              ),
-            ),
-          ),
+          onPressed: () {
+             if (!_isCompleted) {
+               ScaffoldMessenger.of(context).showSnackBar(
+                 const SnackBar(
+                   content: Text('Please watch the entire video to unlock the next part!'),
+                   backgroundColor: AppColors.error,
+                   behavior: SnackBarBehavior.floating,
+                 ),
+               );
+               return;
+             }
+             Navigator.of(context).push(
+               MaterialPageRoute(
+                 builder: (_) => QuizScreen(
+                   lesson: widget.lesson,
+                   course: widget.course,
+                   module: widget.module,
+                 ),
+               ),
+             );
+          },
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

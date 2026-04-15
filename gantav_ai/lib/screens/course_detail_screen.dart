@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../services/app_state.dart';
 import '../models/models.dart';
 import '../widgets/widgets.dart';
 import 'lesson_player_screen.dart';
@@ -11,41 +13,50 @@ class CourseDetailScreen extends StatelessWidget {
   const CourseDetailScreen({super.key, required this.course});
 
   // Fix the course title - never show $dream
-  String get _displayTitle => course.title
-      .replaceAll('\$dream', course.category)
-      .replaceAll('Complete  Course', 'Complete ${course.category} Course');
+  String _getDisplayTitle(Course c) => c.title
+      .replaceAll('\$dream', c.category)
+      .replaceAll('Complete  Course', 'Complete ${c.category} Course');
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final useWideLayout = isLandscape && screenWidth > 700;
+    return Consumer<AppState>(
+      builder: (context, appState, _) {
+        // Find the most recent version of this course from AppState
+        final activeCourse = appState.courses.firstWhere(
+          (c) => c.id == course.id,
+          orElse: () => course,
+        );
 
-    if (useWideLayout) {
-      return _buildWideLayout(context, isDark);
-    }
-    return _buildNarrowLayout(context, isDark);
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+        final screenWidth = MediaQuery.of(context).size.width;
+        final useWideLayout = isLandscape && screenWidth > 700;
+
+        if (useWideLayout) {
+          return _buildWideLayout(context, isDark, activeCourse);
+        }
+        return _buildNarrowLayout(context, isDark, activeCourse);
+      },
+    );
   }
 
-  Widget _buildNarrowLayout(BuildContext context, bool isDark) {
+  Widget _buildNarrowLayout(BuildContext context, bool isDark, Course currentCourse) {
     return Scaffold(
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          _buildAppBar(context, isDark),
-          _buildThumbnail(context),
-          _buildCourseInfo(context, isDark),
-          _buildModuleList(context, isDark),
+          _buildAppBar(context, isDark, currentCourse),
+          _buildThumbnail(context, currentCourse),
+          _buildCourseInfo(context, isDark, currentCourse),
+          _buildModuleList(context, isDark, currentCourse),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
-      bottomNavigationBar: _buildBottomCTA(context, isDark),
+      bottomNavigationBar: _buildBottomCTA(context, isDark, currentCourse),
     );
   }
 
-  Widget _buildWideLayout(BuildContext context, bool isDark) {
+  Widget _buildWideLayout(BuildContext context, bool isDark, Course currentCourse) {
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -74,7 +85,7 @@ class CourseDetailScreen extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _displayTitle,
+                      _getDisplayTitle(currentCourse),
                       style: Theme.of(context).textTheme.titleLarge,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -95,9 +106,9 @@ class CourseDetailScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildThumbnailWidget(context),
+                          _buildThumbnailWidget(context, currentCourse),
                           const SizedBox(height: 16),
-                          _buildInfoContent(context, isDark),
+                          _buildInfoContent(context, isDark, currentCourse),
                         ],
                       ),
                     ),
@@ -127,13 +138,13 @@ class CourseDetailScreen extends StatelessWidget {
                           child: ListView.builder(
                             physics: const BouncingScrollPhysics(),
                             padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: course.modules.length,
+                            itemCount: currentCourse.modules.length,
                             itemBuilder: (context, index) {
-                              return _buildModuleCard(context, isDark, course.modules[index], index);
+                              return _buildModuleCard(context, isDark, currentCourse.modules[index], index, currentCourse);
                             },
                           ),
                         ),
-                        _buildBottomCTA(context, isDark),
+                        _buildBottomCTA(context, isDark, currentCourse),
                       ],
                     ),
                   ),
@@ -146,7 +157,7 @@ class CourseDetailScreen extends StatelessWidget {
     );
   }
 
-  SliverAppBar _buildAppBar(BuildContext context, bool isDark) {
+  SliverAppBar _buildAppBar(BuildContext context, bool isDark, Course currentCourse) {
     return SliverAppBar(
       pinned: true,
       backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
@@ -155,8 +166,8 @@ class CourseDetailScreen extends StatelessWidget {
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.06),
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
@@ -168,7 +179,7 @@ class CourseDetailScreen extends StatelessWidget {
         onPressed: () => Navigator.of(context).pop(),
       ),
       title: Text(
-        _displayTitle,
+        _getDisplayTitle(currentCourse),
         style: Theme.of(context).textTheme.titleLarge,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -176,43 +187,73 @@ class CourseDetailScreen extends StatelessWidget {
     );
   }
 
-  SliverToBoxAdapter _buildThumbnail(BuildContext context) {
+  SliverToBoxAdapter _buildThumbnail(BuildContext context, Course currentCourse) {
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: _buildThumbnailWidget(context),
+        child: _buildThumbnailWidget(context, currentCourse),
       ),
     );
   }
 
-  Widget _buildThumbnailWidget(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Image.network(
-          course.thumbnailUrl,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            color: AppColors.darkSurface2,
-            child: const Center(
-              child: Icon(Icons.play_circle_outline,
-                  color: AppColors.textMuted, size: 56),
+  Widget _buildThumbnailWidget(BuildContext context, Course currentCourse) {
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Image.network(
+              currentCourse.thumbnailUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: AppColors.darkSurface2,
+                child: const Center(
+                  child: Icon(Icons.play_circle_outline,
+                      color: AppColors.textMuted, size: 56),
+                ),
+              ),
             ),
           ),
         ),
-      ),
+        if (currentCourse.isVerified)
+          Positioned(
+            top: 14, left: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha:0.8),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.gold.withValues(alpha:0.5), width: 0.5),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha:0.3), blurRadius: 10, offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.verified, color: AppColors.gold, size: 14),
+                  const SizedBox(width: 6),
+                  Text('GANTAV VERIFIED',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 10, fontWeight: FontWeight.w900,
+                      color: AppColors.gold, letterSpacing: 0.8)),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 
-  SliverToBoxAdapter _buildCourseInfo(BuildContext context, bool isDark) {
+  SliverToBoxAdapter _buildCourseInfo(BuildContext context, bool isDark, Course currentCourse) {
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildInfoContent(context, isDark),
+            _buildInfoContent(context, isDark, currentCourse),
             Text('Modules', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 14),
           ],
@@ -221,17 +262,32 @@ class CourseDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoContent(BuildContext context, bool isDark) {
+  Widget _buildInfoContent(BuildContext context, bool isDark, Course currentCourse) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (currentCourse.isVerified)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.verified, color: AppColors.gold, size: 16),
+                const SizedBox(width: 6),
+                Text('Hand-picked and curated by Gantav Team',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.gold)),
+              ],
+            ),
+          ),
         Text(
-          _displayTitle,
+          _getDisplayTitle(currentCourse),
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 8),
         Text(
-          course.description,
+          currentCourse.description,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.textMuted,
                 height: 1.5,
@@ -244,38 +300,28 @@ class CourseDetailScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: AppColors.violet.withValues(alpha: 0.12),
+                color: currentCourse.isVerified ? AppColors.gold.withValues(alpha: 0.12) : AppColors.violet.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(100),
+                border: currentCourse.isVerified ? Border.all(color: AppColors.gold.withValues(alpha: 0.3), width: 0.5) : null,
               ),
               child: Text(
-                course.category,
+                currentCourse.isVerified ? 'Gantav Verified' : currentCourse.category,
                 style: GoogleFonts.dmSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.violet,
+                  color: currentCourse.isVerified ? AppColors.gold : AppColors.violet,
                 ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Icon(Icons.star_rounded, color: AppColors.gold, size: 18),
-            const SizedBox(width: 4),
-            Text(
-              course.rating.toStringAsFixed(1),
-              style: GoogleFonts.dmMono(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.gold,
               ),
             ),
           ],
         ),
         const SizedBox(height: 16),
 
-        if (course.skills.isNotEmpty)
+        if (currentCourse.skills.isNotEmpty)
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: course.skills.map((skill) {
+            children: currentCourse.skills.map((skill) {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
@@ -319,7 +365,7 @@ class CourseDetailScreen extends StatelessWidget {
             children: [
               _StatItem(
                 icon: Icons.play_lesson_outlined,
-                value: '${course.totalLessons}',
+                value: '${currentCourse.totalLessons}',
                 label: 'lessons',
               ),
               Container(
@@ -328,9 +374,9 @@ class CourseDetailScreen extends StatelessWidget {
               ),
               _StatItem(
                 icon: Icons.calendar_today_outlined,
-                value: course.estimatedTime.replaceAll(' weeks', '').isEmpty 
+                value: currentCourse.estimatedTime.replaceAll(' weeks', '').isEmpty 
                     ? '8' 
-                    : course.estimatedTime.replaceAll(' weeks', ''),
+                    : currentCourse.estimatedTime.replaceAll(' weeks', ''),
                 label: 'weeks',
               ),
               Container(
@@ -339,7 +385,7 @@ class CourseDetailScreen extends StatelessWidget {
               ),
               _StatItem(
                 icon: Icons.people_outline,
-                value: _formatCount(course.learnerCount),
+                value: _formatCount(currentCourse.learnerCount),
                 label: 'learners',
               ),
             ],
@@ -347,25 +393,25 @@ class CourseDetailScreen extends StatelessWidget {
         ),
         const SizedBox(height: 24),
 
-        if (course.isInProgress) ...[
-          SimpleProgressBar(progress: course.progress, height: 8),
+        if (currentCourse.isInProgress) ...[
+          SimpleProgressBar(progress: currentCourse.progress, height: 8),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
                 child: Text(
-                  '${course.completedLessons}/${course.totalLessons} lessons completed',
+                  '${currentCourse.completedLessons}/${currentCourse.totalLessons} lessons completed',
                   style: Theme.of(context).textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Text(
-                '${(course.progress * 100).round()}%',
+                '${(currentCourse.progress * 100).round()}%',
                 style: GoogleFonts.dmMono(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.progressColor(course.progress),
+                  color: AppColors.progressColor(currentCourse.progress),
                 ),
               ),
             ],
@@ -377,12 +423,31 @@ class CourseDetailScreen extends StatelessWidget {
   }
 
   /// Build a single module card with proper unique title/description display
-  Widget _buildModuleCard(BuildContext context, bool isDark, Module module, int index) {
+  Widget _buildModuleCard(BuildContext context, bool isDark, Module module, int index, Course currentCourse) {
+    // Sequence unlocking logic:
+    // 1. First module is always unlocked
+    // 2. Subsequent modules are locked if previous module is not completed
+    bool isActuallyLocked = false;
+    if (index > 0) {
+      final prevModule = currentCourse.modules[index - 1];
+      // A module is completed if all its lessons are done
+      isActuallyLocked = prevModule.completedCount < prevModule.lessonCount;
+    }
+
     return GestureDetector(
-      onTap: module.isLocked ? null : () => _openModule(context, module),
+      onTap: isActuallyLocked ? () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Finish previous modules to unlock this!', style: GoogleFonts.dmSans()),
+            backgroundColor: AppColors.violet,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          )
+        );
+      } : () => _openModule(context, module, currentCourse),
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 300),
-        opacity: module.isLocked ? 0.5 : 1.0,
+        opacity: isActuallyLocked ? 0.4 : 1.0,
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(16),
@@ -401,14 +466,14 @@ class CourseDetailScreen extends StatelessWidget {
               Container(
                 width: 40, height: 40,
                 decoration: BoxDecoration(
-                  color: module.isLocked
+                  color: isActuallyLocked
                       ? AppColors.textMuted.withValues(alpha: 0.1)
                       : AppColors.violet.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
-                  child: module.isLocked
-                      ? const Icon(Icons.lock_outline, size: 18, color: AppColors.textMuted)
+                  child: isActuallyLocked
+                      ? const Icon(Icons.lock_rounded, size: 18, color: AppColors.textMuted)
                       : Text(
                           '${index + 1}',
                           style: GoogleFonts.dmMono(
@@ -460,22 +525,22 @@ class CourseDetailScreen extends StatelessWidget {
     );
   }
 
-  SliverPadding _buildModuleList(BuildContext context, bool isDark) {
+  SliverPadding _buildModuleList(BuildContext context, bool isDark, Course currentCourse) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
-            if (index >= course.modules.length) return null;
-            return _buildModuleCard(context, isDark, course.modules[index], index);
+            if (index >= currentCourse.modules.length) return null;
+            return _buildModuleCard(context, isDark, currentCourse.modules[index], index, currentCourse);
           },
-          childCount: course.modules.length,
+          childCount: currentCourse.modules.length,
         ),
       ),
     );
   }
 
-  Widget _buildBottomCTA(BuildContext context, bool isDark) {
+  Widget _buildBottomCTA(BuildContext context, bool isDark, Course currentCourse) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
       decoration: BoxDecoration(
@@ -483,8 +548,8 @@ class CourseDetailScreen extends StatelessWidget {
         border: Border(
           top: BorderSide(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.08),
           ),
         ),
       ),
@@ -492,9 +557,9 @@ class CourseDetailScreen extends StatelessWidget {
         width: double.infinity,
         height: 52,
         child: ElevatedButton(
-          onPressed: () => _startLearning(context),
+          onPressed: () => _startLearning(context, currentCourse),
           child: Text(
-            course.isInProgress ? 'Continue learning' : 'Start learning',
+            currentCourse.isInProgress ? 'Continue learning' : 'Start learning',
             style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ),
@@ -502,7 +567,7 @@ class CourseDetailScreen extends StatelessWidget {
     );
   }
 
-  void _openModule(BuildContext context, Module module) {
+  void _openModule(BuildContext context, Module module, Course currentCourse) {
     if (module.lessons.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -528,18 +593,19 @@ class CourseDetailScreen extends StatelessWidget {
         builder: (_) => LessonPlayerScreen(
           lesson: nextLesson,
           module: module,
-          course: course,
+          course: currentCourse,
         ),
       ),
     );
   }
 
-  void _startLearning(BuildContext context) {
-    final module = course.modules.firstWhere(
-      (m) => !m.isLocked && m.lessons.isNotEmpty,
-      orElse: () => course.modules.first,
+  void _startLearning(BuildContext context, Course currentCourse) {
+    // Find the first module that isn't fully completed
+    final module = currentCourse.modules.firstWhere(
+      (m) => m.completedCount < m.lessonCount && m.lessons.isNotEmpty,
+      orElse: () => currentCourse.modules.first,
     );
-    _openModule(context, module);
+    _openModule(context, module, currentCourse);
   }
 
   static String _formatCount(int count) {

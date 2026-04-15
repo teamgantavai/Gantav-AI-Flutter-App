@@ -103,6 +103,7 @@ class Course {
   final String title;
   final String description;
   final String category;
+  final String language;
   final String thumbnailUrl;
   final double rating;
   final int learnerCount;
@@ -111,12 +112,16 @@ class Course {
   final String estimatedTime;
   final List<String> skills;
   final List<Module> modules;
+  final int likes;
+
+  final bool isVerified;
 
   const Course({
     required this.id,
     required this.title,
     required this.description,
     required this.category,
+    this.language = 'English',
     required this.thumbnailUrl,
     this.rating = 0.0,
     this.learnerCount = 0,
@@ -125,6 +130,8 @@ class Course {
     this.estimatedTime = '',
     this.skills = const [],
     this.modules = const [],
+    this.likes = 0,
+    this.isVerified = false,
   });
 
   double get progress =>
@@ -138,12 +145,14 @@ class Course {
       title: json['title'] ?? '',
       description: json['description'] ?? '',
       category: json['category'] ?? '',
+      language: json['language'] ?? 'English',
       thumbnailUrl: json['thumbnail_url'] ?? '',
       rating: (json['rating'] ?? 0.0).toDouble(),
       learnerCount: json['learner_count'] ?? 0,
       totalLessons: json['total_lessons'] ?? 0,
       completedLessons: json['completed_lessons'] ?? 0,
       estimatedTime: json['estimated_time'] ?? '',
+      likes: json['likes'] ?? 0,
       skills: json['skills'] != null
           ? List<String>.from(json['skills'])
           : const [],
@@ -152,6 +161,7 @@ class Course {
               .map((m) => Module.fromJson(m))
               .toList()
           : const [],
+      isVerified: json['is_verified'] ?? false,
     );
   }
 
@@ -161,13 +171,17 @@ class Course {
       'title': title,
       'description': description,
       'category': category,
+      'language': language,
       'thumbnail_url': thumbnailUrl,
       'rating': rating,
       'learner_count': learnerCount,
       'total_lessons': totalLessons,
       'completed_lessons': completedLessons,
       'estimated_time': estimatedTime,
+      'likes': likes,
       'skills': skills,
+      'modules': modules.map((m) => m.toJson()).toList(),
+      'is_verified': isVerified,
     };
   }
 
@@ -616,6 +630,17 @@ class Module {
           : const [],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'lesson_count': lessonCount,
+      'completed_count': completedCount,
+      'is_locked': isLocked,
+      'lessons': lessons.map((l) => l.toJson()).toList(),
+    };
+  }
 }
 
 class Lesson {
@@ -623,6 +648,7 @@ class Lesson {
   final String title;
   final String youtubeVideoId;
   final String duration;
+  final String description;
   final bool isCompleted;
   final List<Chapter> chapters;
 
@@ -631,6 +657,7 @@ class Lesson {
     required this.title,
     required this.youtubeVideoId,
     this.duration = '',
+    this.description = '',
     this.isCompleted = false,
     this.chapters = const [],
   });
@@ -641,6 +668,7 @@ class Lesson {
       title: json['title'] ?? '',
       youtubeVideoId: json['youtube_video_id'] ?? '',
       duration: json['duration'] ?? '',
+      description: json['description'] ?? '',
       isCompleted: json['is_completed'] ?? false,
       chapters: json['chapters'] != null
           ? (json['chapters'] as List)
@@ -648,6 +676,18 @@ class Lesson {
               .toList()
           : const [],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'youtube_video_id': youtubeVideoId,
+      'duration': duration,
+      'description': description,
+      'is_completed': isCompleted,
+      'chapters': chapters.map((c) => c.toJson()).toList(),
+    };
   }
 }
 
@@ -665,6 +705,13 @@ class Chapter {
       title: json['title'] ?? '',
       timestamp: json['timestamp'] ?? '',
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'timestamp': timestamp,
+    };
   }
 }
 

@@ -78,19 +78,46 @@ class ActiveCourseCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Thumbnail
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: SizedBox(
-                  height: 130, width: double.infinity,
-                  child: Image.network(
-                    course.thumbnailUrl, fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: AppColors.darkSurface2,
-                      child: const Center(
-                        child: Icon(Icons.play_circle_outline,
-                          color: AppColors.textMuted, size: 36))),
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    child: SizedBox(
+                      height: 130, width: double.infinity,
+                      child: Image.network(
+                        course.thumbnailUrl, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: AppColors.darkSurface2,
+                          child: const Center(
+                            child: Icon(Icons.play_circle_outline,
+                              color: AppColors.textMuted, size: 36))),
+                      ),
+                    ),
                   ),
-                ),
+                  if (course.isVerified)
+                    Positioned(
+                      top: 10, left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha:0.75),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.gold.withValues(alpha:0.5), width: 0.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.verified, color: AppColors.gold, size: 12),
+                            const SizedBox(width: 4),
+                            Text('VERIFIED',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 9, fontWeight: FontWeight.w900,
+                                color: AppColors.gold, letterSpacing: 0.5)),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
               Expanded(
                 child: Padding(
@@ -99,7 +126,7 @@ class ActiveCourseCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Category
-                      _CatPill(category: course.category),
+                      _CatPill(category: course.isVerified ? 'Gantav Verified' : course.category, isVerified: course.isVerified),
                       const SizedBox(height: 6),
                       // Title
                       Text(course.title,
@@ -186,18 +213,31 @@ class SuggestedCourseRow extends StatelessWidget {
         child: Row(
           children: [
             // Thumbnail
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                width: 72, height: 56,
-                child: Image.network(
-                  course.thumbnailUrl, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: AppColors.darkSurface2,
-                    child: const Icon(Icons.play_circle_outline,
-                      color: AppColors.textMuted, size: 24)),
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 72, height: 56,
+                    child: Image.network(
+                      course.thumbnailUrl, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: AppColors.darkSurface2,
+                        child: const Icon(Icons.play_circle_outline,
+                          color: AppColors.textMuted, size: 24)),
+                    ),
+                  ),
                 ),
-              ),
+                if (course.isVerified)
+                  Positioned(
+                    bottom: 0, right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
+                      child: const Icon(Icons.verified, color: AppColors.gold, size: 12),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -206,7 +246,7 @@ class SuggestedCourseRow extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Flexible(child: _CatPill(category: course.category, small: true)),
+                      Flexible(child: _CatPill(category: course.isVerified ? 'Gantav Verified' : course.category, small: true, isVerified: course.isVerified)),
                       const SizedBox(width: 8),
                       const Icon(Icons.star_rounded, color: AppColors.gold, size: 12),
                       const SizedBox(width: 3),
@@ -329,7 +369,8 @@ class _PulseEventTileState extends State<PulseEventTile>
 class _CatPill extends StatelessWidget {
   final String category;
   final bool small;
-  const _CatPill({required this.category, this.small = false});
+  final bool isVerified;
+  const _CatPill({required this.category, this.small = false, this.isVerified = false});
 
   @override
   Widget build(BuildContext context) {
@@ -339,14 +380,15 @@ class _CatPill extends StatelessWidget {
         vertical: small ? 2 : 4,
       ),
       decoration: BoxDecoration(
-        color: AppColors.violet.withValues(alpha:0.1),
+        color: isVerified ? AppColors.gold.withValues(alpha:0.12) : AppColors.violet.withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(100),
+        border: isVerified ? Border.all(color: AppColors.gold.withValues(alpha:0.3), width: 0.5) : null,
       ),
       child: Text(category,
         style: GoogleFonts.dmSans(
           fontSize: small ? 10 : 11,
           fontWeight: FontWeight.w600,
-          color: AppColors.violet),
+          color: isVerified ? AppColors.gold : AppColors.violet),
         maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }

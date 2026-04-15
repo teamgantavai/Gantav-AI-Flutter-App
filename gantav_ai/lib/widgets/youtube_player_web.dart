@@ -8,12 +8,14 @@ class AppYoutubePlayer extends StatefulWidget {
   final String videoId;
   final bool autoPlay;
   final void Function(double speed)? onSpeedChanged;
+  final VoidCallback? onVideoEnd;
 
   const AppYoutubePlayer({
     super.key,
     required this.videoId,
     this.autoPlay = false,
     this.onSpeedChanged,
+    this.onVideoEnd,
   });
 
   @override
@@ -55,6 +57,13 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> {
         showVideoAnnotations: false,
       ),
     );
+    
+    _controller.listen((state) {
+      if (state.playerState == PlayerState.ended) {
+        widget.onVideoEnd?.call();
+      }
+    });
+
     _loadCachedSettings();
   }
 

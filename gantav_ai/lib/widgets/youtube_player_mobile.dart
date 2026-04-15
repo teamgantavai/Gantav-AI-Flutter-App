@@ -10,12 +10,14 @@ class AppYoutubePlayer extends StatefulWidget {
   final String videoId;
   final bool autoPlay;
   final void Function(double speed)? onSpeedChanged;
+  final VoidCallback? onVideoEnd;
 
   const AppYoutubePlayer({
     super.key,
     required this.videoId,
     this.autoPlay = false,
     this.onSpeedChanged,
+    this.onVideoEnd,
   });
 
   @override
@@ -94,6 +96,9 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
     if (_controller.value.isReady && !_isReady) {
       setState(() => _isReady = true);
       if (_currentSpeed != 1.0) _controller.setPlaybackRate(_currentSpeed);
+    }
+    if (_controller.value.playerState == PlayerState.ended) {
+      widget.onVideoEnd?.call();
     }
   }
 

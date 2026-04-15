@@ -133,6 +133,13 @@ class YouTubeApiService {
     return [];
   }
 
+  /// Fetch details for a specific video by ID.
+  static Future<YouTubeVideoStats?> fetchVideoDetails(String videoId) async {
+    if (!ApiConfig.hasYoutube) return null;
+    final results = await _getVideoStats([videoId]);
+    return results.isNotEmpty ? results.first : null;
+  }
+
   static Future<List<YouTubeVideoStats>> _getVideoStats(List<String> videoIds) async {
     try {
       final idString = videoIds.join(',');

@@ -136,4 +136,20 @@ class FirestoreService {
     } catch (_) {}
     return null;
   }
+
+  Future<void> saveStarredLessonIds(List<String> ids) async {
+    if (currentUserId == null) return;
+    await _db.collection('users').doc(currentUserId).set({
+      'starred_lesson_ids': ids,
+    }, SetOptions(merge: true));
+  }
+
+  Future<List<String>> getStarredLessonIds() async {
+    if (currentUserId == null) return [];
+    final doc = await _db.collection('users').doc(currentUserId).get();
+    if (doc.exists && doc.data()!.containsKey('starred_lesson_ids')) {
+      return List<String>.from(doc.data()!['starred_lesson_ids']);
+    }
+    return [];
+  }
 }

@@ -8,6 +8,7 @@ import '../services/firestore_service.dart';
 import '../services/gemini_service.dart';
 import '../services/onboarding_service.dart';
 import '../services/youtube_api_service.dart';
+import '../services/admin_service.dart';
 
 enum AuthStatus {
   unauthenticated,
@@ -40,6 +41,7 @@ class AppState extends ChangeNotifier {
   List<Roadmap> _roadmaps = [];
   bool _needsOnboarding = false;
   bool _isGeneratingRoadmap = false;
+  final Set<String> _starredLessonIds = {};
 
   bool _dreamCollectedInOnboarding = false;
   bool get dreamCollectedInOnboarding => _dreamCollectedInOnboarding;
@@ -50,9 +52,22 @@ class AppState extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   UserProfile? get user => _user;
   String? get profileImagePath => _profileImagePath;
-  List<Course> get courses => [..._courses, ..._generatedCourses];
+  List<Course> get courses {
+    final all = [..._courses, ..._generatedCourses];
+    final seen = <String>{};
+    return all.where((c) => seen.add(c.id)).toList();
+  }
+  
   List<Course> get activeCourses =>
       courses.where((c) => c.isInProgress).toList();
+      
+  List<Course> get favoriteCourses {
+    // For now, let's assume courses with high rating or that user marked as starred are favorites
+    // Actually, let's add a proper favorite list if we have one.
+    // If not, we'll use a local filter for now.
+    return courses.where((c) => (c.rating >= 4.9 && c.isVerified)).toList();
+  }
+
   List<Course> get suggestedCourses =>
       courses.where((c) => !c.isInProgress).toList();
   List<PulseEvent> get pulseEvents => _pulseEvents;
@@ -85,6 +100,20 @@ class AppState extends ChangeNotifier {
   int get todayTotalTasks => todayRoadmapDay?.tasks.length ?? 0;
   bool get isTodayComplete => todayRoadmapDay?.allTasksCompleted ?? false;
 
+  List<Lesson> get starredLessons {
+    final List<Lesson> starred = [];
+    for (final course in courses) {
+      for (final module in course.modules) {
+        for (final lesson in module.lessons) {
+          if (_starredLessonIds.contains(lesson.id)) {
+            starred.add(lesson);
+          }
+        }
+      }
+    }
+    return starred;
+  }
+
   void clearNotification() {
     if (_notificationMessage != null) {
       _notificationMessage = null;
@@ -112,6 +141,7 @@ class AppState extends ChangeNotifier {
     await _loadLocalCourses();
     await _loadLocalPreferences();
     await _loadLocalRoadmaps();
+    await _loadStarredLessons();
 
     final firebaseUser = AuthService.currentUser;
     if (firebaseUser != null &&
@@ -165,6 +195,13 @@ class AppState extends ChangeNotifier {
     if (firestoreRoadmaps.isNotEmpty) {
       _roadmaps = firestoreRoadmaps;
       await _saveLocalRoadmaps();
+    }
+    
+    // Load starred from firestore if available
+    final firestoreStarred = await _firestoreService.getStarredLessonIds();
+    if (firestoreStarred.isNotEmpty) {
+      _starredLessonIds.addAll(firestoreStarred);
+      await _saveLocalStarredLessons();
     }
   }
 
@@ -571,6 +608,19 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // 1. First, check if a similar Curated/Verified course exists
+      final curated = await AdminService.findMatchingVerifiedCourse(prompt);
+      if (curated != null) {
+        await addGeneratedCourse(curated);
+        await setDream(dreamTopic, courseId: curated.id);
+        _lastCompletedCourse = curated;
+        _isGeneratingCourse = false;
+        showNotification('Found a curated course for $dreamTopic!');
+        notifyListeners();
+        return;
+      }
+
+      // 2. If not found, proceed with AI generation
       final preFilteredVideos =
           await YouTubeApiService.fetchHighQualityVideos(topic: prompt);
       final course = await GeminiService.generateLearningPath(
@@ -603,6 +653,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // 1. Check for curated matches first
+      final curated = await AdminService.findMatchingVerifiedCourse(promptHint);
+      if (curated != null) {
+        await addGeneratedCourse(curated);
+        _isGeneratingCourse = false;
+        showNotification('Found a professional curated course for "$promptHint"!');
+        notifyListeners();
+        return;
+      }
+
       final course = await ApiService.suggestPath(promptHint)
           .timeout(const Duration(seconds: 60), onTimeout: () => null);
       if (course != null) {
@@ -869,11 +929,17 @@ class AppState extends ChangeNotifier {
         _preferences = prefs;
       }
 
+      // Fetch all Gantav Verified courses
+      final verifiedCourses = await AdminService.getAllVerifiedCourses();
+
       // Fetch pulse for internal state but Bug #6 fix:
       // We store them but DON'T show them on home screen anymore.
       final pulseResults = await ApiService.fetchPulse('user_001');
       _pulseEvents = pulseResults;
-      _courses = [];
+      
+      // Merge verified courses with user's generated/active courses
+      // Verified courses should stay at the top or be easily accessible in Explore
+      _courses = verifiedCourses; 
     } else {
       final results = await Future.wait([
         ApiService.fetchUser('user_001'),
@@ -946,4 +1012,102 @@ class AppState extends ChangeNotifier {
     await prefs.remove('local_roadmaps');
     notifyListeners();
   }
+
+  Future<void> markLessonAsCompleted(String courseId, String moduleId, String lessonId) async {
+    final courseIdx = _generatedCourses.indexWhere((c) => c.id == courseId);
+    if (courseIdx == -1) return;
+
+    final course = _generatedCourses[courseIdx];
+    final updatedModules = course.modules.map((m) {
+      if (m.id == moduleId) {
+        final updatedLessons = m.lessons.map((l) {
+          if (l.id == lessonId) {
+            return Lesson(
+              id: l.id,
+              title: l.title,
+              youtubeVideoId: l.youtubeVideoId,
+              duration: l.duration,
+              description: l.description,
+              isCompleted: true,
+              chapters: l.chapters,
+            );
+          }
+          return l;
+        }).toList();
+
+        final compCount = updatedLessons.where((l) => l.isCompleted).length;
+        return Module(
+          id: m.id,
+          title: m.title,
+          lessonCount: m.lessonCount,
+          completedCount: compCount,
+          isLocked: m.isLocked,
+          lessons: updatedLessons,
+        );
+      }
+      return m;
+    }).toList();
+
+    // Re-check locking for all modules sequentially
+    bool previousCompleted = true;
+    final finalModules = updatedModules.map((m) {
+      final isLocked = !previousCompleted;
+      previousCompleted = m.completedCount >= m.lessonCount && m.lessonCount > 0;
+      return Module(
+        id: m.id,
+        title: m.title,
+        lessonCount: m.lessonCount,
+        completedCount: m.completedCount,
+        isLocked: isLocked, // Unlock if previous is done
+        lessons: m.lessons,
+      );
+    }).toList();
+
+    final totalCompleted = finalModules.fold(0, (sum, m) => sum + m.completedCount);
+    
+    _generatedCourses[courseIdx] = Course(
+      id: course.id,
+      title: course.title,
+      description: course.description,
+      category: course.category,
+      language: course.language,
+      thumbnailUrl: course.thumbnailUrl,
+      rating: course.rating,
+      learnerCount: course.learnerCount,
+      totalLessons: course.totalLessons,
+      completedLessons: totalCompleted,
+      estimatedTime: course.estimatedTime,
+      skills: course.skills,
+      modules: finalModules,
+      isVerified: course.isVerified,
+    );
+
+    // Save to Firestore
+    await _firestoreService.saveActiveCourse(_generatedCourses[courseIdx]);
+    notifyListeners();
+  }
+
+  Future<void> _loadStarredLessons() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('starred_lessons') ?? [];
+    _starredLessonIds.addAll(list);
+  }
+
+  Future<void> _saveLocalStarredLessons() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('starred_lessons', _starredLessonIds.toList());
+  }
+
+  Future<void> toggleStarredLesson(String lessonId) async {
+    if (_starredLessonIds.contains(lessonId)) {
+      _starredLessonIds.remove(lessonId);
+    } else {
+      _starredLessonIds.add(lessonId);
+    }
+    await _saveLocalStarredLessons();
+    await _firestoreService.saveStarredLessonIds(_starredLessonIds.toList());
+    notifyListeners();
+  }
+
+  bool isLessonStarred(String lessonId) => _starredLessonIds.contains(lessonId);
 }

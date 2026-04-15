@@ -907,21 +907,6 @@ class _ExploreCourseCard extends StatelessWidget {
                         child: const Center(child: Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 40)),
                       ),
                     ),
-                    Positioned(
-                      top: 10, right: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(8)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.star_rounded, color: AppColors.gold, size: 14),
-                            const SizedBox(width: 3),
-                            Text(course.rating.toStringAsFixed(1), style: GoogleFonts.dmMono(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-                          ],
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),

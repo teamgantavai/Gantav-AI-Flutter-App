@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Allow users to read/write their own data
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow authenticated users to read verified courses
+    match /verified_courses/{courseId} {
+      allow read: if request.auth != null;
+      
+      // Allow admin writes (Create, Update, Delete)
+      allow write, delete: if request.auth != null && 
+        (request.auth.token.email == 'teamgantavai@gmail.com' || 
+         request.auth.token.email == 'official.diljha@gmail.com');
+
+      // Allow access to sub-collections (e.g. modules)
+      match /{allSubcollections=**} {
+        allow read: if request.auth != null;
+        allow write, delete: if request.auth != null && 
+          (request.auth.token.email == 'teamgantavai@gmail.com' || 
+           request.auth.token.email == 'official.diljha@gmail.com');
+      }
+    }
+  }
+}

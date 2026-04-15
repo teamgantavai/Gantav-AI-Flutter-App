@@ -134,6 +134,20 @@ class AuthService {
     }
   }
 
+  /// List of developer/admin emails who have access to the hidden admin panel
+  static const List<String> _authorizedEmails = [
+    'teamgantavai@gmail.com',
+    'official.diljha@gmail.com',
+    // Add more emails here as provided by the user
+  ];
+
+  /// Check if the currently signed-in user has admin/developer access
+  static bool get isAdmin {
+    final user = _auth.currentUser;
+    if (user == null || user.email == null) return false;
+    return _authorizedEmails.contains(user.email);
+  }
+
   /// Map Firebase error codes to user-friendly messages
   static String _mapFirebaseError(String code) {
     switch (code) {
