@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -23,98 +24,106 @@ class AppYoutubePlayer extends StatefulWidget {
 
 class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerProviderStateMixin {
   late YoutubePlayerController _controller;
+  bool _isReady = false;
 
-  // Controls
-  bool _showControls = true;
-  Timer? _controlsTimer;
-
-  // Long press 2x
-  bool _isLongPressing = false;
-  double _previousRate = 1.0;
-
-  // Seek overlay
-  double _seekOverlayOpacity = 0.0;
-  Timer? _seekOverlayTimer;
-  Alignment _seekOverlayAlignment = Alignment.center;
-
-  // Player settings (cached)
+  // Settings
   double _currentSpeed = 1.0;
   String _currentQuality = 'Auto';
   bool _captionsEnabled = false;
 
-  // Animation controller for smooth fade
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
+  // Gesture States
+  bool _isLongPressing = false;
+  bool _showPlayPauseOverlay = false;
+
+  // Double Tap Seek Animation
+  bool _showSeekForward = false;
+  bool _showSeekBackward = false;
+  int _seekAmount = 10;
+
+  Timer? _overlayTimer;
+  Timer? _seekTimer;
+
+  late AnimationController _playPauseController;
+  late Animation<double> _playPauseScaleAnimation;
 
   static const List<double> _speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
   static const List<String> _qualityOptions = ['Auto', '1080p', '720p', '480p', '360p', '240p'];
 
   String _getSafeVideoId(String input) {
+    if (input.isEmpty) return '';
     if (input.contains('youtube.com/watch?v=')) {
-      return input.split('v=')[1].split('&')[0];
+      return Uri.tryParse(input)?.queryParameters['v'] ?? input;
     }
     if (input.contains('youtu.be/')) {
-      return input.split('youtu.be/')[1].split('?')[0];
+      final parts = input.split('youtu.be/');
+      if (parts.length > 1) return parts[1].split('?')[0];
     }
-    return input;
+    return input.length == 11 ? input : '';
   }
 
   @override
   void initState() {
     super.initState();
+
+    _playPauseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _playPauseScaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _playPauseController, curve: Curves.easeOut),
+    );
+
+    final safeId = _getSafeVideoId(widget.videoId);
     _controller = YoutubePlayerController(
-      initialVideoId: _getSafeVideoId(widget.videoId),
+      initialVideoId: safeId.isNotEmpty ? safeId : 'dQw4w9WgXcQ',
       flags: const YoutubePlayerFlags(
-        autoPlay: false,           // Let user tap to play
+        autoPlay: false,
         mute: false,
         enableCaption: false,
-        forceHD: true,
-        hideControls: true,       // We handle controls manually
-        hideThumbnail: true,
+        forceHD: false,
+        hideControls: false,
+        hideThumbnail: false,
+        useHybridComposition: true,
       ),
-    );
-
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-    _fadeAnimation = CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut);
-    _fadeController.value = 1.0; // Start with controls visible
+    )..addListener(_onControllerUpdate);
 
     _loadCachedSettings();
-    _startControlsTimer();
+  }
+
+  void _onControllerUpdate() {
+    if (_controller.value.isReady && !_isReady) {
+      setState(() => _isReady = true);
+      if (_currentSpeed != 1.0) _controller.setPlaybackRate(_currentSpeed);
+    }
   }
 
   @override
   void dispose() {
-    _controlsTimer?.cancel();
-    _seekOverlayTimer?.cancel();
-    _fadeController.dispose();
+    _overlayTimer?.cancel();
+    _seekTimer?.cancel();
+    _playPauseController.dispose();
     _controller.dispose();
     super.dispose();
   }
 
-  /// Load cached player settings
+  // ================== SETTINGS ==================
   Future<void> _loadCachedSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final settingsJson = prefs.getString('player_settings');
-      if (settingsJson != null) {
-        final settings = jsonDecode(settingsJson) as Map<String, dynamic>;
+      final json = prefs.getString('player_settings');
+      if (json != null) {
+        final data = jsonDecode(json) as Map<String, dynamic>;
         if (mounted) {
           setState(() {
-            _currentSpeed = (settings['speed'] ?? 1.0).toDouble();
-            _currentQuality = settings['quality'] ?? 'Auto';
-            _captionsEnabled = settings['captions'] ?? false;
+            _currentSpeed = (data['speed'] ?? 1.0).toDouble();
+            _currentQuality = data['quality'] ?? 'Auto';
+            _captionsEnabled = data['captions'] ?? false;
           });
-          // Apply cached speed
-          _controller.setPlaybackRate(_currentSpeed);
         }
       }
     } catch (_) {}
   }
 
-  /// Save player settings to cache
   Future<void> _saveCachedSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -126,35 +135,6 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
     } catch (_) {}
   }
 
-  void _startControlsTimer() {
-    _controlsTimer?.cancel();
-    _controlsTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
-        _fadeController.reverse();
-        setState(() => _showControls = false);
-      }
-    });
-  }
-
-  void _toggleControls() {
-    setState(() => _showControls = !_showControls);
-    if (_showControls) {
-      _fadeController.forward();
-      _startControlsTimer();
-    } else {
-      _fadeController.reverse();
-    }
-  }
-
-  void _togglePlayPause() {
-    if (_controller.value.isPlaying) {
-      _controller.pause();
-    } else {
-      _controller.play();
-    }
-    _startControlsTimer();
-  }
-
   void setPlaybackRate(double rate) {
     _controller.setPlaybackRate(rate);
     setState(() => _currentSpeed = rate);
@@ -162,50 +142,231 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
     widget.onSpeedChanged?.call(rate);
   }
 
-  Future<double> getCurrentTime() async {
-    return _controller.value.position.inSeconds.toDouble();
-  }
+  // ================== GESTURES ==================
+  void _togglePlayPause() {
+    final isPlaying = _controller.value.isPlaying;
 
-  // Seek with overlay
-  void _showSeekOverlay(bool isForward) {
-    _seekOverlayTimer?.cancel();
-    setState(() {
-      _seekOverlayOpacity = 1.0;
-      _seekOverlayAlignment = isForward ? Alignment.centerRight : Alignment.centerLeft;
+    if (isPlaying) {
+      _controller.pause();
+    } else {
+      _controller.play();
+    }
+
+    setState(() => _showPlayPauseOverlay = true);
+    _playPauseController.forward().then((_) => _playPauseController.reverse());
+
+    _overlayTimer?.cancel();
+    _overlayTimer = Timer(const Duration(milliseconds: 650), () {
+      if (mounted) setState(() => _showPlayPauseOverlay = false);
     });
-    _seekOverlayTimer = Timer(const Duration(milliseconds: 800), () {
-      if (mounted) setState(() => _seekOverlayOpacity = 0.0);
+
+    HapticFeedback.lightImpact();
+  }
+
+  void _handleDoubleTap(TapDownDetails details) {
+    final width = MediaQuery.of(context).size.width;
+    final isRightSide = details.globalPosition.dx > width / 2;
+
+    if (isRightSide) {
+      _seekRelative(10);
+      setState(() {
+        _showSeekForward = true;
+        _seekAmount = 10;
+      });
+    } else {
+      _seekRelative(-10);
+      setState(() {
+        _showSeekBackward = true;
+        _seekAmount = 10;
+      });
+    }
+
+    HapticFeedback.mediumImpact();
+
+    _seekTimer?.cancel();
+    _seekTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        setState(() {
+          _showSeekForward = false;
+          _showSeekBackward = false;
+        });
+      }
     });
   }
 
-  void _seekForward() {
-    final current = _controller.value.position;
-    _controller.seekTo(current + const Duration(seconds: 10));
-    _showSeekOverlay(true);
+  void _seekRelative(int seconds) {
+    final current = _controller.value.position.inSeconds.toDouble();
+    final duration = _controller.metadata.duration.inSeconds.toDouble();
+    final newPos = (current + seconds).clamp(0.0, duration);
+    _controller.seekTo(Duration(seconds: newPos.toInt()));
   }
 
-  void _seekBackward() {
-    final current = _controller.value.position;
-    _controller.seekTo(current - const Duration(seconds: 10));
-    _showSeekOverlay(false);
-  }
-
-  void _startLongPress2x(_) {
-    if (!_controller.value.isPlaying) return;
-    _previousRate = _controller.value.playbackRate;
-    _controller.setPlaybackRate(2.0);
+  void _handleLongPressStart(LongPressStartDetails details) {
+    if (_currentSpeed != 2.0) {
+      setPlaybackRate(2.0);
+    }
     setState(() => _isLongPressing = true);
+    HapticFeedback.heavyImpact();
   }
 
-  void _endLongPress2x(_) {
-    if (!_isLongPressing) return;
-    _controller.setPlaybackRate(_previousRate);
+  void _handleLongPressEnd(LongPressEndDetails details) {
+    if (_currentSpeed == 2.0) {
+      setPlaybackRate(1.0); // Return to normal
+    }
     setState(() => _isLongPressing = false);
   }
 
-  /// Show professional settings bottom sheet
+  // ================== BUILD ==================
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _togglePlayPause,
+      onDoubleTapDown: _handleDoubleTap,
+      onLongPressStart: _handleLongPressStart,
+      onLongPressEnd: _handleLongPressEnd,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          YoutubePlayer(
+            controller: _controller,
+            showVideoProgressIndicator: true,
+            progressIndicatorColor: const Color(0xFF6D5BDB),
+            progressColors: const ProgressBarColors(
+              playedColor: Color(0xFF6D5BDB),
+              handleColor: Color(0xFF6D5BDB),
+              bufferedColor: Colors.white30,
+              backgroundColor: Colors.white12,
+            ),
+            onReady: () {
+              setState(() => _isReady = true);
+              if (_currentSpeed != 1.0) _controller.setPlaybackRate(_currentSpeed);
+            },
+            bottomActions: [
+              CurrentPosition(),
+              const Expanded(child: ProgressBar(isExpanded: true)),
+              RemainingDuration(),
+              if (_currentSpeed != 1.0)
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text('${_currentSpeed}x', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              const FullScreenButton(),
+            ],
+          ),
+
+          // ================== DOUBLE TAP SEEK ANIMATION ==================
+          if (_showSeekForward)
+            _buildSeekAnimation(true),
+          if (_showSeekBackward)
+            _buildSeekAnimation(false),
+
+          // ================== PLAY / PAUSE OVERLAY ==================
+          if (_showPlayPauseOverlay)
+            Center(
+              child: ScaleTransition(
+                scale: _playPauseScaleAnimation,
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 72,
+                  ),
+                ),
+              ),
+            ),
+
+          // ================== LONG PRESS 2X INDICATOR ==================
+          if (_isLongPressing)
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C6AFF).withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF7C6AFF).withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.speed_rounded, color: Colors.white, size: 20),
+                    SizedBox(width: 6),
+                    Text(
+                      '2×',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeekAnimation(bool isForward) {
+    return Positioned(
+      left: isForward ? null : 40,
+      right: isForward ? 40 : null,
+      top: MediaQuery.of(context).size.height * 0.35,
+      child: AnimatedOpacity(
+        opacity: (isForward ? _showSeekForward : _showSeekBackward) ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 200),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.65),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isForward ? Icons.forward_10_rounded : Icons.replay_10_rounded,
+                color: Colors.white,
+                size: 42,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${isForward ? '+' : ''}$_seekAmount s',
+              style: GoogleFonts.dmSans(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                shadows: [
+                  Shadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 8),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Keep your existing showSettingsSheet() method unchanged
   void showSettingsSheet() {
-    _controlsTimer?.cancel(); // Pause auto-hide while sheet is open
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -229,224 +390,13 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
           Navigator.pop(ctx);
         },
       ),
-    ).then((_) {
-      if (mounted) _startControlsTimer();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return YoutubePlayerBuilder(
-      player: YoutubePlayer(
-        controller: _controller,
-        showVideoProgressIndicator: false, // We use our own if needed
-      ),
-      builder: (context, player) {
-        return AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Main Video Player
-              player,
-
-              // Overlay for gestures + controls with smooth fade
-              GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: _toggleControls,
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    child: Stack(
-                      children: [
-                        // Center Play/Pause Button (Professional size)
-                        Center(
-                          child: GestureDetector(
-                            onTap: _togglePlayPause,
-                            child: Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.45),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.25),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Icon(
-                                _controller.value.isPlaying
-                                    ? Icons.pause_rounded
-                                    : Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 32,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // Top Bar (Title + Settings)
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.fromLTRB(16, 10, 8, 20),
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Colors.black87, Colors.transparent],
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _controller.metadata.title.isNotEmpty
-                                        ? _controller.metadata.title
-                                        : widget.videoId,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                // Speed badge
-                                if (_currentSpeed != 1.0)
-                                  Container(
-                                    margin: const EdgeInsets.only(right: 4),
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      '${_currentSpeed}x',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                // Settings gear
-                                Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: showSettingsSheet,
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(8),
-                                      child: Icon(Icons.settings_rounded, color: Colors.white, size: 22),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Gesture Zones (always active, transparent)
-              Positioned.fill(
-                child: Row(
-                  children: [
-                    // Left Side - Backward + Long Press 2x
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onDoubleTap: _seekBackward,
-                        onLongPressStart: _startLongPress2x,
-                        onLongPressEnd: _endLongPress2x,
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                    // Center - Just for tap (play/pause handled above)
-                    const Expanded(flex: 2, child: SizedBox()),
-                    // Right Side - Forward + Long Press 2x
-                    Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onDoubleTap: _seekForward,
-                        onLongPressStart: _startLongPress2x,
-                        onLongPressEnd: _endLongPress2x,
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 2x Speed Indicator
-              if (_isLongPressing)
-                Positioned(
-                  top: 16,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.75),
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('2× ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                          Icon(Icons.fast_forward, color: Colors.white, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-              // 10s Seek Animation
-              IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: _seekOverlayOpacity,
-                  duration: const Duration(milliseconds: 150),
-                  child: Align(
-                    alignment: _seekOverlayAlignment,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 50),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.65),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          _seekOverlayAlignment == Alignment.centerRight
-                              ? Icons.forward_10
-                              : Icons.replay_10,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
-}
 
-// ═══════════════════════════════════════════════════════════════════════
-// Settings Bottom Sheet
-// ═══════════════════════════════════════════════════════════════════════
+  Future<double> getCurrentTime() async {
+    return _controller.value.position.inSeconds.toDouble();
+  }
+}
 
 class _SettingsSheet extends StatefulWidget {
   final double currentSpeed;
@@ -470,10 +420,7 @@ class _SettingsSheet extends StatefulWidget {
 }
 
 class _SettingsSheetState extends State<_SettingsSheet> {
-  String _activePanel = 'main'; // 'main', 'speed', 'quality', 'subtitles'
-
-  static const List<double> _speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-  static const List<String> _qualityOptions = ['Auto', '1080p', '720p', '480p', '360p', '240p'];
+  String _activePanel = 'main';
 
   @override
   Widget build(BuildContext context) {
@@ -490,7 +437,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Handle bar
               Container(
                 width: 36,
                 height: 4,
@@ -516,21 +462,18 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Speed option
         _SettingsTile(
           icon: Icons.speed_rounded,
           label: 'Playback speed',
           value: widget.currentSpeed == 1.0 ? 'Normal' : '${widget.currentSpeed}x',
           onTap: () => setState(() => _activePanel = 'speed'),
         ),
-        // Quality option
         _SettingsTile(
           icon: Icons.high_quality_rounded,
           label: 'Video quality',
           value: widget.currentQuality,
           onTap: () => setState(() => _activePanel = 'quality'),
         ),
-        // Subtitles option
         _SettingsTile(
           icon: Icons.subtitles_rounded,
           label: 'Subtitles / CC',
