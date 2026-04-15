@@ -29,7 +29,6 @@ class LessonPlayerScreen extends StatefulWidget {
 class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   double _playbackSpeed = 1.0;
   bool _showAiChat = false;
-  final List<double> _speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
 
   // AI Chat state
   final TextEditingController _chatController = TextEditingController();
@@ -46,9 +45,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   int _likeCount = 0;
 
   final GlobalKey<AppYoutubePlayerState> _ytKey = GlobalKey();
-
-  int get _currentLessonIndex =>
-      widget.module.lessons.indexOf(widget.lesson) + 1;
 
   @override
   void initState() {
@@ -247,13 +243,13 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ─── Top bar ───────────────────────────────────────
+            // ─── Simple Top bar - just back + settings, NO module text ────
             _buildTopBar(isDark),
 
             // ─── Full-width Video ───────────────────────────────
             _buildVideoPlayer(),
 
-            // ─── YouTube-style info section ─────────────────────
+            // ─── Content section ─────────────────────────────────
             Expanded(
               child: _showAiChat
                   ? _buildAiChatPanel(isDark)
@@ -311,6 +307,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
+  // ─── Clean top bar - ONLY back arrow + lesson title (no module pill) ─────
   Widget _buildTopBar(bool isDark) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 2, 8, 0),
@@ -320,31 +317,29 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.keyboard_arrow_down, size: 28),
           ),
-          const Spacer(),
-          // Module info pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(100),
-            ),
+          Expanded(
             child: Text(
-              '${widget.module.title} · $_currentLessonIndex/${widget.module.lessonCount}',
-              style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textMuted),
+              widget.lesson.title,
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.textLight : AppColors.textDark,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 4),
-          // Settings icon
+          // Settings gear - opens speed + quality sheet
           IconButton(
             onPressed: () => _ytKey.currentState?.showSettingsSheet(),
-            icon: Icon(Icons.settings_rounded, size: 18, color: isDark ? Colors.white54 : Colors.black45),
+            icon: Icon(Icons.settings_rounded, size: 20, color: isDark ? Colors.white54 : Colors.black45),
           ),
         ],
       ),
     );
   }
 
-  /// Full-width video player — no horizontal padding
+  /// Full-width video player
   Widget _buildVideoPlayer() {
     return SizedBox(
       width: double.infinity,
@@ -365,19 +360,15 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── YouTube-style Title + Actions Block ────────────
+          // ─── Title + Actions Block ─────────────────────────
           _buildYouTubeInfoBlock(isDark),
 
-          // ─── Content/AI Tab Toggle ───────────────────────────
+          // ─── Content/AI Tab Toggle ────────────────────────
           _buildContentToggle(isDark),
 
-          // ─── Speed Controls ──────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: _buildSpeedControls(isDark),
-          ),
+          // ─── Speed Controls REMOVED from here (now in gear only) ─
 
-          // ─── Chapters ────────────────────────────────────────
+          // ─── Chapters ─────────────────────────────────────
           if (widget.lesson.chapters.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
@@ -393,7 +384,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             ),
           ],
 
-          // ─── Up next ─────────────────────────────────────────
+          // ─── Up next ──────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _buildUpNext(isDark),
@@ -405,14 +396,13 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// YouTube-style block: title, channel/course info, like/dislike bar
+  /// YouTube-style title + like/dislike/save/focus bar
   Widget _buildYouTubeInfoBlock(bool isDark) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Video title — large and bold like YouTube
           Text(
             widget.lesson.title,
             style: GoogleFonts.dmSans(
@@ -423,7 +413,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             ),
           ),
           const SizedBox(height: 6),
-          // Course & category info
           Row(
             children: [
               Container(
@@ -440,7 +429,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  widget.course.title,
+                  widget.course.title.replaceAll('\$dream', widget.course.category),
                   style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -450,10 +439,9 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           ),
           const SizedBox(height: 14),
 
-          // ─── Like / Dislike / Save / Focus row ────────────────
+          // ─── Like / Dislike / Save / Focus row ─────────────
           Row(
             children: [
-              // Like button — pill style like YouTube
               _LikePill(
                 isLiked: _isLiked,
                 likeCount: _likeCount,
@@ -463,7 +451,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                 isDark: isDark,
               ),
               const SizedBox(width: 10),
-              // Save / Bookmark
               _ActionPill(
                 icon: _isStarred ? Icons.bookmark : Icons.bookmark_outline,
                 label: _isStarred ? 'Saved' : 'Save',
@@ -473,7 +460,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                 isDark: isDark,
               ),
               const SizedBox(width: 10),
-              // Focus mode
               _ActionPill(
                 icon: Icons.crop_free_rounded,
                 label: 'Focus',
@@ -515,40 +501,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             onTap: () => setState(() => _showAiChat = true),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSpeedControls(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.lightSurface2,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: _speeds.map((speed) {
-          final isSelected = speed == _playbackSpeed;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => _setPlaybackSpeed(speed),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.violet : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text('$speed×',
-                    style: GoogleFonts.dmMono(
-                      fontSize: 12, fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : AppColors.textMuted)),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
       ),
     );
   }
@@ -860,7 +812,6 @@ class _LikePill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Like button
           GestureDetector(
             onTap: onLike,
             child: Container(
@@ -891,9 +842,7 @@ class _LikePill extends StatelessWidget {
               ),
             ),
           ),
-          // Divider
           Container(width: 1, height: 20, color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1)),
-          // Dislike button
           GestureDetector(
             onTap: onDislike,
             child: Container(
@@ -920,7 +869,7 @@ class _LikePill extends StatelessWidget {
   }
 }
 
-// ─── Action Pill (Save, Focus, etc.) ────────────────────────────────────────
+// ─── Action Pill ─────────────────────────────────────────────────────────────
 
 class _ActionPill extends StatelessWidget {
   final IconData icon;

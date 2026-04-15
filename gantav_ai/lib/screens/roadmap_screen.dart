@@ -11,8 +11,6 @@ import '../theme/app_theme.dart';
 import '../services/app_state.dart';
 import '../models/onboarding_models.dart';
 
-/// Displays the AI-generated learning roadmap with day-by-day timeline, 
-/// task completion tracking, and share functionality.
 class RoadmapScreen extends StatefulWidget {
   final Roadmap roadmap;
   const RoadmapScreen({super.key, required this.roadmap});
@@ -34,7 +32,6 @@ class _RoadmapScreenState extends State<RoadmapScreen>
     _pulseCtrl = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
     
-    // Scroll to current day after build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToCurrentDay();
     });
@@ -42,8 +39,7 @@ class _RoadmapScreenState extends State<RoadmapScreen>
 
   void _scrollToCurrentDay() {
     final currentDay = widget.roadmap.currentDayNumber;
-    // Approximate scroll position (each day card ~200px)
-    final targetScroll = (currentDay - 1) * 200.0;
+    final targetScroll = (currentDay - 1) * 220.0;
     if (_scrollCtrl.hasClients && targetScroll > 0) {
       _scrollCtrl.animateTo(
         targetScroll.clamp(0, _scrollCtrl.position.maxScrollExtent),
@@ -100,10 +96,8 @@ class _RoadmapScreenState extends State<RoadmapScreen>
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ──────────────────────────────────────────────
             _buildAppBar(isDark, roadmap),
 
-            // ── Content ─────────────────────────────────────────────
             Expanded(
               child: RepaintBoundary(
                 key: _shareKey,
@@ -113,17 +107,8 @@ class _RoadmapScreenState extends State<RoadmapScreen>
                     controller: _scrollCtrl,
                     physics: const BouncingScrollPhysics(),
                     slivers: [
-                      // Progress overview card
-                      SliverToBoxAdapter(
-                        child: _buildProgressCard(isDark, roadmap),
-                      ),
-
-                      // Today's tasks highlight
-                      SliverToBoxAdapter(
-                        child: _buildTodayCard(isDark, roadmap),
-                      ),
-
-                      // Timeline
+                      SliverToBoxAdapter(child: _buildProgressCard(isDark, roadmap)),
+                      SliverToBoxAdapter(child: _buildTodayCard(isDark, roadmap)),
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
@@ -132,7 +117,6 @@ class _RoadmapScreenState extends State<RoadmapScreen>
                               color: isDark ? AppColors.textLight : AppColors.textDark)),
                         ),
                       ),
-
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                         sliver: SliverList(
@@ -142,12 +126,7 @@ class _RoadmapScreenState extends State<RoadmapScreen>
                           ),
                         ),
                       ),
-
-                      // Watermark for sharing
-                      SliverToBoxAdapter(
-                        child: _buildWatermark(isDark),
-                      ),
-
+                      SliverToBoxAdapter(child: _buildWatermark(isDark)),
                       const SliverToBoxAdapter(child: SizedBox(height: 100)),
                     ],
                   ),
@@ -155,7 +134,6 @@ class _RoadmapScreenState extends State<RoadmapScreen>
               ),
             ),
 
-            // ── Bottom bar with share/save ───────────────────────────
             _buildBottomBar(isDark),
           ],
         ),
@@ -246,7 +224,6 @@ class _RoadmapScreenState extends State<RoadmapScreen>
               ],
             ),
             const SizedBox(height: 16),
-            // Animated progress bar
             TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: roadmap.taskProgress),
               duration: const Duration(milliseconds: 800),
@@ -309,9 +286,12 @@ class _RoadmapScreenState extends State<RoadmapScreen>
                   Text(allDone ? 'Today\'s tasks complete! 🎉' : 'Today\'s Tasks',
                     style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w700,
                       color: allDone ? AppColors.teal : AppColors.gold)),
+                  // FIX: Use softWrap and remove maxLines to prevent text truncation
                   Text('${today.completedTaskCount}/${today.tasks.length} tasks · ${today.topic}',
                     style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                    softWrap: true,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
@@ -331,13 +311,12 @@ class _RoadmapScreenState extends State<RoadmapScreen>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Timeline column (dot + line)
+          // Timeline column
           SizedBox(
             width: 40,
             child: Column(
               children: [
                 const SizedBox(height: 4),
-                // Dot
                 if (isCurrentDay)
                   AnimatedBuilder(
                     animation: _pulseCtrl,
@@ -369,7 +348,6 @@ class _RoadmapScreenState extends State<RoadmapScreen>
                         ? const Icon(Icons.check, size: 10, color: Colors.white)
                         : null,
                   ),
-                // Line
                 if (!isLast)
                   Expanded(
                     child: Container(
@@ -384,7 +362,7 @@ class _RoadmapScreenState extends State<RoadmapScreen>
             ),
           ),
 
-          // Day card
+          // Day card - FIX: ensure text is fully visible
           Expanded(
             child: Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -425,17 +403,21 @@ class _RoadmapScreenState extends State<RoadmapScreen>
                     ],
                   ),
                   const SizedBox(height: 8),
+                  // FIX: Show full topic text - no maxLines restriction
                   Text(day.topic,
                     style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600,
-                      color: isDark ? AppColors.textLight : AppColors.textDark)),
+                      color: isDark ? AppColors.textLight : AppColors.textDark),
+                    softWrap: true,
+                  ),
                   if (day.description.isNotEmpty) ...[
                     const SizedBox(height: 4),
+                    // FIX: Show full description text
                     Text(day.description,
                       style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted, height: 1.4),
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                      softWrap: true,
+                    ),
                   ],
 
-                  // Tasks (expandable)
                   if (day.tasks.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     ...day.tasks.map((task) => _buildTaskRow(isDark, roadmap, day, task)),
@@ -497,7 +479,11 @@ class _RoadmapScreenState extends State<RoadmapScreen>
                         : isDark ? AppColors.textLight : AppColors.textDark,
                     decoration: task.isCompleted ? TextDecoration.lineThrough : null,
                   ),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                  // FIX: Allow task titles to wrap to multiple lines
+                  softWrap: true,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(width: 8),
               Text('${task.durationMinutes}m',
@@ -538,7 +524,6 @@ class _RoadmapScreenState extends State<RoadmapScreen>
       ),
       child: Row(
         children: [
-          // Share button
           Expanded(
             child: SizedBox(
               height: 48,

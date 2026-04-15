@@ -10,6 +10,11 @@ class CourseDetailScreen extends StatelessWidget {
 
   const CourseDetailScreen({super.key, required this.course});
 
+  // Fix the course title - never show $dream
+  String get _displayTitle => course.title
+      .replaceAll('\$dream', course.category)
+      .replaceAll('Complete  Course', 'Complete ${course.category} Course');
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -32,7 +37,7 @@ class CourseDetailScreen extends StatelessWidget {
           _buildAppBar(context, isDark),
           _buildThumbnail(context),
           _buildCourseInfo(context, isDark),
-          _buildModuleList(context),
+          _buildModuleList(context, isDark),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
@@ -45,7 +50,6 @@ class CourseDetailScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // App bar
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 4, 16, 8),
               child: Row(
@@ -70,7 +74,7 @@ class CourseDetailScreen extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      course.title,
+                      _displayTitle,
                       style: Theme.of(context).textTheme.titleLarge,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -79,12 +83,10 @@ class CourseDetailScreen extends StatelessWidget {
                 ],
               ),
             ),
-            // Two-column layout
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Left: Thumbnail + info
                   Expanded(
                     flex: 4,
                     child: SingleChildScrollView(
@@ -106,7 +108,6 @@ class CourseDetailScreen extends StatelessWidget {
                         ? Colors.white.withValues(alpha: 0.06)
                         : Colors.black.withValues(alpha: 0.06),
                   ),
-                  // Right: Modules
                   Expanded(
                     flex: 3,
                     child: Column(
@@ -117,9 +118,7 @@ class CourseDetailScreen extends StatelessWidget {
                             children: [
                               Text(
                                 'Modules',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall,
+                                style: Theme.of(context).textTheme.headlineSmall,
                               ),
                             ],
                           ),
@@ -127,16 +126,10 @@ class CourseDetailScreen extends StatelessWidget {
                         Expanded(
                           child: ListView.builder(
                             physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             itemCount: course.modules.length,
                             itemBuilder: (context, index) {
-                              return ModuleCard(
-                                module: course.modules[index],
-                                index: index,
-                                onTap: () => _openModule(
-                                    context, course.modules[index]),
-                              );
+                              return _buildModuleCard(context, isDark, course.modules[index], index);
                             },
                           ),
                         ),
@@ -175,7 +168,7 @@ class CourseDetailScreen extends StatelessWidget {
         onPressed: () => Navigator.of(context).pop(),
       ),
       title: Text(
-        course.title,
+        _displayTitle,
         style: Theme.of(context).textTheme.titleLarge,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -220,11 +213,7 @@ class CourseDetailScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildInfoContent(context, isDark),
-            // Modules header
-            Text(
-              'Modules',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text('Modules', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 14),
           ],
         ),
@@ -236,9 +225,8 @@ class CourseDetailScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Title + description
         Text(
-          course.title,
+          _displayTitle,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 8),
@@ -251,12 +239,10 @@ class CourseDetailScreen extends StatelessWidget {
         ),
         const SizedBox(height: 14),
 
-        // Category pill + rating
         Row(
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AppColors.violet.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(100),
@@ -285,15 +271,13 @@ class CourseDetailScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Skills row
         if (course.skills.isNotEmpty)
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: course.skills.map((skill) {
               return Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: isDark
                       ? Colors.white.withValues(alpha: 0.06)
@@ -310,9 +294,7 @@ class CourseDetailScreen extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: isDark
-                            ? AppColors.textLight
-                            : AppColors.textDark,
+                        color: isDark ? AppColors.textLight : AppColors.textDark,
                       ),
                 ),
               );
@@ -341,23 +323,19 @@ class CourseDetailScreen extends StatelessWidget {
                 label: 'lessons',
               ),
               Container(
-                width: 1,
-                height: 36,
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
+                width: 1, height: 36,
+                color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
               ),
               _StatItem(
                 icon: Icons.calendar_today_outlined,
-                value: course.estimatedTime.replaceAll(' weeks', ''),
+                value: course.estimatedTime.replaceAll(' weeks', '').isEmpty 
+                    ? '8' 
+                    : course.estimatedTime.replaceAll(' weeks', ''),
                 label: 'weeks',
               ),
               Container(
-                width: 1,
-                height: 36,
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.08),
+                width: 1, height: 36,
+                color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
               ),
               _StatItem(
                 icon: Icons.people_outline,
@@ -369,7 +347,6 @@ class CourseDetailScreen extends StatelessWidget {
         ),
         const SizedBox(height: 24),
 
-        // Module progress
         if (course.isInProgress) ...[
           SimpleProgressBar(progress: course.progress, height: 8),
           const SizedBox(height: 8),
@@ -399,19 +376,98 @@ class CourseDetailScreen extends StatelessWidget {
     );
   }
 
-  SliverPadding _buildModuleList(BuildContext context) {
+  /// Build a single module card with proper unique title/description display
+  Widget _buildModuleCard(BuildContext context, bool isDark, Module module, int index) {
+    return GestureDetector(
+      onTap: module.isLocked ? null : () => _openModule(context, module),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: module.isLocked ? 0.5 : 1.0,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: !module.isLocked
+                  ? AppColors.violet.withValues(alpha: 0.2)
+                  : isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            ),
+          ),
+          child: Row(
+            children: [
+              // Number or lock icon
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: module.isLocked
+                      ? AppColors.textMuted.withValues(alpha: 0.1)
+                      : AppColors.violet.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: module.isLocked
+                      ? const Icon(Icons.lock_outline, size: 18, color: AppColors.textMuted)
+                      : Text(
+                          '${index + 1}',
+                          style: GoogleFonts.dmMono(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.violet,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              // Module title + lesson count - use full text, no ellipsis on title
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      module.title,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? AppColors.textLight : AppColors.textDark,
+                      ),
+                      // Allow up to 2 lines so text is fully visible
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${module.completedCount}/${module.lessonCount} lessons',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    if (!module.isLocked && module.progress > 0) ...[
+                      const SizedBox(height: 8),
+                      SimpleProgressBar(progress: module.progress, height: 4),
+                    ],
+                  ],
+                ),
+              ),
+              if (!module.isLocked)
+                const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  SliverPadding _buildModuleList(BuildContext context, bool isDark) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             if (index >= course.modules.length) return null;
-            final module = course.modules[index];
-            return ModuleCard(
-              module: module,
-              index: index,
-              onTap: () => _openModule(context, module),
-            );
+            return _buildModuleCard(context, isDark, course.modules[index], index);
           },
           childCount: course.modules.length,
         ),
@@ -439,10 +495,7 @@ class CourseDetailScreen extends StatelessWidget {
           onPressed: () => _startLearning(context),
           child: Text(
             course.isInProgress ? 'Continue learning' : 'Start learning',
-            style: GoogleFonts.dmSans(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+            style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ),
       ),
@@ -459,15 +512,12 @@ class CourseDetailScreen extends StatelessWidget {
           ),
           backgroundColor: AppColors.darkSurface,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
       return;
     }
 
-    // Find the first incomplete lesson, or the first lesson
     final nextLesson = module.lessons.firstWhere(
       (l) => !l.isCompleted,
       orElse: () => module.lessons.first,
@@ -485,7 +535,6 @@ class CourseDetailScreen extends StatelessWidget {
   }
 
   void _startLearning(BuildContext context) {
-    // Find the first unlocked module with lessons
     final module = course.modules.firstWhere(
       (m) => !m.isLocked && m.lessons.isNotEmpty,
       orElse: () => course.modules.first,
@@ -506,11 +555,7 @@ class _StatItem extends StatelessWidget {
   final String value;
   final String label;
 
-  const _StatItem({
-    required this.icon,
-    required this.value,
-    required this.label,
-  });
+  const _StatItem({required this.icon, required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -528,8 +573,7 @@ class _StatItem extends StatelessWidget {
         ),
         Text(
           label,
-          style:
-              Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
         ),
       ],
     );

@@ -62,9 +62,14 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   List<Course> _filteredCourses(List<Course> courses) {
     return courses.where((course) {
-      final title = course.title.replaceAll('\$dream', course.category);
+      // Fix $dream in title for display/search
+      final title = course.title
+          .replaceAll('\$dream', course.category)
+          .replaceAll('Complete ', '')
+          .replaceAll(' Course', '');
+      final displayTitle = course.title.replaceAll('\$dream', course.category);
       final matchesSearch = _searchQuery.isEmpty ||
-          title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          displayTitle.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           course.category.toLowerCase().contains(_searchQuery.toLowerCase());
       final matchesCategory =
           _selectedCategory == 'All' || course.category == _selectedCategory;
@@ -106,11 +111,8 @@ class _ExploreScreenState extends State<ExploreScreen>
         isDark: isDark,
         onGenerate: (courseName, language, channel) {
           Navigator.pop(ctx);
-          final prompt = [
-            courseName,
-            if (language.isNotEmpty) 'in $language language',
-            if (channel.isNotEmpty) 'taught by $channel or similar channel',
-          ].join(' ');
+          // Build a well-formed prompt with the actual course name
+          final prompt = _buildCoursePrompt(courseName, language, channel);
           context.read<AppState>().generateCourseInBackgroundFromCategory(prompt);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -130,6 +132,18 @@ class _ExploreScreenState extends State<ExploreScreen>
         },
       ),
     );
+  }
+
+  /// Build a clean prompt that will result in a properly named course
+  String _buildCoursePrompt(String courseName, String language, String channel) {
+    final parts = <String>[courseName];
+    if (language.isNotEmpty && language != 'English') {
+      parts.add('in $language language');
+    }
+    if (channel.isNotEmpty) {
+      parts.add('with videos from $channel or similar channels');
+    }
+    return parts.join(' ');
   }
 
   @override
@@ -240,7 +254,7 @@ class _ExploreScreenState extends State<ExploreScreen>
             ),
           ),
 
-          // ─── Professional Custom Course Builder Banner ──────────
+          // ─── Custom Course Builder Banner ──────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -571,7 +585,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 }
 
-// ─── Professional Custom Course Builder Sheet ─────────────────────────────────
+// ─── Custom Course Builder Sheet ──────────────────────────────────────────────
 
 class _CustomCourseBuilderSheet extends StatefulWidget {
   final bool isDark;
@@ -587,7 +601,6 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
   final _courseNameCtrl = TextEditingController();
   final _channelCtrl = TextEditingController();
   String _selectedLanguage = 'English';
-  int _currentStep = 0;
 
   final List<String> _courseNameSuggestions = [
     'Complete Python for Beginners',
@@ -611,16 +624,9 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
   ];
 
   final List<String> _channelSuggestions = [
-    'freeCodeCamp',
-    'Traversy Media',
-    'Fireship',
-    '3Blue1Brown',
-    'The Net Ninja',
-    'CodeWithHarry',
-    'Apna College',
-    'Programming with Mosh',
-    'TechWithTim',
-    'CS50',
+    'freeCodeCamp', 'Traversy Media', 'Fireship', '3Blue1Brown',
+    'The Net Ninja', 'CodeWithHarry', 'Apna College', 'Programming with Mosh',
+    'TechWithTim', 'CS50',
   ];
 
   @override
@@ -648,7 +654,6 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
               width: 36, height: 4,
               margin: const EdgeInsets.only(top: 12, bottom: 4),
@@ -682,132 +687,135 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
 
             Divider(height: 1, color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
 
-            // Content
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ─── Step 1: Course Name ──────────────────────────
-                  _buildSectionLabel('What do you want to learn? *', Icons.school_outlined, AppColors.violet),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _courseNameCtrl,
-                    autofocus: true,
-                    style: GoogleFonts.dmSans(fontSize: 15, color: isDark ? AppColors.textLight : AppColors.textDark),
-                    textCapitalization: TextCapitalization.sentences,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'e.g., Complete Python for Beginners',
-                      hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.7)),
-                      filled: true,
-                      fillColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: AppColors.violet, width: 2),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      suffixIcon: _courseNameCtrl.text.isNotEmpty
-                          ? IconButton(onPressed: () => setState(() => _courseNameCtrl.clear()), icon: const Icon(Icons.clear, size: 18, color: AppColors.textMuted))
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  // Quick suggestions
-                  Text('Quick picks:', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.3)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6, runSpacing: 6,
-                    children: _courseNameSuggestions.map((s) {
-                      return GestureDetector(
-                        onTap: () => setState(() => _courseNameCtrl.text = s),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _courseNameCtrl.text == s ? AppColors.violet.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
-                            borderRadius: BorderRadius.circular(100),
-                            border: Border.all(color: _courseNameCtrl.text == s ? AppColors.violet.withValues(alpha: 0.4) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
-                          ),
-                          child: Text(s, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: _courseNameCtrl.text == s ? AppColors.violet : AppColors.textMuted)),
+            // Scrollable content
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Step 1: Course Name
+                    _buildSectionLabel('What do you want to learn? *', Icons.school_outlined, AppColors.violet),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _courseNameCtrl,
+                      autofocus: true,
+                      style: GoogleFonts.dmSans(fontSize: 15, color: isDark ? AppColors.textLight : AppColors.textDark),
+                      textCapitalization: TextCapitalization.sentences,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'e.g., Complete Python for Beginners',
+                        hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.7)),
+                        filled: true,
+                        fillColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: AppColors.violet, width: 2),
                         ),
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // ─── Step 2: Language ─────────────────────────────
-                  _buildSectionLabel('Content Language', Icons.translate_rounded, AppColors.teal),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 40,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _languageOptions.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (context, index) {
-                        final opt = _languageOptions[index];
-                        final isSelected = _selectedLanguage == opt['value'];
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        suffixIcon: _courseNameCtrl.text.isNotEmpty
+                            ? IconButton(onPressed: () => setState(() => _courseNameCtrl.clear()), icon: const Icon(Icons.clear, size: 18, color: AppColors.textMuted))
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('Quick picks:', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.3)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6, runSpacing: 6,
+                      children: _courseNameSuggestions.map((s) {
+                        final isSelected = _courseNameCtrl.text == s;
                         return GestureDetector(
-                          onTap: () => setState(() => _selectedLanguage = opt['value']!),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          onTap: () => setState(() => _courseNameCtrl.text = s),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: isSelected ? AppColors.teal.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                              color: isSelected ? AppColors.violet.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
                               borderRadius: BorderRadius.circular(100),
-                              border: Border.all(color: isSelected ? AppColors.teal.withValues(alpha: 0.4) : Colors.transparent),
+                              border: Border.all(color: isSelected ? AppColors.violet.withValues(alpha: 0.4) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
                             ),
-                            child: Text(opt['label']!, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? AppColors.teal : AppColors.textMuted)),
+                            child: Text(s, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: isSelected ? AppColors.violet : AppColors.textMuted)),
                           ),
                         );
-                      },
+                      }).toList(),
                     ),
-                  ),
 
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                  // ─── Step 3: Channel (Optional) ───────────────────
-                  _buildSectionLabel('Preferred Channel (Optional)', Icons.play_circle_outline, AppColors.gold),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _channelCtrl,
-                    style: GoogleFonts.dmSans(fontSize: 14, color: isDark ? AppColors.textLight : AppColors.textDark),
-                    decoration: InputDecoration(
-                      hintText: 'e.g., freeCodeCamp, Traversy Media...',
-                      hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.7), fontSize: 13),
-                      filled: true,
-                      fillColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: AppColors.gold, width: 2),
+                    // Step 2: Language
+                    _buildSectionLabel('Content Language', Icons.translate_rounded, AppColors.teal),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 40,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _languageOptions.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          final opt = _languageOptions[index];
+                          final isSelected = _selectedLanguage == opt['value'];
+                          return GestureDetector(
+                            onTap: () => setState(() => _selectedLanguage = opt['value']!),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppColors.teal.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                                borderRadius: BorderRadius.circular(100),
+                                border: Border.all(color: isSelected ? AppColors.teal.withValues(alpha: 0.4) : Colors.transparent),
+                              ),
+                              child: Text(opt['label']!, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? AppColors.teal : AppColors.textMuted)),
+                            ),
+                          );
+                        },
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6, runSpacing: 6,
-                    children: _channelSuggestions.map((c) {
-                      return GestureDetector(
-                        onTap: () => setState(() => _channelCtrl.text = c),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: _channelCtrl.text == c ? AppColors.gold.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
-                            borderRadius: BorderRadius.circular(100),
-                            border: Border.all(color: _channelCtrl.text == c ? AppColors.gold.withValues(alpha: 0.4) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
-                          ),
-                          child: Text(c, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: _channelCtrl.text == c ? AppColors.gold : AppColors.textMuted)),
-                        ),
-                      );
-                    }).toList(),
-                  ),
 
-                  const SizedBox(height: 24),
-                ],
+                    const SizedBox(height: 20),
+
+                    // Step 3: Channel (Optional)
+                    _buildSectionLabel('Preferred Channel (Optional)', Icons.play_circle_outline, AppColors.gold),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _channelCtrl,
+                      style: GoogleFonts.dmSans(fontSize: 14, color: isDark ? AppColors.textLight : AppColors.textDark),
+                      decoration: InputDecoration(
+                        hintText: 'e.g., freeCodeCamp, Traversy Media...',
+                        hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.7), fontSize: 13),
+                        filled: true,
+                        fillColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: AppColors.gold, width: 2),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6, runSpacing: 6,
+                      children: _channelSuggestions.map((c) {
+                        final isSelected = _channelCtrl.text == c;
+                        return GestureDetector(
+                          onTap: () => setState(() => _channelCtrl.text = c),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.gold.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(color: isSelected ? AppColors.gold.withValues(alpha: 0.4) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+                            ),
+                            child: Text(c, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: isSelected ? AppColors.gold : AppColors.textMuted)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
             ),
 
@@ -858,7 +866,7 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
   }
 }
 
-// ─── Explore Course Card ────────────────────────────────────────────────────
+// ─── Explore Course Card ─────────────────────────────────────────────────────
 
 class _ExploreCourseCard extends StatelessWidget {
   final Course course;
@@ -869,7 +877,7 @@ class _ExploreCourseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Fix $dream placeholder
+    // Always fix $dream placeholder
     final displayTitle = course.title.replaceAll('\$dream', course.category);
 
     return GestureDetector(
@@ -923,14 +931,12 @@ class _ExploreCourseCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Category pill — NO learner count
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(100)),
                     child: Text(course.category, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
                   const SizedBox(height: 10),
-                  // Fixed title — no $dream
                   Text(displayTitle, style: Theme.of(context).textTheme.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 6),
                   Text(course.description, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),

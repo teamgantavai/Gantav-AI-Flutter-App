@@ -24,7 +24,7 @@ class GeminiService {
         DateTime.now().add(const Duration(minutes: 1));
   }
 
-  // ── Quiz Generation ─────────────────────────────────────────────────────
+  // ── Quiz Generation ──────────────────────────────────────────────────────
   static Future<List<QuizQuestion>> generateQuiz({
     required String lessonTitle,
     required String courseTitle,
@@ -33,7 +33,6 @@ class GeminiService {
   }) async {
     if (!ApiConfig.isConfigured) return QuizQuestion.mockQuestions();
 
-    // Compact prompt for faster response
     final prompt =
         'Generate 5 MCQ quiz questions for lesson: "$lessonTitle" (Course: "$courseTitle").\n'
         'Return ONLY JSON array, no markdown:\n'
@@ -43,7 +42,7 @@ class GeminiService {
       final response = await _smartCall(
         prompt,
         task: AITask.courseGeneration,
-        maxTokens: 1500, // Reduced for speed
+        maxTokens: 1500,
       );
       if (response == null) return QuizQuestion.mockQuestions();
       final jsonStr = extractJson(response);
@@ -56,7 +55,7 @@ class GeminiService {
     }
   }
 
-  // ── Doubt Resolution ────────────────────────────────────────────────────
+  // ── Doubt Resolution ─────────────────────────────────────────────────────
   static Future<String> askDoubt({
     required String question,
     required String lessonTitle,
@@ -81,7 +80,7 @@ class GeminiService {
       final response = await _smartCall(
         prompt,
         task: AITask.chat,
-        maxTokens: 400, // Short responses are faster
+        maxTokens: 400,
       );
       return response ?? 'Sorry, I could not answer that. Please try again.';
     } catch (e) {
@@ -90,46 +89,92 @@ class GeminiService {
   }
 
   // ── Learning Path Generation ─────────────────────────────────────────────
+  /// Generates a course with the ACTUAL course name in the title (no $dream placeholder).
   static Future<Course?> generateLearningPath({
     required String dream,
     List<YouTubeVideoStats>? preFilteredVideos,
   }) async {
     if (!ApiConfig.isConfigured) return null;
 
+    // Clean the dream/topic to extract the actual course name
+    final courseName = _extractCourseName(dream);
+    final courseCategory = _extractCategory(dream);
+
     String videoContext = '';
+    String firstVideoId = '';
     if (preFilteredVideos != null && preFilteredVideos.isNotEmpty) {
-      // Limit to top 6 videos for a compact prompt
-      final topVideos = preFilteredVideos.take(6).toList();
+      final topVideos = preFilteredVideos.take(9).toList();
+      if (topVideos.isNotEmpty) firstVideoId = topVideos.first.id;
       videoContext =
-          'Use ONLY these verified videos:\n${topVideos.map((v) => '- ID:${v.id} Title:"${v.title}" Duration:${v.durationText}').join('\n')}\n';
+          'Use ONLY these verified YouTube videos (pick the most relevant for each lesson):\n'
+          '${topVideos.map((v) => '- ID:${v.id} Title:"${v.title}" Duration:${v.durationText} Channel:${v.channelTitle}').join('\n')}\n';
     }
 
-    // Compact course generation prompt — max 3 modules, 3 lessons each
+    // Generate unique module descriptions based on the course topic
+    final moduleTopics = _generateModuleTopics(courseName);
+
     final prompt =
-        'Create a learning course for: "$dream"\n'
+        'Create a complete learning course for: "$courseName"\n'
         '$videoContext'
-        'Return ONLY valid JSON (no markdown backticks):\n'
-        '{"id":"gen_1","title":"Complete $dream Course","description":"Learn $dream from scratch",'
-        '"category":"Technology","thumbnail_url":"https://img.youtube.com/vi/VIDEO_ID/maxresdefault.jpg",'
-        '"total_lessons":9,"rating":4.8,"learner_count":0,'
-        '"skills":["skill1","skill2","skill3"],'
-        '"modules":[{"id":"mod_1","title":"Module Title","lesson_count":3,"is_locked":false,'
-        '"lessons":[{"id":"les_1","title":"Lesson Title","youtube_video_id":"real_id","duration":"15:00",'
-        '"chapters":[{"title":"Intro","timestamp":"0:00"}]}]}]}\n'
-        'Rules: 3 modules, 3 lessons each. Module 1 is_locked:false, rest true. '
-        'Use real YouTube video IDs from the list above. thumbnail_url uses first video ID.';
+        'IMPORTANT: The course title MUST be exactly "$courseName" - do NOT use any placeholder like \$dream.\n'
+        'Return ONLY valid JSON (no markdown backticks, no extra text):\n'
+        '{\n'
+        '  "id": "gen_${DateTime.now().millisecondsSinceEpoch}",\n'
+        '  "title": "$courseName",\n'
+        '  "description": "A comprehensive course covering all aspects of ${courseName.toLowerCase()}",\n'
+        '  "category": "$courseCategory",\n'
+        '  "thumbnail_url": "${firstVideoId.isNotEmpty ? "https://img.youtube.com/vi/$firstVideoId/maxresdefault.jpg" : "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"}",\n'
+        '  "total_lessons": 9,\n'
+        '  "rating": 4.8,\n'
+        '  "learner_count": 0,\n'
+        '  "skills": ["${moduleTopics[0]}", "${moduleTopics[1]}", "${moduleTopics[2]}"],\n'
+        '  "modules": [\n'
+        '    {"id":"mod_1","title":"${moduleTopics[0]}","lesson_count":3,"is_locked":false,"lessons":[\n'
+        '      {"id":"les_1","title":"Introduction to ${courseName}","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"15:00","chapters":[{"title":"Overview","timestamp":"0:00"}]},\n'
+        '      {"id":"les_2","title":"Core ${moduleTopics[0]} Concepts","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"18:00"},\n'
+        '      {"id":"les_3","title":"${moduleTopics[0]} in Practice","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"20:00"}\n'
+        '    ]},\n'
+        '    {"id":"mod_2","title":"${moduleTopics[1]}","lesson_count":3,"is_locked":true,"lessons":[\n'
+        '      {"id":"les_4","title":"${moduleTopics[1]} Fundamentals","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"22:00"},\n'
+        '      {"id":"les_5","title":"Advanced ${moduleTopics[1]}","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"25:00"},\n'
+        '      {"id":"les_6","title":"${moduleTopics[1]} Projects","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"19:00"}\n'
+        '    ]},\n'
+        '    {"id":"mod_3","title":"${moduleTopics[2]}","lesson_count":3,"is_locked":true,"lessons":[\n'
+        '      {"id":"les_7","title":"${moduleTopics[2]} Deep Dive","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"23:00"},\n'
+        '      {"id":"les_8","title":"Real-world ${moduleTopics[2]}","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"27:00"},\n'
+        '      {"id":"les_9","title":"Final ${courseName} Project","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"35:00"}\n'
+        '    ]}\n'
+        '  ]\n'
+        '}\n\n'
+        'Rules:\n'
+        '1. Replace each VIDEO_ID_FROM_LIST with a REAL YouTube video ID from the provided list above.\n'
+        '2. Match video IDs to lesson topics (most relevant video for each lesson).\n'
+        '3. Keep the title EXACTLY as "$courseName".\n'
+        '4. Each module must have a UNIQUE title describing a different aspect of $courseName.\n'
+        '5. Module 1 is_locked:false, modules 2 and 3 is_locked:true.';
 
     try {
       final response = await _smartCall(
         prompt,
         task: AITask.courseGeneration,
-        maxTokens: 2000, // Reduced significantly for speed
+        maxTokens: 2500,
         temperature: 0.2,
       );
       if (response == null) return null;
 
       final jsonStr = extractJson(response);
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      
+      // Ensure title never contains $dream
+      if (data['title'] == null || 
+          (data['title'] as String).contains('\$dream') || 
+          (data['title'] as String).trim().isEmpty) {
+        data['title'] = courseName;
+      }
+      if (data['category'] == null || (data['category'] as String).trim().isEmpty) {
+        data['category'] = courseCategory;
+      }
+      
       return Course.fromJson(data);
     } catch (e) {
       debugPrint('[AI] Course gen error: $e');
@@ -137,7 +182,78 @@ class GeminiService {
     }
   }
 
-  // ── Daily Recommendations ────────────────────────────────────────────────
+  /// Extract a clean course name from the prompt
+  static String _extractCourseName(String dream) {
+    // Remove common prefix patterns
+    var name = dream
+        .replaceAll(RegExp(r'I want to learn:\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'in \w+ language.*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'taught by.*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'with videos from.*', caseSensitive: false), '')
+        .trim();
+    
+    // Capitalize first letter of each word
+    if (name.isEmpty) return 'Complete Programming Course';
+    return name;
+  }
+
+  /// Extract category from course name
+  static String _extractCategory(String dream) {
+    final lower = dream.toLowerCase();
+    if (lower.contains('python') || lower.contains('programming')) return 'Programming';
+    if (lower.contains('flutter') || lower.contains('mobile') || lower.contains('android') || lower.contains('ios')) return 'Mobile Development';
+    if (lower.contains('react') || lower.contains('web') || lower.contains('html') || lower.contains('css') || lower.contains('javascript')) return 'Web Development';
+    if (lower.contains('machine learning') || lower.contains('ai') || lower.contains('deep learning')) return 'AI & ML';
+    if (lower.contains('data')) return 'Data Science';
+    if (lower.contains('cloud') || lower.contains('aws') || lower.contains('devops')) return 'Cloud & DevOps';
+    if (lower.contains('design') || lower.contains('ui') || lower.contains('ux')) return 'Design';
+    if (lower.contains('game')) return 'Game Development';
+    if (lower.contains('cyber') || lower.contains('security')) return 'Cybersecurity';
+    if (lower.contains('blockchain') || lower.contains('web3')) return 'Blockchain';
+    return 'Technology';
+  }
+
+  /// Generate unique module topic names for a course
+  static List<String> _generateModuleTopics(String courseName) {
+    final lower = courseName.toLowerCase();
+    
+    if (lower.contains('python')) {
+      return ['Python Fundamentals', 'Data Structures & OOP', 'Advanced Python & Projects'];
+    }
+    if (lower.contains('flutter') || lower.contains('mobile')) {
+      return ['Flutter Basics & Dart', 'Widgets & State Management', 'Firebase & Deployment'];
+    }
+    if (lower.contains('react')) {
+      return ['React Fundamentals', 'Hooks & State', 'Full-Stack Integration'];
+    }
+    if (lower.contains('machine learning') || lower.contains('ml')) {
+      return ['ML Foundations', 'Supervised Learning', 'Deep Learning & Projects'];
+    }
+    if (lower.contains('web')) {
+      return ['HTML & CSS Basics', 'JavaScript & DOM', 'Backend & Deployment'];
+    }
+    if (lower.contains('data science')) {
+      return ['Python & Pandas', 'Data Visualization', 'Statistical Analysis & ML'];
+    }
+    if (lower.contains('cloud') || lower.contains('aws')) {
+      return ['Cloud Fundamentals', 'Core Services & Architecture', 'DevOps & CI/CD'];
+    }
+    if (lower.contains('game')) {
+      return ['Game Engine Basics', 'Game Mechanics & Physics', 'Advanced Game Systems'];
+    }
+    if (lower.contains('design') || lower.contains('ui')) {
+      return ['Design Principles', 'Figma & Prototyping', 'Design Systems & Case Studies'];
+    }
+    // Generic fallback
+    final cleanName = courseName.replaceAll(RegExp(r'(Complete|Course|Basics|Fundamentals)', caseSensitive: false), '').trim();
+    return [
+      '$cleanName Foundations',
+      'Intermediate $cleanName',
+      'Advanced $cleanName & Projects',
+    ];
+  }
+
+  // ── Daily Recommendations ─────────────────────────────────────────────────
   static Future<List<Map<String, String>>> generateRecommendations({
     required String? dream,
     required List<String> categories,
@@ -158,7 +274,7 @@ class GeminiService {
       final response = await _smartCall(
         prompt,
         task: AITask.recommendations,
-        maxTokens: 1200, // Compact
+        maxTokens: 1200,
       );
       if (response == null) return _mockRecommendations();
       final jsonStr = extractJson(response);
@@ -224,7 +340,7 @@ class GeminiService {
     double temperature = 0.7,
   }) async {
     int attempts = 0;
-    const maxRetries = 2; // Reduced retries for faster failure
+    const maxRetries = 2;
 
     while (attempts < maxRetries) {
       attempts++;
@@ -238,7 +354,7 @@ class GeminiService {
             _setRateLimited(provider);
             rethrow;
           }
-          await Future.delayed(Duration(seconds: attempts)); // 1s, 2s
+          await Future.delayed(Duration(seconds: attempts));
         } else {
           rethrow;
         }
@@ -294,7 +410,7 @@ class GeminiService {
 
     final response = await http
         .post(url, headers: {'Content-Type': 'application/json'}, body: body)
-        .timeout(const Duration(seconds: 30)); // Reduced from 45s
+        .timeout(const Duration(seconds: 30));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -343,7 +459,7 @@ class GeminiService {
           },
           body: body,
         )
-        .timeout(const Duration(seconds: 25)); // Groq is fast
+        .timeout(const Duration(seconds: 25));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -492,7 +608,7 @@ class GeminiService {
         {
           'title': 'CSS Grid in 20 Minutes',
           'channel': 'Traversy Media',
-          'video_id': 'jV8B24rSN5o',
+          'video_id': '3Xc3CA655Y4',
           'duration': '28:05',
           'category': 'CSS',
           'description': 'Master CSS Grid layout'
