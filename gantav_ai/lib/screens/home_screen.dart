@@ -48,7 +48,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadRecommendations({bool reset = false}) async {
     if (reset) {
-      if (mounted) setState(() { _loadingRecs = true; _recPage = 0; });
+      if (mounted) {
+        setState(() {
+          _loadingRecs = true;
+          _recPage = 0;
+        });
+      }
     }
     
     final appState = context.read<AppState>();
@@ -60,8 +65,11 @@ class _HomeScreenState extends State<HomeScreen> {
     
     if (mounted) {
       setState(() {
-        if (reset) _recommendations = recs;
-        else _recommendations.addAll(recs);
+        if (reset) {
+          _recommendations = recs;
+        } else {
+          _recommendations.addAll(recs);
+        }
         _loadingRecs = false;
         _loadingMoreRecs = false;
       });

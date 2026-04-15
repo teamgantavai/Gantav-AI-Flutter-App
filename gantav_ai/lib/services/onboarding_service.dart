@@ -26,8 +26,7 @@ class OnboardingService {
     final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: prefs.learningGoal);
     final String verifiedVideosContext;
     if (preFilteredVideos.isNotEmpty) {
-      verifiedVideosContext = 'IMPORTANT: You MUST use ONLY the following verified YouTube videos for tasks:\n' +
-          preFilteredVideos.map((v) => '- Title: "${v.title}", Video ID: ${v.id}, Duration: ${v.durationText}, Channel: ${v.channelTitle}').join('\n');
+      verifiedVideosContext = 'IMPORTANT: You MUST use ONLY the following verified YouTube videos for tasks:\n${preFilteredVideos.map((v) => '- Title: "${v.title}", Video ID: ${v.id}, Duration: ${v.durationText}, Channel: ${v.channelTitle}').join('\n')}';
     } else {
       verifiedVideosContext = 'Use REAL YouTube video IDs from: freeCodeCamp(rfscVS0vtbw), 3Blue1Brown(aircAruvnKk), Traversy(nu_pCVPKzTk), Fireship(DHjqpvDnNGE), Corey Schafer(YYXdXT2l7Tc), TechWithTim(nLRL_NcnK-4), Khan Academy(HvMSRWTE2mI)';
     }

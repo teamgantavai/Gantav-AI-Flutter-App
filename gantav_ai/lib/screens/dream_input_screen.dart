@@ -20,7 +20,7 @@ class _DreamInputScreenState extends State<DreamInputScreen>
   final TextEditingController _teacherController = TextEditingController();
   String _timeCommitment = '1 Hour';
   
-  bool _isGenerating = false;
+  final bool _isGenerating = false;
   Course? _generatedCourse;
   String? _error;
   late AnimationController _shimmerController;

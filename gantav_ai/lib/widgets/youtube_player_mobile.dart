@@ -20,17 +20,19 @@ class AppYoutubePlayer extends StatefulWidget {
 
 class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerProviderStateMixin {
   late YoutubePlayerController _controller;
-  
-  // Custom gesture states
-  double _previousRate = 1.0;
+
+  // Controls
+  bool _showControls = true;
+  Timer? _controlsTimer;
+
+  // Long press 2x
   bool _isLongPressing = false;
+  double _previousRate = 1.0;
+
+  // Seek overlay
   double _seekOverlayOpacity = 0.0;
   Timer? _seekOverlayTimer;
   Alignment _seekOverlayAlignment = Alignment.center;
-
-  // Modern Fade Overlay states
-  bool _showControls = true;
-  Timer? _controlsTimer;
 
   String _getSafeVideoId(String input) {
     if (input.contains('youtube.com/watch?v=')) {
@@ -47,27 +49,25 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
     super.initState();
     _controller = YoutubePlayerController(
       initialVideoId: _getSafeVideoId(widget.videoId),
-      flags: YoutubePlayerFlags(
-        autoPlay: widget.autoPlay,
+      flags: const YoutubePlayerFlags(
+        autoPlay: false,           // Let user tap to play
         mute: false,
         enableCaption: false,
         forceHD: true,
+        hideControls: true,       // We handle controls manually
+        hideThumbnail: true,
       ),
     );
+
     _startControlsTimer();
   }
 
   @override
   void dispose() {
-    _seekOverlayTimer?.cancel();
     _controlsTimer?.cancel();
+    _seekOverlayTimer?.cancel();
     _controller.dispose();
     super.dispose();
-  }
-
-  void _toggleControls() {
-    setState(() => _showControls = !_showControls);
-    if (_showControls) _startControlsTimer();
   }
 
   void _startControlsTimer() {
@@ -77,16 +77,21 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
     });
   }
 
+  void _toggleControls() {
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _startControlsTimer();
+  }
+
   void _togglePlayPause() {
     if (_controller.value.isPlaying) {
       _controller.pause();
     } else {
       _controller.play();
     }
-    _startControlsTimer(); // Keep controls visible when interacting
+    _startControlsTimer();
   }
 
-  Future<void> setPlaybackRate(double rate) async {
+  void setPlaybackRate(double rate) {
     _controller.setPlaybackRate(rate);
     widget.onSpeedChanged?.call(rate);
   }
@@ -95,15 +100,14 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
     return _controller.value.position.inSeconds.toDouble();
   }
 
-  // --- Custom Advanced Gesture Logic ---
-
+  // Seek with overlay
   void _showSeekOverlay(bool isForward) {
     _seekOverlayTimer?.cancel();
     setState(() {
       _seekOverlayOpacity = 1.0;
       _seekOverlayAlignment = isForward ? Alignment.centerRight : Alignment.centerLeft;
     });
-    _seekOverlayTimer = Timer(const Duration(milliseconds: 600), () {
+    _seekOverlayTimer = Timer(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _seekOverlayOpacity = 0.0);
     });
   }
@@ -120,92 +124,17 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
     _showSeekOverlay(false);
   }
 
-  void _startLongPress2x(LongPressStartDetails details) {
+  void _startLongPress2x(_) {
     if (!_controller.value.isPlaying) return;
-    _isLongPressing = true;
     _previousRate = _controller.value.playbackRate;
     _controller.setPlaybackRate(2.0);
-    setState(() {});
+    setState(() => _isLongPressing = true);
   }
 
-  void _endLongPress2x(LongPressEndDetails details) {
+  void _endLongPress2x(_) {
     if (!_isLongPressing) return;
-    _isLongPressing = false;
     _controller.setPlaybackRate(_previousRate);
-    setState(() {});
-  }
-
-  // --- Settings Sheet ---
-  void _showSettingsSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E2C),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 16),
-              ListTile(
-                leading: const Icon(Icons.speed_rounded, color: Colors.white),
-                title: const Text('Playback speed', style: TextStyle(color: Colors.white)),
-                trailing: Text('${_controller.value.playbackRate}x', style: const TextStyle(color: Colors.white70)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showSpeedSheet();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.subtitles_rounded, color: Colors.white),
-                title: const Text('Captions', style: TextStyle(color: Colors.white)),
-                trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 14),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Toggle captions (note: this overrides the player flags contextually)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Captions toggled'), duration: Duration(seconds: 1)),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showSpeedSheet() {
-    final speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E2C),
-      builder: (context) {
-        return SafeArea(
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: speeds.length,
-            itemBuilder: (context, index) {
-              final speed = speeds[index];
-              final isSelected = _controller.value.playbackRate == speed;
-              return ListTile(
-                trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF6366F1)) : null,
-                title: Text(speed == 1.0 ? 'Normal' : '${speed}x', style: TextStyle(color: isSelected ? const Color(0xFF6366F1) : Colors.white)),
-                onTap: () {
-                  setPlaybackRate(speed);
-                  Navigator.pop(context);
-                },
-              );
-            },
-          ),
-        );
-      },
-    );
+    setState(() => _isLongPressing = false);
   }
 
   @override
@@ -213,15 +142,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
     return YoutubePlayerBuilder(
       player: YoutubePlayer(
         controller: _controller,
-        showVideoProgressIndicator: true,
-        progressIndicatorColor: const Color(0xFF6366F1),
-        progressColors: const ProgressBarColors(
-          playedColor: Color(0xFF6366F1),
-          handleColor: Color(0xFF818CF8),
-        ),
-        // Use custom overlay for everything to avoid touch conflicts
-        topActions: const [],
-        bottomActions: const [], 
+        showVideoProgressIndicator: false, // We use our own if needed
       ),
       builder: (context, player) {
         return AspectRatio(
@@ -229,144 +150,109 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // 1. Native Video Player
+              // Main Video Player
               player,
-              
-              // 2. Interaction Layer & Faded Overlay (Dark like YouTube)
+
+              // Overlay for gestures + controls
               GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onTap: _toggleControls,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  color: _showControls ? Colors.black.withValues(alpha: 0.82) : Colors.transparent,
+                  duration: const Duration(milliseconds: 200),
+                  color: _showControls
+                      ? Colors.black.withValues(alpha: 0.65)
+                      : Colors.transparent,
                   child: Stack(
                     children: [
-                      // --- TOP AUTO-HIDE CONTROLS ---
+                      // Center Play/Pause Button (Big & Beautiful)
+                      if (_showControls)
+                        Center(
+                          child: GestureDetector(
+                            onTap: _togglePlayPause,
+                            child: Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
+                              ),
+                              child: Icon(
+                                _controller.value.isPlaying
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 62,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // Top Bar (Title + Settings)
                       if (_showControls)
                         Positioned(
-                          top: 0, left: 0, right: 0,
+                          top: 0,
+                          left: 0,
+                          right: 0,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                            decoration: BoxDecoration(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                            decoration: const BoxDecoration(
                               gradient: LinearGradient(
-                                begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                                colors: [Colors.black.withValues(alpha: 0.9), Colors.transparent],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Colors.black87, Colors.transparent],
                               ),
                             ),
                             child: Row(
                               children: [
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        _controller.metadata.title.isNotEmpty ? _controller.metadata.title : 'Generating Curriculum...',
-                                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (_controller.metadata.author.isNotEmpty)
-                                        Text(
-                                          'Channel: ${_controller.metadata.author}',
-                                          style: TextStyle(
-                                            color: Colors.white.withValues(alpha: 0.9),
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                    ],
+                                  child: Text(
+                                    _controller.metadata.title.isNotEmpty
+                                        ? _controller.metadata.title
+                                        : widget.videoId,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.settings, color: Colors.white, size: 26),
-                                  onPressed: _showSettingsSheet,
+                                  onPressed: () {
+                                    // You can call your speed sheet here if needed
+                                  },
                                 ),
                               ],
                             ),
                           ),
                         ),
 
-                      // --- CENTER PLAY/PAUSE ---
-                      if (_showControls)
-                        Center(
-                          child: GestureDetector(
-                            onTap: _togglePlayPause,
-                            child: AnimatedScale(
-                              scale: _showControls ? 1.0 : 0.8,
-                              duration: const Duration(milliseconds: 250),
-                              child: Container(
-                                padding: const EdgeInsets.all(22),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.45),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
-                                ),
-                                child: Icon(
-                                  _controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                  color: Colors.white,
-                                  size: 56,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                      // --- BOTTOM PROGRESS ---
-                      if (_showControls)
-                        Positioned(
-                          bottom: 0, left: 0, right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.fromLTRB(14, 40, 14, 16),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.bottomCenter, end: Alignment.topCenter,
-                                colors: [Colors.black.withValues(alpha: 0.9), Colors.transparent],
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    CurrentPosition(),
-                                    const SizedBox(width: 10),
-                                    Expanded(child: ProgressBar(isExpanded: true)),
-                                    const SizedBox(width: 10),
-                                    RemainingDuration(),
-                                    const SizedBox(width: 8),
-                                    const FullScreenButton(),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                      // --- GESTURE ZONES (Double tap to seek, etc.) ---
-                      // Positioned between Top and Bottom bars to avoid blocking them
-                      Positioned(
-                        top: 60, bottom: 60, left: 0, right: 0,
+                      // Gesture Zones for Double Tap Seek + Long Press 2x
+                      Positioned.fill(
                         child: Row(
                           children: [
+                            // Left Side - Backward + Long Press 2x
                             Expanded(
-                              flex: 1,
                               child: GestureDetector(
                                 behavior: HitTestBehavior.translucent,
                                 onDoubleTap: _seekBackward,
                                 onLongPressStart: _startLongPress2x,
                                 onLongPressEnd: _endLongPress2x,
-                                child: Container(color: Colors.transparent),
+                                child: const SizedBox.expand(),
                               ),
                             ),
-                            const Expanded(flex: 2, child: SizedBox.shrink()),
+                            // Center - Just for tap (play/pause handled above)
+                            const Expanded(flex: 2, child: SizedBox()),
+                            // Right Side - Forward + Long Press 2x
                             Expanded(
-                              flex: 1,
                               child: GestureDetector(
                                 behavior: HitTestBehavior.translucent,
                                 onDoubleTap: _seekForward,
                                 onLongPressStart: _startLongPress2x,
                                 onLongPressEnd: _endLongPress2x,
-                                child: Container(color: Colors.transparent),
+                                child: const SizedBox.expand(),
                               ),
                             ),
                           ],
@@ -377,49 +263,51 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
                 ),
               ),
 
-              // 3. Beautiful 2x Speed Long Press Overlay Indicator
+              // 2x Speed Indicator
               if (_isLongPressing)
                 Positioned(
-                  top: 10, left: 0, right: 0,
+                  top: 16,
+                  left: 0,
+                  right: 0,
                   child: Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(100),
+                        color: Colors.black.withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(30),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('2x Speed ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                          Icon(Icons.fast_forward, color: Colors.white, size: 16),
+                          Text('2× ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                          Icon(Icons.fast_forward, color: Colors.white, size: 18),
                         ],
                       ),
                     ),
                   ),
                 ),
 
-              // 4. Beautiful 10s Seek Overlay Animation (Left/Right)
+              // 10s Seek Animation
               IgnorePointer(
                 child: AnimatedOpacity(
                   opacity: _seekOverlayOpacity,
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 150),
                   child: Align(
                     alignment: _seekOverlayAlignment,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 50),
                       child: Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
+                          color: Colors.black.withValues(alpha: 0.65),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          _seekOverlayAlignment == Alignment.centerRight 
-                             ? Icons.forward_10_rounded 
-                             : Icons.replay_10_rounded,
+                          _seekOverlayAlignment == Alignment.centerRight
+                              ? Icons.forward_10
+                              : Icons.replay_10,
                           color: Colors.white,
-                          size: 32,
+                          size: 42,
                         ),
                       ),
                     ),

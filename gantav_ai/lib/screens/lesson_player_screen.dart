@@ -163,7 +163,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
 
   Future<void> _setPlaybackSpeed(double speed) async {
     setState(() => _playbackSpeed = speed);
-    await _ytKey.currentState?.setPlaybackRate(speed);
+    _ytKey.currentState?.setPlaybackRate(speed);
   }
 
   Future<void> _sendMessage() async {

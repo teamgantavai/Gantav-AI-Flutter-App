@@ -114,14 +114,13 @@ Give a clear answer under 150 words. Use examples when helpful.''';
     String verifiedVideosContext = '';
     if (preFilteredVideos != null && preFilteredVideos.isNotEmpty) {
       // Pass stats AND comments to the AI so it can judge quality without making 10 separate calls
-      verifiedVideosContext = 'IMPORTANT: Construct the course using ONLY these highly-rated videos. Read their top comments to determine if they are beginner or advanced:\n' +
-          preFilteredVideos.map((v) => '''
+      verifiedVideosContext = 'IMPORTANT: Construct the course using ONLY these highly-rated videos. Read their top comments to determine if they are beginner or advanced:\n${preFilteredVideos.map((v) => '''
 - ID: ${v.id}
   Title: "${v.title}"
   Duration: ${v.durationText}
   Engagement: ${v.engagementRatio}%
   Comments: ${v.topComments.take(3).join(" | ")}
-''').join('\n');
+''').join('\n')}';
     }
 
     final prompt = '''You are an expert curriculum designer. Goal: "$dream"
@@ -186,7 +185,7 @@ $verifiedVideosContext
     if (!ApiConfig.isConfigured) return _mockRecommendations();
 
     final context = [dream, ...categories]
-        .where((s) => s != null && s!.isNotEmpty)
+        .where((s) => s != null && s.isNotEmpty)
         .join(', ');
 
     final prompt = '''Recommend 8 educational YouTube videos for someone learning: $context
