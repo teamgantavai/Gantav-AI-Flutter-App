@@ -11,6 +11,7 @@ import 'screens/auth_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/roadmap_generation_screen.dart';
 import 'screens/course_detail_screen.dart';
+import 'screens/roadmap_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';

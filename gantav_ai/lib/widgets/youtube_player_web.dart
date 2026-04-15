@@ -137,57 +137,9 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
+    return YoutubePlayer(
+      controller: _controller,
       aspectRatio: 16 / 9,
-      child: Stack(
-        children: [
-          YoutubePlayer(
-            controller: _controller,
-            aspectRatio: 16 / 9,
-          ),
-          // Settings gear overlay (top right)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: showSettingsSheet,
-                borderRadius: BorderRadius.circular(20),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.settings_rounded, color: Colors.white, size: 18),
-                ),
-              ),
-            ),
-          ),
-          // Speed badge if not 1x
-          if (_currentSpeed != 1.0)
-            Positioned(
-              top: 8,
-              right: 44,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '${_currentSpeed}x',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
