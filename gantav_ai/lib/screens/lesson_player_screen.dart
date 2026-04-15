@@ -383,11 +383,17 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(
-                  widget.lesson.title,
-                  style: Theme.of(context).textTheme.titleSmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(
+                    widget.lesson.title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
               Row(
@@ -475,14 +481,10 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           if (!isLandscape) ...[
             const SizedBox(height: 14),
 
-            Text(widget.lesson.title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, height: 1.3)),
-            const SizedBox(height: 6),
-
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.violet.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(100),
@@ -496,7 +498,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
 
             _buildContentToggle(isDark),
             const SizedBox(height: 16),

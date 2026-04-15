@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +8,6 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'roadmap_screen.dart';
-import '../models/models.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -297,19 +295,26 @@ class _ProfileHero extends StatelessWidget {
 
             // Share button
             SizedBox(
-              width: double.infinity, height: 42,
-              child: OutlinedButton.icon(
+              width: double.infinity, height: 44,
+              child: OutlinedButton(
                 onPressed: () {
                   SharePlus.instance.share(ShareParams(
                     text: 'Check out my learning journey on Gantav AI! 🎯\nhttps://gantavai.com/u/${user.handle}',
                   ));
                 },
-                icon: const Icon(Icons.share_outlined, size: 16),
-                label: Text('Share Profile', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.violet,
                   side: BorderSide(color: AppColors.violet.withValues(alpha: 0.4)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: EdgeInsets.zero,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.share_outlined, size: 16),
+                    const SizedBox(width: 8),
+                    Text('Share Profile', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ],
                 ),
               ),
             ),

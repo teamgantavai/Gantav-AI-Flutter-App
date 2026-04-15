@@ -214,53 +214,14 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
       player: YoutubePlayer(
         controller: _controller,
         showVideoProgressIndicator: true,
-        progressIndicatorColor: const Color(0xFF6366F1), // Violet color
+        progressIndicatorColor: const Color(0xFF6366F1),
         progressColors: const ProgressBarColors(
           playedColor: Color(0xFF6366F1),
           handleColor: Color(0xFF818CF8),
         ),
-        topActions: [
-          const SizedBox(width: 8.0),
-          Expanded(
-            child: Text(
-              _controller.metadata.title.isNotEmpty ? _controller.metadata.title : 'Loading Video...',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15.0,
-                fontWeight: FontWeight.w600,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          if (_controller.metadata.author.isNotEmpty) ...[
-            const SizedBox(width: 8.0),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                _controller.metadata.author,
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-              ),
-            ),
-            const SizedBox(width: 14.0),
-          ]
-        ],
-        bottomActions: [
-          const SizedBox(width: 14.0),
-          CurrentPosition(),
-          const SizedBox(width: 8.0),
-          ProgressBar(isExpanded: true),
-          RemainingDuration(),
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white, size: 20),
-            onPressed: _showSettingsSheet,
-          ),
-          const FullScreenButton(),   // Native fullscreen toggle option
-        ],
+        // Use custom overlay for everything to avoid touch conflicts
+        topActions: const [],
+        bottomActions: const [], 
       ),
       builder: (context, player) {
         return AspectRatio(
@@ -271,42 +232,124 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
               // 1. Native Video Player
               player,
               
-              // 2. Main Interaction Overlay (Fades on single tap)
+              // 2. Interaction Layer & Faded Overlay (Dark like YouTube)
               GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onTap: _toggleControls,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  color: _showControls ? Colors.black.withValues(alpha: 0.4) : Colors.transparent,
+                  color: _showControls ? Colors.black.withValues(alpha: 0.82) : Colors.transparent,
                   child: Stack(
                     children: [
-                      // Large smooth Play/Pause in center
+                      // --- TOP AUTO-HIDE CONTROLS ---
+                      if (_showControls)
+                        Positioned(
+                          top: 0, left: 0, right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                                colors: [Colors.black.withValues(alpha: 0.9), Colors.transparent],
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _controller.metadata.title.isNotEmpty ? _controller.metadata.title : 'Generating Curriculum...',
+                                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (_controller.metadata.author.isNotEmpty)
+                                        Text(
+                                          'Channel: ${_controller.metadata.author}',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.9),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.settings, color: Colors.white, size: 26),
+                                  onPressed: _showSettingsSheet,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // --- CENTER PLAY/PAUSE ---
                       if (_showControls)
                         Center(
                           child: GestureDetector(
                             onTap: _togglePlayPause,
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                _controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 48,
+                            child: AnimatedScale(
+                              scale: _showControls ? 1.0 : 0.8,
+                              duration: const Duration(milliseconds: 250),
+                              child: Container(
+                                padding: const EdgeInsets.all(22),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.45),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
+                                ),
+                                child: Icon(
+                                  _controller.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 56,
+                                ),
                               ),
                             ),
                           ),
                         ),
 
-                      // Invisible side panels for Double Tap (10s seek) and Long Press (2x)
-                      // These sit on top of the black fade but don't block taps to center
-                      Positioned.fill(
+                      // --- BOTTOM PROGRESS ---
+                      if (_showControls)
+                        Positioned(
+                          bottom: 0, left: 0, right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(14, 40, 14, 16),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                                colors: [Colors.black.withValues(alpha: 0.9), Colors.transparent],
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    CurrentPosition(),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: ProgressBar(isExpanded: true)),
+                                    const SizedBox(width: 10),
+                                    RemainingDuration(),
+                                    const SizedBox(width: 8),
+                                    const FullScreenButton(),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // --- GESTURE ZONES (Double tap to seek, etc.) ---
+                      // Positioned between Top and Bottom bars to avoid blocking them
+                      Positioned(
+                        top: 60, bottom: 60, left: 0, right: 0,
                         child: Row(
                           children: [
                             Expanded(
-                              flex: 1, // 20% left side
+                              flex: 1,
                               child: GestureDetector(
                                 behavior: HitTestBehavior.translucent,
                                 onDoubleTap: _seekBackward,
@@ -315,9 +358,9 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> with SingleTickerPro
                                 child: Container(color: Colors.transparent),
                               ),
                             ),
-                            const Expanded(flex: 3, child: SizedBox.shrink()), // Center gap
+                            const Expanded(flex: 2, child: SizedBox.shrink()),
                             Expanded(
-                              flex: 1, // 20% right side
+                              flex: 1,
                               child: GestureDetector(
                                 behavior: HitTestBehavior.translucent,
                                 onDoubleTap: _seekForward,

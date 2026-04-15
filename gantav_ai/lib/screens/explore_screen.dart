@@ -76,22 +76,17 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
   Future<void> _generateCourseFromSubCategory(SubCategory sub) async {
     final appState = context.read<AppState>();
 
-    // Show generating dialog with timeout
+    // Show professional generating dialog
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _GeneratingDialog(
-        title: sub.name,
-        onCancel: () {
-          Navigator.of(ctx).pop();
-        },
-      ),
+      builder: (ctx) => _ProfessionalGeneratingDialog(title: sub.name),
     );
 
     final course = await appState.generateCourseFromCategory(sub.promptHint);
 
     if (!mounted) return;
-    Navigator.of(context).pop(); // Close dialog
+    Navigator.of(context, rootNavigator: true).pop(); // Close dialog
 
     if (course != null) {
       Navigator.of(context).push(
@@ -99,6 +94,87 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
       );
     } else {
       ErrorHandler.showError(context, 'Could not generate course. The request may have timed out. Please try again.');
+    }
+  }
+
+  void _showCustomCourseBuilder(BuildContext context) {
+    String customGoal = '';
+    String customTeacher = '';
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 24, right: 24, top: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('What do you want to learn?', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            TextField(
+              onChanged: (v) => customGoal = v,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'e.g., Next.js for Beginners',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              onChanged: (v) => customTeacher = v,
+              decoration: InputDecoration(
+                hintText: 'Preferred Teacher (Optional, e.g., Fireship)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.violet, 
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (customGoal.isNotEmpty) {
+                    final prompt = "$customGoal ${customTeacher.isNotEmpty ? 'taught by $customTeacher' : ''}";
+                    _generateCourseWithProfessionalUI(prompt);
+                  }
+                },
+                child: const Text('Generate with AI'),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _generateCourseWithProfessionalUI(String promptHint) async {
+    final appState = context.read<AppState>();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _ProfessionalGeneratingDialog(title: promptHint),
+    );
+
+    final course = await appState.generateCourseFromCategory(promptHint);
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // Close dialog
+
+    if (course != null) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course)));
+    } else {
+      ErrorHandler.showError(context, 'AI Servers are busy. Please try again in a few moments.');
     }
   }
 
@@ -225,6 +301,48 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: const BorderSide(color: AppColors.violet),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Custom Course Builder Button
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: InkWell(
+                onTap: () => _showCustomCourseBuilder(context),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.violet, AppColors.teal],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                        child: const Icon(Icons.auto_awesome, color: Colors.white),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Create Custom Course', style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                            Text('Tell AI exactly what you want to learn', style: GoogleFonts.dmSans(fontSize: 13, color: Colors.white70)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                    ],
                   ),
                 ),
               ),
@@ -598,73 +716,91 @@ class _ExploreScreenState extends State<ExploreScreen> with SingleTickerProvider
 }
 
 /// Dialog shown while generating course — now with cancel button and timeout
-class _GeneratingDialog extends StatefulWidget {
+class _ProfessionalGeneratingDialog extends StatefulWidget {
   final String title;
-  final VoidCallback onCancel;
-  const _GeneratingDialog({required this.title, required this.onCancel});
+  const _ProfessionalGeneratingDialog({required this.title});
 
   @override
-  State<_GeneratingDialog> createState() => _GeneratingDialogState();
+  State<_ProfessionalGeneratingDialog> createState() => _ProfessionalGeneratingDialogState();
 }
 
-class _GeneratingDialogState extends State<_GeneratingDialog> {
-  bool _showCancel = false;
+class _ProfessionalGeneratingDialogState extends State<_ProfessionalGeneratingDialog> {
+  int _step = 0;
+  final List<String> _steps = [
+    'Analyzing request...',
+    'Fetching top YouTube videos...',
+    'Reading comments & calculating engagement...',
+    'Structuring curriculum...',
+    'Finalizing roadmap...'
+  ];
 
   @override
   void initState() {
     super.initState();
-    // Show cancel button after 10 seconds
-    Future.delayed(const Duration(seconds: 10), () {
-      if (mounted) setState(() => _showCancel = true);
-    });
+    _cycleSteps();
+  }
+
+  void _cycleSteps() async {
+    for (int i = 0; i < _steps.length; i++) {
+        await Future.delayed(const Duration(seconds: 4)); // AI usually takes 15-20s
+        if (!mounted) return;
+        setState(() => _step = i);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Dialog(
-      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 56, height: 56,
-              decoration: BoxDecoration(
-                color: AppColors.violet.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 28),
-            ),
-            const SizedBox(height: 20),
-            Text('Generating Course', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Text('Creating a ${widget.title} learning path with AI...',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4)),
+            const CircularProgressIndicator(color: AppColors.violet),
             const SizedBox(height: 24),
-            const SizedBox(
-              width: 24, height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.violet),
-            ),
-            // Cancel button appears after delay
-            AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              child: _showCancel
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 20),
-                      child: TextButton.icon(
-                        onPressed: widget.onCancel,
-                        icon: const Icon(Icons.arrow_back, size: 16),
-                        label: Text('Go back',
-                          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500)),
-                        style: TextButton.styleFrom(foregroundColor: AppColors.textMuted),
+            Text('Crafting your Course', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text('Topic: ${widget.title}', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            const SizedBox(height: 24),
+            
+            // Professional Progress Tracker
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: List.generate(_steps.length, (index) {
+                bool isPast = index < _step;
+                bool isCurrent = index == _step;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isPast ? Icons.check_circle : (isCurrent ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                        color: isPast ? AppColors.teal : (isCurrent ? AppColors.violet : Colors.grey),
+                        size: 18,
                       ),
-                    )
-                  : const SizedBox.shrink(),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _steps[index],
+                          style: TextStyle(
+                            color: isPast || isCurrent ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black) : Colors.grey,
+                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                            fontSize: 13
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
             ),
+            
+            const SizedBox(height: 24),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel Request', style: TextStyle(color: Colors.red)),
+            )
           ],
         ),
       ),

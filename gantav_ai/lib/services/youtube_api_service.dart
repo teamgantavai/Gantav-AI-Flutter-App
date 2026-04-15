@@ -13,6 +13,7 @@ class YouTubeVideoStats {
   final int likeCount;
   final int commentCount;
   final double engagementRatio;
+  final List<String> topComments; // Added for AI analysis
 
   YouTubeVideoStats({
     required this.id,
@@ -23,6 +24,7 @@ class YouTubeVideoStats {
     required this.likeCount,
     required this.commentCount,
     required this.engagementRatio,
+    this.topComments = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -34,6 +36,7 @@ class YouTubeVideoStats {
         'likeCount': likeCount,
         'commentCount': commentCount,
         'engagementRatio': engagementRatio,
+        'topComments': topComments,
       };
 
   factory YouTubeVideoStats.fromJson(Map<String, dynamic> json) =>
@@ -45,7 +48,10 @@ class YouTubeVideoStats {
         viewCount: json['viewCount'],
         likeCount: json['likeCount'],
         commentCount: json['commentCount'],
-        engagementRatio: json['engagementRatio'],
+        engagementRatio: json['engagementRatio'] is int 
+            ? (json['engagementRatio'] as int).toDouble() 
+            : (json['engagementRatio'] ?? 0.0),
+        topComments: List<String>.from(json['topComments'] ?? []),
       );
 }
 
@@ -53,54 +59,71 @@ class YouTubeApiService {
   static const String _baseUrl = 'https://www.googleapis.com/youtube/v3';
   static const int _cacheDurationDays = 7;
 
-  /// Fetches top videos for a topic, checks stats, and filters high-quality ones.
   static Future<List<YouTubeVideoStats>> fetchHighQualityVideos({
     required String topic,
     String level = '',
-    int maxResults = 30, // Get a wider pool so we can filter down
+    int maxResults = 25,
   }) async {
-    if (!ApiConfig.hasYoutube) {
-      debugPrint('[YouTube] API Key missing!');
-      return [];
-    }
+    if (!ApiConfig.hasYoutube) return [];
 
     final query = '$topic $level tutorial'.trim();
-    final cacheKey = 'yt_search_${query.toLowerCase().replaceAll(" ", "_")}';
+    final cacheKey = 'yt_search_v2_${query.toLowerCase().replaceAll(" ", "_")}';
 
-    // 1. Check local cache first (saves 100 quota units / search)
     final cachedResult = await _getCachedVideos(cacheKey);
-    if (cachedResult != null && cachedResult.isNotEmpty) {
-      debugPrint('[YouTube] Using cached results for: $query');
-      return cachedResult;
-    }
+    if (cachedResult != null && cachedResult.isNotEmpty) return cachedResult;
 
-    debugPrint('[YouTube] Fetching live results for: $query');
-
-    // 2. Perform live search to get Video IDs
+    // 1. Search for IDs
     final videoIds = await _getVideoIdsFromSearch(query, maxResults);
     if (videoIds.isEmpty) return [];
 
-    // 3. Perform live stats lookup
+    // 2. Get Stats
     final videos = await _getVideoStats(videoIds);
 
-    // 4. Filter for high quality
-    // Good: Views > 5000 AND (Likes/Views) * 100 > 1.5%
+    // 3. Filter strictly by ratio (> 1.5%) and minimum views (> 5000)
     final List<YouTubeVideoStats> filtered = videos.where((v) {
       return v.viewCount > 5000 && v.engagementRatio > 1.5;
     }).toList();
 
-    // Sort by most engaged (ratio) combined with view volume
     filtered.sort((a, b) => b.engagementRatio.compareTo(a.engagementRatio));
+    final topCandidates = filtered.take(10).toList(); // Take top 10 to save API limits
 
-    // Limit to top 15 after filtering to pass to AI
-    final finalSelection = filtered.take(15).toList();
-
-    // 5. Cache the filtered results
-    if (finalSelection.isNotEmpty) {
-      await _cacheVideos(cacheKey, finalSelection);
+    // 4. Fetch comments for ONLY the top candidates (reduces quota usage)
+    List<YouTubeVideoStats> finalVideosWithComments = [];
+    for (var video in topCandidates) {
+      final comments = await _getTopComments(video.id);
+      finalVideosWithComments.add(YouTubeVideoStats(
+        id: video.id,
+        title: video.title,
+        channelTitle: video.channelTitle,
+        durationText: video.durationText,
+        viewCount: video.viewCount,
+        likeCount: video.likeCount,
+        commentCount: video.commentCount,
+        engagementRatio: video.engagementRatio,
+        topComments: comments,
+      ));
     }
 
-    return finalSelection;
+    if (finalVideosWithComments.isNotEmpty) {
+      await _cacheVideos(cacheKey, finalVideosWithComments);
+    }
+
+    return finalVideosWithComments;
+  }
+
+  static Future<List<String>> _getTopComments(String videoId) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/commentThreads?part=snippet&videoId=$videoId&maxResults=5&order=relevance&key=${ApiConfig.youtubeApiKey}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final items = data['items'] as List;
+        return items.map((item) => item['snippet']['topLevelComment']['snippet']['textOriginal'] as String).toList();
+      }
+    } catch (e) {
+      debugPrint('[YouTube] Comment fetch error: $e');
+    }
+    return [];
   }
 
   static Future<List<String>> _getVideoIdsFromSearch(String query, int maxResults) async {

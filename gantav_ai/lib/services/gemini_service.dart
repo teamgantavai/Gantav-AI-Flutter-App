@@ -29,8 +29,8 @@ class GeminiService {
   }
 
   static void _setRateLimited(AIProvider provider) {
-    debugPrint('[AI] ! ${provider.name} rate limited. Cooling down for 2 mins.');
-    _rateLimitExpirations[provider] = DateTime.now().add(const Duration(minutes: 2));
+    debugPrint('[AI] ! ${provider.name} rate limited. Cooling down for 1 min.');
+    _rateLimitExpirations[provider] = DateTime.now().add(const Duration(minutes: 1));
   }
 
 
@@ -111,35 +111,39 @@ Give a clear answer under 150 words. Use examples when helpful.''';
   }) async {
     if (!ApiConfig.isConfigured) return null;
 
-    final String verifiedVideosContext;
+    String verifiedVideosContext = '';
     if (preFilteredVideos != null && preFilteredVideos.isNotEmpty) {
-      verifiedVideosContext = 'IMPORTANT: You MUST use ONLY the following verified YouTube videos for this course:\n' +
-          preFilteredVideos.map((v) => '- Title: "${v.title}", Video ID: ${v.id}, Duration: ${v.durationText}, Channel: ${v.channelTitle}').join('\n');
-    } else {
-      verifiedVideosContext = 'Use REAL YouTube video IDs from channels like freeCodeCamp, 3Blue1Brown, Fireship, etc.';
+      // Pass stats AND comments to the AI so it can judge quality without making 10 separate calls
+      verifiedVideosContext = 'IMPORTANT: Construct the course using ONLY these highly-rated videos. Read their top comments to determine if they are beginner or advanced:\n' +
+          preFilteredVideos.map((v) => '''
+- ID: ${v.id}
+  Title: "${v.title}"
+  Duration: ${v.durationText}
+  Engagement: ${v.engagementRatio}%
+  Comments: ${v.topComments.take(3).join(" | ")}
+''').join('\n');
     }
 
-    final prompt = '''You are a highly skilled curriculum designer. Goal: "$dream"
+    final prompt = '''You are an expert curriculum designer. Goal: "$dream"
+Create a structured learning course. Return ONLY valid JSON. Do not include markdown formatting like ```json.
 
-Create a structured YouTube-based learning course. Return ONLY valid JSON:
+Rules:
+$verifiedVideosContext
+- First module is_locked: false. Rest: true.
+- Max 3 modules, 3-4 lessons each to keep it concise.
+
 {
-  "id": "gen_12345",
-  "title": "Complete [Topic] Course",
-  "description": "Two sentence description of what students will learn.",
-  "category": "Machine Learning",
+  "id": "gen_1",
+  "title": "Complete Course",
+  "description": "Short description.",
+  "category": "Technology",
   "thumbnail_url": "https://img.youtube.com/vi/[FirstVideoId]/maxresdefault.jpg",
-  "rating": 4.7,
-  "learner_count": 1234,
-  "total_lessons": 20,
-  "completed_lessons": 0,
-  "estimated_time": "8 weeks",
-  "skills": ["Skill1", "Skill2", "Skill3"],
+  "total_lessons": 10,
   "modules": [
     {
       "id": "mod_1",
-      "title": "Module Title",
-      "lesson_count": 5,
-      "completed_count": 0,
+      "title": "Basics",
+      "lesson_count": 3,
       "is_locked": false,
       "lessons": [
         {
@@ -147,36 +151,26 @@ Create a structured YouTube-based learning course. Return ONLY valid JSON:
           "title": "Lesson Title",
           "youtube_video_id": "real_video_id",
           "duration": "15:30",
-          "is_completed": false,
-          "chapters": [
-            {"title": "Introduction", "timestamp": "0:00"},
-            {"title": "Core Concepts", "timestamp": "5:00"}
-          ]
+          "chapters": [{"title": "Intro", "timestamp": "0:00"}]
         }
       ]
     }
   ]
-}
-
-Rules:
-$verifiedVideosContext
-- First module: is_locked: false. Rest: is_locked: true
-- 3-4 modules, 4-6 lessons each (or evenly distribute standard content)
-- Total lessons should match sum of module lesson counts''';
+}''';
 
     try {
       final response = await _smartCall(
         prompt,
         task: AITask.courseGeneration,
-        maxTokens: 4096,
-        temperature: 0.3,
+        maxTokens: 3000, // Reduced to prevent timeout
+        temperature: 0.2, // Lower temperature means stricter JSON formatting
       );
       if (response == null) return null;
+      
       final jsonStr = extractJson(response);
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-      final course = Course.fromJson(data);
-      if (course.modules.isEmpty) return null;
-      return course;
+      
+      return Course.fromJson(data);
     } catch (e) {
       debugPrint('[AI] Course gen error: $e');
       return null;
@@ -482,7 +476,11 @@ Use REAL video IDs. Mix difficulty levels based on the page depth. Prioritize ch
         return choices[0]['message']['content'] as String?;
       }
     } else {
-      debugPrint('[OpenRouter] API status ${response.statusCode}');
+      if (response.statusCode == 401) {
+        debugPrint('[AI] ✗ OpenRouter UNAUTHORIZED (401). Please check if your OPENROUTER_API_KEY in .env is valid.');
+      } else {
+        debugPrint('[OpenRouter] API status ${response.statusCode}');
+      }
       if (response.statusCode == 429) {
         throw Exception('Rate limited');
       }
@@ -517,26 +515,29 @@ Use REAL video IDs. Mix difficulty levels based on the page depth. Prioritize ch
   // ═══════════════════════════════════════════════════════════════════════════
 
   static String extractJson(String text) {
-    var cleaned = text.trim();
-    // Remove markdown code fences
-    cleaned = cleaned.replaceAll(RegExp(r'```json\s*'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'```\s*'), '');
-
-    // Find first [ or {
-    final arrayStart = cleaned.indexOf('[');
-    final objStart = cleaned.indexOf('{');
-
-    if (arrayStart == -1 && objStart == -1) return cleaned;
-
-    if (arrayStart != -1 && (objStart == -1 || arrayStart < objStart)) {
-      final end = cleaned.lastIndexOf(']');
-      if (end != -1) return cleaned.substring(arrayStart, end + 1);
-    } else {
-      final end = cleaned.lastIndexOf('}');
-      if (end != -1) return cleaned.substring(objStart, end + 1);
+    try {
+      var cleaned = text.trim();
+      if (cleaned.contains('```json')) {
+        cleaned = cleaned.split('```json')[1].split('```')[0].trim();
+      } else if (cleaned.contains('```')) {
+        cleaned = cleaned.split('```')[1].split('```')[0].trim();
+      }
+      
+      final arrayStart = cleaned.indexOf('[');
+      final objStart = cleaned.indexOf('{');
+      
+      if (arrayStart == -1 && objStart == -1) return cleaned;
+      
+      if (objStart != -1 && (arrayStart == -1 || objStart < arrayStart)) {
+        final end = cleaned.lastIndexOf('}');
+        return cleaned.substring(objStart, end + 1);
+      } else {
+        final end = cleaned.lastIndexOf(']');
+        return cleaned.substring(arrayStart, end + 1);
+      }
+    } catch (e) {
+      return text;
     }
-
-    return cleaned;
   }
 
   static List<Map<String, String>> _mockRecommendations() => [
