@@ -62,8 +62,9 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   List<Course> _filteredCourses(List<Course> courses) {
     return courses.where((course) {
+      final title = course.title.replaceAll('\$dream', course.category);
       final matchesSearch = _searchQuery.isEmpty ||
-          course.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           course.category.toLowerCase().contains(_searchQuery.toLowerCase());
       final matchesCategory =
           _selectedCategory == 'All' || course.category == _selectedCategory;
@@ -73,31 +74,16 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Future<void> _generateCourseFromSubCategory(SubCategory sub) async {
     final appState = context.read<AppState>();
-
-    // Start background generation immediately
     appState.generateCourseInBackgroundFromCategory(sub.promptHint);
 
-    // Show brief toast
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
             const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Generating "${sub.name}" course in background...',
-                style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13),
-              ),
-            ),
+            Expanded(child: Text('Generating "${sub.name}" course...', style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13))),
           ],
         ),
         behavior: SnackBarBehavior.floating,
@@ -107,116 +93,41 @@ class _ExploreScreenState extends State<ExploreScreen>
       ),
     );
 
-    // Go back to category list
-    setState(() {
-      _showSubCategories = false;
-      _selectedCatalogCategory = null;
-    });
+    setState(() { _showSubCategories = false; _selectedCatalogCategory = null; });
   }
 
   void _showCustomCourseBuilder(BuildContext context) {
-    String customGoal = '';
-    String customTeacher = '';
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 24,
-            right: 24,
-            top: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('What do you want to learn?',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            TextField(
-              onChanged: (v) => customGoal = v,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'e.g., Next.js for Beginners',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _CustomCourseBuilderSheet(
+        isDark: isDark,
+        onGenerate: (courseName, language, channel) {
+          Navigator.pop(ctx);
+          final prompt = [
+            courseName,
+            if (language.isNotEmpty) 'in $language language',
+            if (channel.isNotEmpty) 'taught by $channel or similar channel',
+          ].join(' ');
+          context.read<AppState>().generateCourseInBackgroundFromCategory(prompt);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Creating "$courseName" course...', style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13))),
+                ],
               ),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              backgroundColor: AppColors.violet,
+              duration: const Duration(seconds: 4),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              onChanged: (v) => customTeacher = v,
-              decoration: InputDecoration(
-                hintText: 'Preferred Teacher (Optional)',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.violet,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  if (customGoal.isNotEmpty) {
-                    final prompt =
-                        '$customGoal ${customTeacher.isNotEmpty ? 'taught by $customTeacher' : ''}';
-                    _generateCourseWithProfessionalUI(prompt);
-                  }
-                },
-                child: const Text('Generate with AI'),
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _generateCourseWithProfessionalUI(String promptHint) async {
-    final appState = context.read<AppState>();
-
-    // Start background generation
-    appState.generateCourseInBackgroundFromCategory(promptHint);
-
-    // Show brief toast
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Generating course in background...',
-                style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        backgroundColor: AppColors.violet,
-        duration: const Duration(seconds: 3),
+          );
+        },
       ),
     );
   }
@@ -230,62 +141,42 @@ class _ExploreScreenState extends State<ExploreScreen>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Explore',
-                      style: Theme.of(context).textTheme.headlineMedium),
+                  Text('Explore', style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 4),
                   Text('Find your next learning path',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: AppColors.textMuted)),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
                 ],
               ),
             ),
-
             const SizedBox(height: 12),
-
-            // Tab bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
                 height: 44,
                 decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.darkSurface
-                      : AppColors.lightSurface2,
+                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface2,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: TabBar(
                   controller: _tabController,
-                  indicator: BoxDecoration(
-                    color: AppColors.violet,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  indicator: BoxDecoration(color: AppColors.violet, borderRadius: BorderRadius.circular(10)),
                   indicatorSize: TabBarIndicatorSize.tab,
                   dividerColor: Colors.transparent,
                   labelColor: Colors.white,
                   unselectedLabelColor: AppColors.textMuted,
-                  labelStyle: GoogleFonts.dmSans(
-                      fontSize: 13, fontWeight: FontWeight.w600),
-                  unselectedLabelStyle: GoogleFonts.dmSans(
-                      fontSize: 13, fontWeight: FontWeight.w500),
+                  labelStyle: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600),
+                  unselectedLabelStyle: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500),
                   indicatorPadding: const EdgeInsets.all(3),
-                  tabs: const [
-                    Tab(text: 'Courses'),
-                    Tab(text: 'Categories'),
-                  ],
+                  tabs: const [Tab(text: 'Courses'), Tab(text: 'Categories')],
                 ),
               ),
             ),
-
             const SizedBox(height: 8),
-
             Expanded(
               child: TabBarView(
                 controller: _tabController,
@@ -302,8 +193,7 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Widget _buildCoursesTab(AppState appState, bool isDark) {
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
     final screenWidth = MediaQuery.of(context).size.width;
     final useGrid = isLandscape || screenWidth > 700;
     final filtered = _filteredCourses(appState.courses);
@@ -313,108 +203,85 @@ class _ExploreScreenState extends State<ExploreScreen>
       color: AppColors.violet,
       child: CustomScrollView(
         controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         slivers: [
-          // Search bar
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: TextField(
                 controller: _searchController,
-                onChanged: (value) =>
-                    setState(() => _searchQuery = value),
+                onChanged: (value) => setState(() => _searchQuery = value),
                 style: Theme.of(context).textTheme.bodyMedium,
                 decoration: InputDecoration(
                   hintText: 'Search courses, topics...',
-                  prefixIcon: const Icon(Icons.search,
-                      color: AppColors.textMuted, size: 20),
+                  prefixIcon: const Icon(Icons.search, color: AppColors.textMuted, size: 20),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
-                          icon: const Icon(Icons.clear,
-                              color: AppColors.textMuted, size: 18),
-                        )
+                          onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); },
+                          icon: const Icon(Icons.clear, color: AppColors.textMuted, size: 18))
                       : null,
                   filled: true,
-                  fillColor: isDark
-                      ? AppColors.darkSurface
-                      : AppColors.lightSurface,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
+                  fillColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.06)
-                            : Colors.black.withValues(alpha: 0.06)),
+                    borderSide: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.06)
-                            : Colors.black.withValues(alpha: 0.06)),
+                    borderSide: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide:
-                        const BorderSide(color: AppColors.violet),
+                    borderSide: const BorderSide(color: AppColors.violet),
                   ),
                 ),
               ),
             ),
           ),
 
-          // Custom Course Builder Button
+          // ─── Professional Custom Course Builder Banner ──────────
           SliverToBoxAdapter(
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: InkWell(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: GestureDetector(
                 onTap: () => _showCustomCourseBuilder(context),
-                borderRadius: BorderRadius.circular(16),
                 child: Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [AppColors.violet, AppColors.teal],
+                      colors: [AppColors.violet, Color(0xFF9C5BDB)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: AppColors.violet.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6)),
+                    ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            shape: BoxShape.circle),
-                        child: const Icon(Icons.auto_awesome,
-                            color: Colors.white),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+                        child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Create Custom Course',
-                                style: GoogleFonts.dmSans(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white)),
-                            Text('Tell AI exactly what you want to learn',
-                                style: GoogleFonts.dmSans(
-                                    fontSize: 13, color: Colors.white70)),
+                            Text('Create Custom Course', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                            const SizedBox(height: 2),
+                            Text('Tell AI exactly what you want to learn', style: GoogleFonts.dmSans(fontSize: 12, color: Colors.white70)),
                           ],
                         ),
                       ),
-                      const Icon(Icons.arrow_forward_ios,
-                          color: Colors.white, size: 16),
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 14),
+                      ),
                     ],
                   ),
                 ),
@@ -437,35 +304,16 @@ class _ExploreScreenState extends State<ExploreScreen>
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: GestureDetector(
-                      onTap: () =>
-                          setState(() => _selectedCategory = cat),
+                      onTap: () => setState(() => _selectedCategory = cat),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.violet
-                              : isDark
-                                  ? AppColors.darkSurface
-                                  : AppColors.lightSurface,
+                          color: isSelected ? AppColors.violet : isDark ? AppColors.darkSurface : AppColors.lightSurface,
                           borderRadius: BorderRadius.circular(100),
-                          border: isSelected
-                              ? null
-                              : Border.all(
-                                  color: isDark
-                                      ? Colors.white
-                                          .withValues(alpha: 0.08)
-                                      : Colors.black
-                                          .withValues(alpha: 0.08)),
+                          border: isSelected ? null : Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
                         ),
-                        child: Text(cat,
-                            style: GoogleFonts.dmSans(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: isSelected
-                                    ? Colors.white
-                                    : AppColors.textMuted)),
+                        child: Text(cat, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: isSelected ? Colors.white : AppColors.textMuted)),
                       ),
                     ),
                   );
@@ -474,54 +322,41 @@ class _ExploreScreenState extends State<ExploreScreen>
             ),
           ),
 
-          // Results count
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
               child: Row(
                 children: [
-                  Text(
-                      '${filtered.length} course${filtered.length != 1 ? 's' : ''} found',
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text('${filtered.length} course${filtered.length != 1 ? 's' : ''} found',
+                    style: Theme.of(context).textTheme.bodySmall),
                   const Spacer(),
                   if (filtered.isNotEmpty)
-                    Text('Scroll for more ↓',
-                        style: GoogleFonts.dmSans(
-                            fontSize: 11,
-                            color: AppColors.violet,
-                            fontWeight: FontWeight.w500)),
+                    Text('Scroll for more ↓', style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.violet, fontWeight: FontWeight.w500)),
                 ],
               ),
             ),
           ),
 
-          // Course list/grid
           if (filtered.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(40),
                 child: Column(
                   children: [
-                    const Icon(Icons.search_off,
-                        color: AppColors.textMuted, size: 48),
+                    const Icon(Icons.search_off, color: AppColors.textMuted, size: 48),
                     const SizedBox(height: 14),
-                    Text('No courses found',
-                        style: Theme.of(context).textTheme.titleMedium),
+                    Text('No courses found', style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 4),
-                    Text('Try a different search or category',
-                        style: Theme.of(context).textTheme.bodySmall),
+                    Text('Try a different search or category', style: Theme.of(context).textTheme.bodySmall),
                     const SizedBox(height: 20),
                     ElevatedButton.icon(
                       onPressed: appState.generateNextCourseBatch,
                       icon: const Icon(Icons.auto_awesome, size: 16),
-                      label: Text('Generate AI courses',
-                          style: GoogleFonts.dmSans(
-                              fontWeight: FontWeight.w600)),
+                      label: Text('Generate AI courses', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.violet,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ],
@@ -539,16 +374,9 @@ class _ExploreScreenState extends State<ExploreScreen>
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Column(
                   children: [
-                    const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2.5, color: AppColors.violet),
-                    ),
+                    const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.violet)),
                     const SizedBox(height: 10),
-                    Text('Generating more courses with AI...',
-                        style: GoogleFonts.dmSans(
-                            fontSize: 12, color: AppColors.textMuted)),
+                    Text('Generating more courses with AI...', style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted)),
                   ],
                 ),
               ),
@@ -561,32 +389,22 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Widget _buildCategoriesTab(bool isDark) {
-    if (_showSubCategories && _selectedCatalogCategory != null) {
-      return _buildSubCategoryList(isDark);
-    }
+    if (_showSubCategories && _selectedCatalogCategory != null) return _buildSubCategoryList(isDark);
     return _buildCategoryGrid(isDark);
   }
 
-  /// Bug #4 fix: Category tiles are now smaller (childAspectRatio: 1.6 instead of 1.25)
-  /// and use a compact horizontal layout
   Widget _buildCategoryGrid(bool isDark) {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
       physics: const BouncingScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.9, // Bug #4 fix: was 1.25, now tiles are much smaller
+        crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.9,
       ),
       itemCount: CatalogData.categories.length,
       itemBuilder: (context, index) {
         final cat = CatalogData.categories[index];
         return GestureDetector(
-          onTap: () => setState(() {
-            _selectedCatalogCategory = cat;
-            _showSubCategories = true;
-          }),
+          onTap: () => setState(() { _selectedCatalogCategory = cat; _showSubCategories = true; }),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
@@ -597,12 +415,8 @@ class _ExploreScreenState extends State<ExploreScreen>
             child: Row(
               children: [
                 Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: cat.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(color: cat.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
                   child: Icon(cat.icon, color: cat.color, size: 18),
                 ),
                 const SizedBox(width: 10),
@@ -611,26 +425,9 @@ class _ExploreScreenState extends State<ExploreScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        cat.name,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? AppColors.textLight
-                              : AppColors.textDark,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      Text(cat.name, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? AppColors.textLight : AppColors.textDark), maxLines: 2, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 2),
-                      Text(
-                        '${cat.subCategories.length} paths',
-                        style: GoogleFonts.dmSans(
-                            fontSize: 10,
-                            color: cat.color,
-                            fontWeight: FontWeight.w600),
-                      ),
+                      Text('${cat.subCategories.length} paths', style: GoogleFonts.dmSans(fontSize: 10, color: cat.color, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -644,7 +441,6 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Widget _buildSubCategoryList(bool isDark) {
     final cat = _selectedCatalogCategory!;
-
     return Column(
       children: [
         Padding(
@@ -652,43 +448,25 @@ class _ExploreScreenState extends State<ExploreScreen>
           child: Row(
             children: [
               IconButton(
-                onPressed: () => setState(() {
-                  _showSubCategories = false;
-                  _selectedCatalogCategory = null;
-                }),
+                onPressed: () => setState(() { _showSubCategories = false; _selectedCatalogCategory = null; }),
                 icon: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : Colors.black.withValues(alpha: 0.06),
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.arrow_back,
-                      size: 18,
-                      color:
-                          isDark ? AppColors.textLight : AppColors.textDark),
+                  child: Icon(Icons.arrow_back, size: 18, color: isDark ? AppColors.textLight : AppColors.textDark),
                 ),
               ),
               const SizedBox(width: 8),
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: cat.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(cat.icon, color: cat.color, size: 18),
-              ),
+              Container(width: 36, height: 36, decoration: BoxDecoration(color: cat.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)), child: Icon(cat.icon, color: cat.color, size: 18)),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(cat.name,
-                        style: Theme.of(context).textTheme.titleLarge),
-                    Text('${cat.subCategories.length} paths available',
-                        style: Theme.of(context).textTheme.bodySmall),
+                    Text(cat.name, style: Theme.of(context).textTheme.titleLarge),
+                    Text('${cat.subCategories.length} paths available', style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
               ),
@@ -708,64 +486,33 @@ class _ExploreScreenState extends State<ExploreScreen>
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.darkSurface
-                        : AppColors.lightSurface,
+                    color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: isDark
-                            ? AppColors.darkBorder
-                            : AppColors.lightBorder),
+                    border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
                   ),
                   child: Row(
                     children: [
                       Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: cat.color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Center(
-                          child: Text('${index + 1}',
-                              style: GoogleFonts.dmMono(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: cat.color)),
-                        ),
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(color: cat.color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                        child: Center(child: Text('${index + 1}', style: GoogleFonts.dmMono(fontSize: 16, fontWeight: FontWeight.w700, color: cat.color))),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(sub.name,
-                                style: GoogleFonts.dmSans(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? AppColors.textLight
-                                        : AppColors.textDark)),
+                            Text(sub.name, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? AppColors.textLight : AppColors.textDark)),
                             const SizedBox(height: 4),
-                            Text(sub.description,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(height: 1.4),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis),
+                            Text(sub.description, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
                           ],
                         ),
                       ),
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: cat.color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child:
-                            Icon(Icons.auto_awesome, size: 16, color: cat.color),
+                        decoration: BoxDecoration(color: cat.color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                        child: Icon(Icons.auto_awesome, size: 16, color: cat.color),
                       ),
                     ],
                   ),
@@ -787,10 +534,7 @@ class _ExploreScreenState extends State<ExploreScreen>
             final course = filtered[index];
             return _ExploreCourseCard(
               course: course,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => CourseDetailScreen(course: course)),
-              ),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course))),
             );
           },
           childCount: filtered.length,
@@ -801,7 +545,6 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Widget _buildGrid(List<Course> filtered) {
     final rowCount = (filtered.length / 2).ceil();
-
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList(
@@ -812,28 +555,10 @@ class _ExploreScreenState extends State<ExploreScreen>
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _ExploreCourseCard(
-                    course: filtered[i1],
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              CourseDetailScreen(course: filtered[i1])),
-                    ),
-                  ),
-                ),
+                Expanded(child: _ExploreCourseCard(course: filtered[i1], onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CourseDetailScreen(course: filtered[i1]))))),
                 const SizedBox(width: 14),
                 if (i2 < filtered.length)
-                  Expanded(
-                    child: _ExploreCourseCard(
-                      course: filtered[i2],
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                CourseDetailScreen(course: filtered[i2])),
-                      ),
-                    ),
-                  )
+                  Expanded(child: _ExploreCourseCard(course: filtered[i2], onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CourseDetailScreen(course: filtered[i2])))))
                 else
                   const Expanded(child: SizedBox()),
               ],
@@ -846,9 +571,294 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 }
 
-// Course generation now uses background processing with toast notifications
+// ─── Professional Custom Course Builder Sheet ─────────────────────────────────
 
-// ── Explore Course Card ────────────────────────────────────────────────────────
+class _CustomCourseBuilderSheet extends StatefulWidget {
+  final bool isDark;
+  final void Function(String courseName, String language, String channel) onGenerate;
+
+  const _CustomCourseBuilderSheet({required this.isDark, required this.onGenerate});
+
+  @override
+  State<_CustomCourseBuilderSheet> createState() => _CustomCourseBuilderSheetState();
+}
+
+class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
+  final _courseNameCtrl = TextEditingController();
+  final _channelCtrl = TextEditingController();
+  String _selectedLanguage = 'English';
+  int _currentStep = 0;
+
+  final List<String> _courseNameSuggestions = [
+    'Complete Python for Beginners',
+    'Full-Stack Web Development',
+    'Machine Learning Fundamentals',
+    'Flutter Mobile App Development',
+    'Data Science with Python',
+    'React & Node.js Bootcamp',
+    'DevOps & Cloud Engineering',
+    'UI/UX Design Masterclass',
+    'Cybersecurity Essentials',
+    'Game Development with Unity',
+  ];
+
+  final List<Map<String, String>> _languageOptions = [
+    {'label': '🇬🇧 English', 'value': 'English'},
+    {'label': '🇮🇳 Hindi', 'value': 'Hindi'},
+    {'label': '🇪🇸 Spanish', 'value': 'Spanish'},
+    {'label': '🇫🇷 French', 'value': 'French'},
+    {'label': '🇩🇪 German', 'value': 'German'},
+  ];
+
+  final List<String> _channelSuggestions = [
+    'freeCodeCamp',
+    'Traversy Media',
+    'Fireship',
+    '3Blue1Brown',
+    'The Net Ninja',
+    'CodeWithHarry',
+    'Apna College',
+    'Programming with Mosh',
+    'TechWithTim',
+    'CS50',
+  ];
+
+  @override
+  void dispose() {
+    _courseNameCtrl.dispose();
+    _channelCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _canGenerate => _courseNameCtrl.text.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final viewInsets = MediaQuery.of(context).viewInsets;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(bottom: viewInsets.bottom),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 4),
+              decoration: BoxDecoration(
+                color: AppColors.textMuted.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(100),
+              ),
+            ),
+
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Create Custom Course', style: GoogleFonts.dmSans(fontSize: 17, fontWeight: FontWeight.w700, color: isDark ? AppColors.textLight : AppColors.textDark)),
+                      Text('AI will curate the best YouTube videos', style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            Divider(height: 1, color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+
+            // Content
+            SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ─── Step 1: Course Name ──────────────────────────
+                  _buildSectionLabel('What do you want to learn? *', Icons.school_outlined, AppColors.violet),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _courseNameCtrl,
+                    autofocus: true,
+                    style: GoogleFonts.dmSans(fontSize: 15, color: isDark ? AppColors.textLight : AppColors.textDark),
+                    textCapitalization: TextCapitalization.sentences,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'e.g., Complete Python for Beginners',
+                      hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.7)),
+                      filled: true,
+                      fillColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: AppColors.violet, width: 2),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      suffixIcon: _courseNameCtrl.text.isNotEmpty
+                          ? IconButton(onPressed: () => setState(() => _courseNameCtrl.clear()), icon: const Icon(Icons.clear, size: 18, color: AppColors.textMuted))
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Quick suggestions
+                  Text('Quick picks:', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.3)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6, runSpacing: 6,
+                    children: _courseNameSuggestions.map((s) {
+                      return GestureDetector(
+                        onTap: () => setState(() => _courseNameCtrl.text = s),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _courseNameCtrl.text == s ? AppColors.violet.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                            borderRadius: BorderRadius.circular(100),
+                            border: Border.all(color: _courseNameCtrl.text == s ? AppColors.violet.withValues(alpha: 0.4) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+                          ),
+                          child: Text(s, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: _courseNameCtrl.text == s ? AppColors.violet : AppColors.textMuted)),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ─── Step 2: Language ─────────────────────────────
+                  _buildSectionLabel('Content Language', Icons.translate_rounded, AppColors.teal),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 40,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _languageOptions.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final opt = _languageOptions[index];
+                        final isSelected = _selectedLanguage == opt['value'];
+                        return GestureDetector(
+                          onTap: () => setState(() => _selectedLanguage = opt['value']!),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.teal.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(color: isSelected ? AppColors.teal.withValues(alpha: 0.4) : Colors.transparent),
+                            ),
+                            child: Text(opt['label']!, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? AppColors.teal : AppColors.textMuted)),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ─── Step 3: Channel (Optional) ───────────────────
+                  _buildSectionLabel('Preferred Channel (Optional)', Icons.play_circle_outline, AppColors.gold),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _channelCtrl,
+                    style: GoogleFonts.dmSans(fontSize: 14, color: isDark ? AppColors.textLight : AppColors.textDark),
+                    decoration: InputDecoration(
+                      hintText: 'e.g., freeCodeCamp, Traversy Media...',
+                      hintStyle: TextStyle(color: AppColors.textMuted.withValues(alpha: 0.7), fontSize: 13),
+                      filled: true,
+                      fillColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: AppColors.gold, width: 2),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6, runSpacing: 6,
+                    children: _channelSuggestions.map((c) {
+                      return GestureDetector(
+                        onTap: () => setState(() => _channelCtrl.text = c),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: _channelCtrl.text == c ? AppColors.gold.withValues(alpha: 0.12) : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                            borderRadius: BorderRadius.circular(100),
+                            border: Border.all(color: _channelCtrl.text == c ? AppColors.gold.withValues(alpha: 0.4) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+                          ),
+                          child: Text(c, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: _channelCtrl.text == c ? AppColors.gold : AppColors.textMuted)),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+
+            // ─── Generate Button ──────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _canGenerate
+                      ? () => widget.onGenerate(
+                          _courseNameCtrl.text.trim(),
+                          _selectedLanguage,
+                          _channelCtrl.text.trim(),
+                        )
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.violet,
+                    disabledBackgroundColor: AppColors.violet.withValues(alpha: 0.4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.auto_awesome, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Generate Course with AI', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionLabel(String label, IconData icon, Color color) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Text(label, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: widget.isDark ? AppColors.textLightSub : AppColors.textDarkSub)),
+      ],
+    );
+  }
+}
+
+// ─── Explore Course Card ────────────────────────────────────────────────────
 
 class _ExploreCourseCard extends StatelessWidget {
   final Course course;
@@ -859,16 +869,8 @@ class _ExploreCourseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // Bug #5 fix: Replace placeholder $dream in course title
-    final displayTitle =
-        (course.title).replaceAll('\$dream', course.category);
-
-    // Bug #8 fix: All generated courses are personalized — don't show learner count
-    // Only show learner count for mock/catalog courses that have a non-zero count
-    final isPersonalized = course.learnerCount == 0 ||
-        course.learnerCount == 154; // 154 is fallback marker from api_service
-    final showLearnerCount = !isPersonalized && course.learnerCount > 0;
+    // Fix $dream placeholder
+    final displayTitle = course.title.replaceAll('\$dream', course.category);
 
     return GestureDetector(
       onTap: onTap,
@@ -877,19 +879,13 @@ class _ExploreCourseCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
+          border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail
             ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Stack(
@@ -900,34 +896,20 @@ class _ExploreCourseCard extends StatelessWidget {
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
                         color: AppColors.darkSurface2,
-                        child: const Center(
-                            child: Icon(Icons.play_circle_outline,
-                                color: AppColors.textMuted, size: 40)),
+                        child: const Center(child: Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 40)),
                       ),
                     ),
                     Positioned(
-                      top: 10,
-                      right: 10,
+                      top: 10, right: 10,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(8)),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.star_rounded,
-                                color: AppColors.gold, size: 14),
+                            const Icon(Icons.star_rounded, color: AppColors.gold, size: 14),
                             const SizedBox(width: 3),
-                            Text(
-                              course.rating.toStringAsFixed(1),
-                              style: GoogleFonts.dmMono(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white),
-                            ),
+                            Text(course.rating.toStringAsFixed(1), style: GoogleFonts.dmMono(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
                           ],
                         ),
                       ),
@@ -941,75 +923,27 @@ class _ExploreCourseCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color:
-                                AppColors.violet.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(100),
-                          ),
-                          child: Text(
-                            course.category,
-                            style: GoogleFonts.dmSans(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.violet),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      // Bug #8 fix: only show learner count for non-personalized courses
-                      if (showLearnerCount) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.people_outline,
-                            color: AppColors.textMuted, size: 14),
-                        const SizedBox(width: 4),
-                        Text(_formatCount(course.learnerCount),
-                            style: Theme.of(context).textTheme.bodySmall),
-                      ],
-                    ],
+                  // Category pill — NO learner count
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(100)),
+                    child: Text(course.category, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
                   const SizedBox(height: 10),
-                  // Bug #5 fix: show corrected title
-                  Text(displayTitle,
-                      style: Theme.of(context).textTheme.titleMedium,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
+                  // Fixed title — no $dream
+                  Text(displayTitle, style: Theme.of(context).textTheme.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 6),
-                  Text(
-                    course.description,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(height: 1.4),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(course.description, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4), maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      const Icon(Icons.play_lesson_outlined,
-                          color: AppColors.textMuted, size: 14),
+                      const Icon(Icons.play_lesson_outlined, color: AppColors.textMuted, size: 14),
                       const SizedBox(width: 4),
-                      Flexible(
-                          child: Text('${course.totalLessons} lessons',
-                              style:
-                                  Theme.of(context).textTheme.bodySmall,
-                              overflow: TextOverflow.ellipsis)),
+                      Flexible(child: Text('${course.totalLessons} lessons', style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
                       const SizedBox(width: 14),
-                      const Icon(Icons.schedule_outlined,
-                          color: AppColors.textMuted, size: 14),
+                      const Icon(Icons.schedule_outlined, color: AppColors.textMuted, size: 14),
                       const SizedBox(width: 4),
-                      Flexible(
-                          child: Text(course.estimatedTime,
-                              style:
-                                  Theme.of(context).textTheme.bodySmall,
-                              overflow: TextOverflow.ellipsis)),
+                      Flexible(child: Text(course.estimatedTime, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
                     ],
                   ),
                   if (course.isInProgress) ...[
@@ -1023,10 +957,5 @@ class _ExploreCourseCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _formatCount(int count) {
-    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}k';
-    return count.toString();
   }
 }

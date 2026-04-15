@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
 import '../services/gemini_service.dart';
@@ -26,10 +25,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loadingRecs = true;
   bool _loadingMoreRecs = false;
   int _recPage = 0;
-
-  // Bug #6 fix: Pulse timer removed — we no longer auto-show other users'
-  // Gantav Score activity cards on the home screen as they are "unwanted"
-  // per the bug report. The social feed is purely optional (no timer).
+  // Track seen video IDs to prevent duplicates
+  final Set<String> _seenVideoIds = {};
 
   @override
   void initState() {
@@ -47,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadRecommendations({bool reset = false}) async {
     if (reset) {
-      if (mounted) setState(() { _loadingRecs = true; _recPage = 0; });
+      if (mounted) setState(() { _loadingRecs = true; _recPage = 0; _seenVideoIds.clear(); });
     }
 
     final appState = context.read<AppState>();
@@ -58,11 +55,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (mounted) {
+      // Filter out duplicates by video_id
+      final filtered = <Map<String, String>>[];
+      for (final rec in recs) {
+        final videoId = rec['video_id'] ?? '';
+        if (videoId.isNotEmpty && !_seenVideoIds.contains(videoId)) {
+          _seenVideoIds.add(videoId);
+          filtered.add(rec);
+        }
+      }
+
       setState(() {
         if (reset) {
-          _recommendations = recs;
+          _recommendations = filtered;
         } else {
-          _recommendations.addAll(recs);
+          _recommendations.addAll(filtered);
         }
         _loadingRecs = false;
         _loadingMoreRecs = false;
@@ -89,9 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Consumer<AppState>(
       builder: (context, appState, _) {
-        if (appState.isLoading) {
-          return const HomeShimmer();
-        }
+        if (appState.isLoading) return const HomeShimmer();
 
         final user = appState.user;
         if (user == null) return const SizedBox();
@@ -104,9 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
           color: AppColors.violet,
           child: CustomScrollView(
             controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
             slivers: [
               // ─── Greeting ──────────────────────────────────────────
               SliverToBoxAdapter(
@@ -115,24 +118,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${appState.greeting}, ${user.name.split(' ').first}',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
+                      Text('${appState.greeting}, ${user.name.split(' ').first}',
+                        style: Theme.of(context).textTheme.headlineMedium),
                       const SizedBox(height: 4),
-                      Text(
-                        'Your destination is waiting. Keep going.',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(color: AppColors.textMuted),
-                      ),
+                      Text('Your destination is waiting. Keep going.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
                     ],
                   ),
                 ),
               ),
 
-              // ─── Roadmap Progress Card ─────────────────────────────
+              // ─── Roadmap Card ───────────────────────────────────────
               if (appState.activeRoadmap != null)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -141,46 +137,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       roadmap: appState.activeRoadmap!,
                       todayDay: appState.todayRoadmapDay,
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => RoadmapScreen(
-                              roadmap: appState.activeRoadmap!),
-                        ),
+                        MaterialPageRoute(builder: (_) => RoadmapScreen(roadmap: appState.activeRoadmap!)),
                       ),
                     ),
                   ),
                 ),
 
-              // ─── Bug #7 fix: Score + Streak Row ───────────────────
-              // Pulled live from appState.user — always reflects Firestore data
+              // ─── Score + Streak Row ─────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                   child: Row(
                     children: [
-                      StatChip(
-                        icon: Icons.stars_rounded,
-                        label: 'Gantav Score',
-                        value: '${user.gantavScore}',
-                        color: AppColors.gold,
-                      ),
+                      StatChip(icon: Icons.stars_rounded, label: 'Gantav Score', value: '${user.gantavScore}', color: AppColors.gold),
                       const SizedBox(width: 12),
-                      StatChip(
-                        icon: Icons.local_fire_department,
-                        label: 'Day streak',
-                        value: '${user.streakDays}',
-                        color: AppColors.teal,
-                      ),
+                      StatChip(icon: Icons.local_fire_department, label: 'Day streak', value: '${user.streakDays}', color: AppColors.teal),
                     ],
                   ),
                 ),
               ),
 
-              // ─── Bug #6 fix: NO unwanted social "Gantav Score" card ─────
-              // The PulseEventTile showing "Vikram hit a 14-day streak in
-              // Web Development" type cards has been REMOVED from home screen.
-              // These were the "unwanted cards" referenced in the bug report.
-
-              // ─── Continue Learning ─────────────────────────────────
+              // ─── Continue Learning ──────────────────────────────────
               if (appState.activeCourses.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: Padding(
@@ -212,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // ─── Today's Picks ─────────────────────────────────────
+              // ─── Today's Picks ──────────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -220,9 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: "Today's Picks 🔥",
                     actionText: 'Refresh',
                     onAction: () async {
-                      setState(() => _loadingRecs = true);
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.remove('recommendation_date');
+                      setState(() { _loadingRecs = true; _seenVideoIds.clear(); });
                       await _loadRecommendations(reset: true);
                     },
                   ),
@@ -232,36 +207,39 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppColors.violet)),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.violet)),
                   ),
                 )
               else
                 SliverToBoxAdapter(
                   child: SizedBox(
                     height: 200,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: _recommendations.length,
-                      itemBuilder: (context, index) {
-                        final rec = _recommendations[index];
-                        return _RecommendationCard(rec: rec);
-                      },
-                    ),
+                    child: _recommendations.isEmpty
+                        ? Center(
+                            child: Text('Tap Refresh to load picks',
+                              style: GoogleFonts.dmSans(fontSize: 13, color: AppColors.textMuted)),
+                          )
+                        : ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            physics: const BouncingScrollPhysics(),
+                            itemCount: _recommendations.length,
+                            itemBuilder: (context, index) {
+                              final rec = _recommendations[index];
+                              return _RecommendationCard(rec: rec);
+                            },
+                          ),
                   ),
                 ),
 
-              // ─── Suggested for you ─────────────────────────────────
+              // ─── Suggested for you ──────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                   child: SectionHeader(
                     title: 'Suggested for you',
                     actionText: 'Explore',
-                    onAction: () {},
+                    onAction: () => context.read<AppState>().setTabIndex(1),
                   ),
                 ),
               ),
@@ -287,10 +265,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final courses = appState.suggestedCourses;
           if (index >= courses.length) return null;
           final course = courses[index];
-          return SuggestedCourseRow(
-            course: course,
-            onTap: () => _navigateToCourse(context, course),
-          );
+          return SuggestedCourseRow(course: course, onTap: () => _navigateToCourse(context, course));
         },
         childCount: appState.suggestedCourses.length,
       ),
@@ -300,7 +275,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildLandscapeSuggestions(AppState appState) {
     final courses = appState.suggestedCourses;
     final rowCount = (courses.length / 2).ceil();
-
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, rowIndex) {
@@ -309,23 +283,9 @@ class _HomeScreenState extends State<HomeScreen> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (i1 < courses.length)
-                Expanded(
-                  child: SuggestedCourseRow(
-                    course: courses[i1],
-                    onTap: () => _navigateToCourse(context, courses[i1]),
-                  ),
-                ),
+              if (i1 < courses.length) Expanded(child: SuggestedCourseRow(course: courses[i1], onTap: () => _navigateToCourse(context, courses[i1]))),
               const SizedBox(width: 12),
-              if (i2 < courses.length)
-                Expanded(
-                  child: SuggestedCourseRow(
-                    course: courses[i2],
-                    onTap: () => _navigateToCourse(context, courses[i2]),
-                  ),
-                )
-              else
-                const Expanded(child: SizedBox()),
+              if (i2 < courses.length) Expanded(child: SuggestedCourseRow(course: courses[i2], onTap: () => _navigateToCourse(context, courses[i2]))) else const Expanded(child: SizedBox()),
             ],
           );
         },
@@ -335,13 +295,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _navigateToCourse(BuildContext context, dynamic course) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course)),
-    );
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course)));
   }
 }
 
-// ── Recommendation Card ────────────────────────────────────────────────────────
+// ─── Recommendation Card ─────────────────────────────────────────────────────
 
 class _RecommendationCard extends StatelessWidget {
   final Map<String, String> rec;
@@ -351,6 +309,9 @@ class _RecommendationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final videoId = rec['video_id'] ?? '';
+    // Fix: show actual title, not $dream
+    final title = (rec['title'] ?? '').replaceAll('\$dream', rec['category'] ?? 'Video');
+    final channel = rec['channel'] ?? '';
 
     return GestureDetector(
       onTap: () {
@@ -360,20 +321,15 @@ class _RecommendationCard extends StatelessWidget {
             builder: (_) => LessonPlayerScreen(
               course: Course(
                 id: 'rec_$videoId',
-                title: 'Recommendation: ${rec['category'] ?? 'Pick'}',
+                title: rec['category'] ?? 'Recommendation',
                 description: 'A recommended video based on your interests.',
                 category: rec['category'] ?? '',
-                thumbnailUrl:
-                    'https://img.youtube.com/vi/$videoId/0.jpg',
+                thumbnailUrl: 'https://img.youtube.com/vi/$videoId/0.jpg',
               ),
-              module: const Module(
-                id: 'mod_rec',
-                title: 'Recommendations',
-                lessonCount: 1,
-              ),
+              module: const Module(id: 'mod_rec', title: 'Recommendations', lessonCount: 1),
               lesson: Lesson(
                 id: 'les_rec_$videoId',
-                title: rec['title'] ?? 'Video',
+                title: title.isNotEmpty ? title : 'Recommended Video',
                 duration: rec['duration'] ?? '',
                 youtubeVideoId: videoId,
               ),
@@ -387,94 +343,70 @@ class _RecommendationCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
+          border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(14)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
               child: Stack(
                 children: [
                   CachedNetworkImage(
-                    imageUrl:
-                        'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
-                    height: 110,
-                    width: 240,
-                    fit: BoxFit.cover,
+                    imageUrl: 'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+                    height: 110, width: 240, fit: BoxFit.cover,
                     errorWidget: (context, url, error) => Container(
-                      height: 110,
-                      width: 240,
+                      height: 110, width: 240,
                       color: AppColors.darkSurface2,
-                      child: const Icon(Icons.play_circle_outline,
-                          color: AppColors.textMuted, size: 32),
+                      child: const Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 32),
                     ),
                   ),
-                  Positioned(
-                    bottom: 6,
-                    right: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.75),
-                        borderRadius: BorderRadius.circular(4),
+                  if ((rec['duration'] ?? '').isNotEmpty)
+                    Positioned(
+                      bottom: 6, right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.75), borderRadius: BorderRadius.circular(4)),
+                        child: Text(rec['duration']!, style: GoogleFonts.dmMono(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
                       ),
-                      child: Text(rec['duration'] ?? '',
-                          style: GoogleFonts.dmMono(
-                              fontSize: 10,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600)),
                     ),
-                  ),
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.violet.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(4),
+                  if ((rec['category'] ?? '').isNotEmpty)
+                    Positioned(
+                      top: 6, left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(4)),
+                        child: Text(rec['category']!, style: GoogleFonts.dmSans(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600)),
                       ),
-                      child: Text(rec['category'] ?? '',
-                          style: GoogleFonts.dmSans(
-                              fontSize: 9,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600)),
                     ),
-                  ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(rec['title'] ?? '',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                        color: isDark
-                            ? AppColors.textLight
-                            : AppColors.textDark,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Show real title, not $dream
+                    Expanded(
+                      child: Text(
+                        title.isNotEmpty ? title : 'Recommended Video',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12, fontWeight: FontWeight.w600, height: 1.3,
+                          color: isDark ? AppColors.textLight : AppColors.textDark,
+                        ),
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 4),
-                  Text(rec['channel'] ?? '',
-                      style: GoogleFonts.dmSans(
-                          fontSize: 10,
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w500)),
-                ],
+                    ),
+                    if (channel.isNotEmpty)
+                      Text(
+                        channel,
+                        style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -484,18 +416,14 @@ class _RecommendationCard extends StatelessWidget {
   }
 }
 
-// ── Roadmap Card ──────────────────────────────────────────────────────────────
+// ─── Roadmap Card ─────────────────────────────────────────────────────────────
 
 class _RoadmapCard extends StatelessWidget {
   final Roadmap roadmap;
   final RoadmapDay? todayDay;
   final VoidCallback onTap;
 
-  const _RoadmapCard({
-    required this.roadmap,
-    required this.todayDay,
-    required this.onTap,
-  });
+  const _RoadmapCard({required this.roadmap, required this.todayDay, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -511,14 +439,10 @@ class _RoadmapCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              AppColors.violet.withValues(alpha: isDark ? 0.15 : 0.10),
-              AppColors.teal.withValues(alpha: isDark ? 0.08 : 0.05),
-            ],
+            colors: [AppColors.violet.withValues(alpha: isDark ? 0.15 : 0.10), AppColors.teal.withValues(alpha: isDark ? 0.08 : 0.05)],
           ),
           borderRadius: BorderRadius.circular(16),
-          border:
-              Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
+          border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -526,43 +450,22 @@ class _RoadmapCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.violet.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.route_rounded,
-                      size: 20, color: AppColors.violet),
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.route_rounded, size: 20, color: AppColors.violet),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('My Roadmap',
-                          style: GoogleFonts.dmSans(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.violet)),
+                      Text('My Roadmap', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet)),
                       const SizedBox(height: 2),
-                      Text(roadmap.title,
-                          style: GoogleFonts.dmSans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isDark
-                                  ? AppColors.textLight
-                                  : AppColors.textDark),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
+                      Text(roadmap.title, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? AppColors.textLight : AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
-                Text('$pct%',
-                    style: GoogleFonts.dmMono(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.violet)),
+                Text('$pct%', style: GoogleFonts.dmMono(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.violet)),
               ],
             ),
             const SizedBox(height: 12),
@@ -571,40 +474,21 @@ class _RoadmapCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: roadmap.taskProgress,
                 minHeight: 5,
-                backgroundColor: isDark
-                    ? AppColors.darkSurface2
-                    : AppColors.lightSurface2,
-                valueColor:
-                    const AlwaysStoppedAnimation(AppColors.violet),
+                backgroundColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+                valueColor: const AlwaysStoppedAnimation(AppColors.violet),
               ),
             ),
             const SizedBox(height: 10),
             Row(
               children: [
-                Icon(
-                  allDoneToday
-                      ? Icons.check_circle
-                      : Icons.today_outlined,
-                  size: 14,
-                  color: allDoneToday ? AppColors.teal : AppColors.gold,
-                ),
+                Icon(allDoneToday ? Icons.check_circle : Icons.today_outlined, size: 14, color: allDoneToday ? AppColors.teal : AppColors.gold),
                 const SizedBox(width: 6),
                 Text(
-                  allDoneToday
-                      ? "Today's tasks complete! 🎉"
-                      : 'Today: $todayDone/$todayTotal tasks done',
-                  style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: allDoneToday
-                          ? AppColors.teal
-                          : AppColors.textMuted),
+                  allDoneToday ? "Today's tasks complete! 🎉" : 'Today: $todayDone/$todayTotal tasks done',
+                  style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w500, color: allDoneToday ? AppColors.teal : AppColors.textMuted),
                 ),
                 const Spacer(),
-                Text(
-                    'Day ${roadmap.currentDayNumber}/${roadmap.totalDays}',
-                    style: GoogleFonts.dmMono(
-                        fontSize: 11, color: AppColors.textMuted)),
+                Text('Day ${roadmap.currentDayNumber}/${roadmap.totalDays}', style: GoogleFonts.dmMono(fontSize: 11, color: AppColors.textMuted)),
               ],
             ),
           ],
