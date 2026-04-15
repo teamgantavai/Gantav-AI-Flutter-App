@@ -26,21 +26,20 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loadingRecs = true;
   bool _loadingMoreRecs = false;
   int _recPage = 0;
-  Timer? _pulseTimer;
+
+  // Bug #6 fix: Pulse timer removed — we no longer auto-show other users'
+  // Gantav Score activity cards on the home screen as they are "unwanted"
+  // per the bug report. The social feed is purely optional (no timer).
 
   @override
   void initState() {
     super.initState();
-    _pulseTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (mounted) context.read<AppState>().nextPulseEvent();
-    });
-    
     _scrollController.addListener(_onScroll);
     _loadRecommendations(reset: true);
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= 
+    if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 300) {
       _loadMoreRecommendations();
     }
@@ -48,21 +47,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadRecommendations({bool reset = false}) async {
     if (reset) {
-      if (mounted) {
-        setState(() {
-          _loadingRecs = true;
-          _recPage = 0;
-        });
-      }
+      if (mounted) setState(() { _loadingRecs = true; _recPage = 0; });
     }
-    
+
     final appState = context.read<AppState>();
     final recs = await GeminiService.generateRecommendations(
       dream: appState.dream?.text,
       categories: appState.activeCourses.map((c) => c.category).toList(),
       page: _recPage,
     );
-    
+
     if (mounted) {
       setState(() {
         if (reset) {
@@ -84,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _pulseTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -106,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return RefreshIndicator(
           onRefresh: () async {
             await appState.refresh();
-            await _loadRecommendations();
+            await _loadRecommendations(reset: true);
           },
           color: AppColors.violet,
           child: CustomScrollView(
@@ -115,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
               parent: BouncingScrollPhysics(),
             ),
             slivers: [
-              // ─── Greeting ─────────────────────────────────────────
+              // ─── Greeting ──────────────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -129,16 +122,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 4),
                       Text(
                         'Your destination is waiting. Keep going.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.textMuted,
-                            ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: AppColors.textMuted),
                       ),
                     ],
                   ),
                 ),
               ),
 
-              // ─── Roadmap Progress Card ─────────────────────────
+              // ─── Roadmap Progress Card ─────────────────────────────
               if (appState.activeRoadmap != null)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -148,14 +142,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       todayDay: appState.todayRoadmapDay,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => RoadmapScreen(roadmap: appState.activeRoadmap!),
+                          builder: (_) => RoadmapScreen(
+                              roadmap: appState.activeRoadmap!),
                         ),
                       ),
                     ),
                   ),
                 ),
 
-              // ─── Score + Streak Row ───────────────────────────────
+              // ─── Bug #7 fix: Score + Streak Row ───────────────────
+              // Pulled live from appState.user — always reflects Firestore data
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -179,22 +175,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // ─── Social Pulse ─────────────────────────────────────
-              if (appState.currentPulseEvent != null)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 400),
-                      child: PulseEventTile(
-                        key: ValueKey(appState.currentPulseEvent!.id),
-                        event: appState.currentPulseEvent!,
-                      ),
-                    ),
-                  ),
-                ),
+              // ─── Bug #6 fix: NO unwanted social "Gantav Score" card ─────
+              // The PulseEventTile showing "Vikram hit a 14-day streak in
+              // Web Development" type cards has been REMOVED from home screen.
+              // These were the "unwanted cards" referenced in the bug report.
 
-              // ─── Continue Learning ────────────────────────────────
+              // ─── Continue Learning ─────────────────────────────────
               if (appState.activeCourses.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: Padding(
@@ -226,7 +212,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // ─── Today's Picks (Daily Recommendations) ────────────
+              // ─── Today's Picks ─────────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -235,10 +221,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     actionText: 'Refresh',
                     onAction: () async {
                       setState(() => _loadingRecs = true);
-                      // Clear cache to force refresh
                       final prefs = await SharedPreferences.getInstance();
                       await prefs.remove('recommendation_date');
-                      await _loadRecommendations();
+                      await _loadRecommendations(reset: true);
                     },
                   ),
                 ),
@@ -247,7 +232,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.violet)),
+                    child: Center(
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.violet)),
                   ),
                 )
               else
@@ -267,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-              // ─── Suggested for you ────────────────────────────────
+              // ─── Suggested for you ─────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -285,10 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     : _buildPortraitSuggestions(appState),
               ),
 
-              // Bottom padding for nav bar
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 100),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
         );
@@ -314,7 +298,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLandscapeSuggestions(AppState appState) {
-    // 2-column grid in landscape
     final courses = appState.suggestedCourses;
     final rowCount = (courses.length / 2).ceil();
 
@@ -353,15 +336,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _navigateToCourse(BuildContext context, dynamic course) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CourseDetailScreen(course: course),
-      ),
+      MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course)),
     );
   }
-
 }
 
-/// Recommendation video card
+// ── Recommendation Card ────────────────────────────────────────────────────────
+
 class _RecommendationCard extends StatelessWidget {
   final Map<String, String> rec;
   const _RecommendationCard({required this.rec});
@@ -370,7 +351,6 @@ class _RecommendationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final videoId = rec['video_id'] ?? '';
-    final thumbnailUrl = 'https://img.youtube.com/vi/$videoId/0.jpg';
 
     return GestureDetector(
       onTap: () {
@@ -383,7 +363,8 @@ class _RecommendationCard extends StatelessWidget {
                 title: 'Recommendation: ${rec['category'] ?? 'Pick'}',
                 description: 'A recommended video based on your interests.',
                 category: rec['category'] ?? '',
-                thumbnailUrl: thumbnailUrl,
+                thumbnailUrl:
+                    'https://img.youtube.com/vi/$videoId/0.jpg',
               ),
               module: const Module(
                 id: 'mod_rec',
@@ -407,96 +388,104 @@ class _RecommendationCard extends StatelessWidget {
           color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.06),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          // Thumbnail
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            child: Stack(
-              children: [
-                CachedNetworkImage(
-                  imageUrl: 'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
-                  height: 110,
-                  width: 240,
-                  fit: BoxFit.cover,
-                  errorWidget: (context, url, error) => CachedNetworkImage(
-                    imageUrl: 'https://img.youtube.com/vi/$videoId/0.jpg',
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(14)),
+              child: Stack(
+                children: [
+                  CachedNetworkImage(
+                    imageUrl:
+                        'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
                     height: 110,
                     width: 240,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(
-                      height: 110, width: 240,
+                    errorWidget: (context, url, error) => Container(
+                      height: 110,
+                      width: 240,
                       color: AppColors.darkSurface2,
-                      child: const Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 32),
+                      child: const Icon(Icons.play_circle_outline,
+                          color: AppColors.textMuted, size: 32),
                     ),
                   ),
-                ),
-                // Duration badge
-                Positioned(
-                  bottom: 6, right: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.75),
-                      borderRadius: BorderRadius.circular(4),
+                  Positioned(
+                    bottom: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(rec['duration'] ?? '',
+                          style: GoogleFonts.dmMono(
+                              fontSize: 10,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600)),
                     ),
-                    child: Text(rec['duration'] ?? '',
-                      style: GoogleFonts.dmMono(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
                   ),
-                ),
-                // Category badge
-                Positioned(
-                  top: 6, left: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.violet.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(4),
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.violet.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(rec['category'] ?? '',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 9,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600)),
                     ),
-                    child: Text(rec['category'] ?? '',
-                      style: GoogleFonts.dmSans(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600)),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          // Info
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(rec['title'] ?? '',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12, fontWeight: FontWeight.w600, height: 1.3,
-                    color: isDark ? AppColors.textLight : AppColors.textDark,
-                  ),
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text(rec['channel'] ?? '',
-                  style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
-              ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(rec['title'] ?? '',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                        color: isDark
+                            ? AppColors.textLight
+                            : AppColors.textDark,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Text(rec['channel'] ?? '',
+                      style: GoogleFonts.dmSans(
+                          fontSize: 10,
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w500)),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
-/// Roadmap progress card — replaces DreamCard on the home screen
+// ── Roadmap Card ──────────────────────────────────────────────────────────────
+
 class _RoadmapCard extends StatelessWidget {
   final Roadmap roadmap;
   final RoadmapDay? todayDay;
@@ -528,9 +517,8 @@ class _RoadmapCard extends StatelessWidget {
             ],
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: AppColors.violet.withValues(alpha: 0.2),
-          ),
+          border:
+              Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,12 +526,14 @@ class _RoadmapCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 40, height: 40,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: AppColors.violet.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.route_rounded, size: 20, color: AppColors.violet),
+                  child: const Icon(Icons.route_rounded,
+                      size: 20, color: AppColors.violet),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -551,54 +541,70 @@ class _RoadmapCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('My Roadmap',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet)),
+                          style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.violet)),
                       const SizedBox(height: 2),
                       Text(roadmap.title,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 14, fontWeight: FontWeight.w600,
-                          color: isDark ? AppColors.textLight : AppColors.textDark),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                          style: GoogleFonts.dmSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.textLight
+                                  : AppColors.textDark),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
                 Text('$pct%',
-                  style: GoogleFonts.dmMono(
-                    fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.violet)),
+                    style: GoogleFonts.dmMono(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.violet)),
               ],
             ),
             const SizedBox(height: 12),
-            // Progress bar
             ClipRRect(
               borderRadius: BorderRadius.circular(100),
               child: LinearProgressIndicator(
                 value: roadmap.taskProgress,
                 minHeight: 5,
-                backgroundColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
-                valueColor: const AlwaysStoppedAnimation(AppColors.violet),
+                backgroundColor: isDark
+                    ? AppColors.darkSurface2
+                    : AppColors.lightSurface2,
+                valueColor:
+                    const AlwaysStoppedAnimation(AppColors.violet),
               ),
             ),
             const SizedBox(height: 10),
-            // Today's task status
             Row(
               children: [
                 Icon(
-                  allDoneToday ? Icons.check_circle : Icons.today_outlined,
+                  allDoneToday
+                      ? Icons.check_circle
+                      : Icons.today_outlined,
                   size: 14,
                   color: allDoneToday ? AppColors.teal : AppColors.gold,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   allDoneToday
-                      ? 'Today\'s tasks complete! 🎉'
+                      ? "Today's tasks complete! 🎉"
                       : 'Today: $todayDone/$todayTotal tasks done',
                   style: GoogleFonts.dmSans(
-                    fontSize: 12, fontWeight: FontWeight.w500,
-                    color: allDoneToday ? AppColors.teal : AppColors.textMuted),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: allDoneToday
+                          ? AppColors.teal
+                          : AppColors.textMuted),
                 ),
                 const Spacer(),
-                Text('Day ${roadmap.currentDayNumber}/${roadmap.totalDays}',
-                  style: GoogleFonts.dmMono(fontSize: 11, color: AppColors.textMuted)),
+                Text(
+                    'Day ${roadmap.currentDayNumber}/${roadmap.totalDays}',
+                    style: GoogleFonts.dmMono(
+                        fontSize: 11, color: AppColors.textMuted)),
               ],
             ),
           ],

@@ -8,69 +8,72 @@ import 'youtube_api_service.dart';
 /// Service responsible for generating AI-powered learning roadmaps
 /// based on user preferences collected during onboarding.
 class OnboardingService {
-  /// Generate a personalized learning roadmap from user preferences
+  /// Generate a personalized learning roadmap from user preferences.
+  /// IMPORTANT: Language preference only affects VIDEO SEARCH (Hindi/English channels),
+  /// NOT the roadmap content language. The UI/roadmap content is always in English.
   static Future<Roadmap?> generateRoadmap(UserPreferences prefs) async {
     if (!ApiConfig.isConfigured) {
       debugPrint('[Onboarding] No AI provider configured — using template roadmap');
       return _templateRoadmap(prefs);
     }
 
-    final languageInstruction = prefs.language == 'hi'
-        ? 'Generate ALL content (titles, descriptions, topics) in Hindi language.'
-        : 'Generate all content in English.';
-
+    // Language only determines which YouTube channels/videos to search.
+    // The roadmap structure/text stays in English always.
+    final videoSearchLanguage = prefs.language == 'hi' ? 'Hindi' : 'English';
     final teacherHint = prefs.preferredTeacher != null && prefs.preferredTeacher!.isNotEmpty
-        ? 'The user prefers learning from "${prefs.preferredTeacher}". Try to include content from this teacher/channel when relevant.'
+        ? 'Preferred teacher/channel: "${prefs.preferredTeacher}".'
         : '';
-        
-    final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: prefs.learningGoal);
+
+    // Fetch videos tailored to the user's language preference
+    final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(
+      topic: prefs.learningGoal,
+      language: videoSearchLanguage,
+    );
+
     final String verifiedVideosContext;
     if (preFilteredVideos.isNotEmpty) {
-      verifiedVideosContext = 'IMPORTANT: You MUST use ONLY the following verified YouTube videos for tasks:\n${preFilteredVideos.map((v) => '- Title: "${v.title}", Video ID: ${v.id}, Duration: ${v.durationText}, Channel: ${v.channelTitle}').join('\n')}';
+      // Pass only top 8 videos to keep prompt concise and fast
+      final topVideos = preFilteredVideos.take(8).toList();
+      verifiedVideosContext =
+          'Use ONLY these verified YouTube videos for tasks (match video to task topic):\n'
+          '${topVideos.map((v) => '- ID: ${v.id} | Title: "${v.title}" | Duration: ${v.durationText} | Channel: ${v.channelTitle}').join('\n')}';
     } else {
-      verifiedVideosContext = 'Use REAL YouTube video IDs from: freeCodeCamp(rfscVS0vtbw), 3Blue1Brown(aircAruvnKk), Traversy(nu_pCVPKzTk), Fireship(DHjqpvDnNGE), Corey Schafer(YYXdXT2l7Tc), TechWithTim(nLRL_NcnK-4), Khan Academy(HvMSRWTE2mI)';
+      verifiedVideosContext =
+          'Use real YouTube video IDs. Preferred channels for ${videoSearchLanguage}: '
+          '${prefs.language == 'hi' ? 'CodeWithHarry(hEfFMFU4eM8), Apna College(6mbwJ2xhgzM), PW Skills, Physics Wallah' : 'freeCodeCamp(rfscVS0vtbw), 3Blue1Brown(aircAruvnKk), Traversy Media, Fireship(DHjqpvDnNGE)'}';
     }
 
-    final prompt = '''You are an expert education curriculum designer.
-
-A student has the following preferences:
-- Learning Goal: "${prefs.learningGoal}"
-- Daily Study Time: ${prefs.dailyStudyMinutes} minutes per day
-- Preferred Teacher/Channel: ${prefs.preferredTeacher ?? 'None specified'}
-$teacherHint
-$languageInstruction
-
-Create a personalized day-by-day learning roadmap. The roadmap should span 14-21 days.
-Each day should have 1-3 tasks that fit within the ${prefs.dailyStudyMinutes}-minute daily budget.
-Tasks should be specific and actionable (e.g., "Watch: Introduction to Variables", "Practice: Write 5 programs using loops").
-Include highly rated YouTube videos based on the verified list below.
+    // Compact prompt for faster AI response
+    final prompt = '''Create a 10-day learning roadmap for: "${prefs.learningGoal}"
+Daily time: ${prefs.dailyStudyMinutes} minutes. $teacherHint
+Video language preference: $videoSearchLanguage videos only.
 
 Return ONLY valid JSON (no markdown):
 {
-  "id": "roadmap_12345",
-  "title": "Descriptive Roadmap Title",
+  "id": "roadmap_${DateTime.now().millisecondsSinceEpoch}",
+  "title": "10-Day ${prefs.learningGoal} Roadmap",
   "goal": "${prefs.learningGoal}",
-  "language": "${prefs.language}",
+  "language": "en",
   "days": [
     {
       "day_number": 1,
-      "topic": "Topic Name",
-      "description": "Brief description of what will be learned",
+      "topic": "Introduction to ${prefs.learningGoal}",
+      "description": "Get started with the basics",
       "total_duration_minutes": ${prefs.dailyStudyMinutes},
       "tasks": [
         {
           "id": "task_1_1",
-          "title": "Watch: Video Title",
-          "description": "Why this is important",
-          "duration_minutes": 15,
-          "youtube_video_id": "realVideoId",
+          "title": "Watch: Introduction video",
+          "description": "Learn core concepts",
+          "duration_minutes": ${(prefs.dailyStudyMinutes * 0.6).round()},
+          "youtube_video_id": "USE_ID_FROM_LIST_BELOW",
           "is_completed": false
         },
         {
           "id": "task_1_2",
-          "title": "Practice: Exercise description",
-          "description": "What to practice",
-          "duration_minutes": 15,
+          "title": "Practice: Apply what you learned",
+          "description": "Hands-on exercise",
+          "duration_minutes": ${(prefs.dailyStudyMinutes * 0.4).round()},
           "is_completed": false
         }
       ],
@@ -80,18 +83,19 @@ Return ONLY valid JSON (no markdown):
 }
 
 Rules:
-- Each day's total duration should be ~${prefs.dailyStudyMinutes} minutes
+- Generate exactly 10 days. Roadmap content MUST be in English.
 - $verifiedVideosContext
-- Tasks should progress logically from basics to advanced
-- Include a mix of watching, practicing, and reviewing
-- Day numbers must be sequential starting from 1''';
+- Match the youtube_video_id to the task topic from the list above.
+- Each day: 1-2 tasks totaling ~${prefs.dailyStudyMinutes} minutes.
+- Progress from basics (days 1-3) → intermediate (4-7) → advanced (8-10).
+- Use "is_completed": false for all tasks.''';
 
     try {
       final response = await GeminiService.callAI(
         prompt,
         task: AITask.courseGeneration,
-        maxTokens: 4096,
-        temperature: 0.4,
+        maxTokens: 3000,
+        temperature: 0.3,
       );
 
       if (response == null) {
@@ -101,10 +105,11 @@ Rules:
 
       final jsonStr = GeminiService.extractJson(response);
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-      
-      // Ensure created_at is set
+
+      // Always force language to 'en' — language pref only affects video search
       data['created_at'] = DateTime.now().toIso8601String();
-      
+      data['language'] = 'en'; // Always English UI
+
       final roadmap = Roadmap.fromJson(data);
       if (roadmap.days.isEmpty) {
         debugPrint('[Onboarding] AI returned empty roadmap — using template');
@@ -121,57 +126,73 @@ Rules:
 
   /// Fallback template roadmap when AI is unavailable
   static Roadmap _templateRoadmap(UserPreferences prefs) {
-    final isHindi = prefs.language == 'hi';
     final goal = prefs.learningGoal;
     final daily = prefs.dailyStudyMinutes;
     final now = DateTime.now();
 
-    // Create a structured 14-day roadmap based on goal
-    final days = List.generate(14, (i) {
+    // Hindi language users get Hindi channel video IDs for fallback
+    final videoIds = prefs.language == 'hi'
+        ? [
+            'hEfFMFU4eM8', // CodeWithHarry Python
+            '6mbwJ2xhgzM', // Apna College
+            'T-D1KVIuvjA', // CodeWithHarry Web Dev
+            'ORrELERaZ38', // CodeWithHarry DSA
+            'fhHParI0d5I', // Apna College Java
+            'q3uXXh1sHcI', // PW Skills
+            'yRpLlJgoaNY', // Hindi ML
+            'eWRfhZUzrAc', // Hindi Data Science
+            'XRv7HFNgS_E', // Hindi JavaScript
+            'UHjVn6WKNEQ', // Hindi Flutter
+          ]
+        : [
+            'rfscVS0vtbw', // freeCodeCamp Python
+            'aircAruvnKk', // 3Blue1Brown Neural Networks
+            'nu_pCVPKzTk', // Traversy Web Dev
+            'DHjqpvDnNGE', // Fireship JS
+            'YYXdXT2l7Tc', // Corey Schafer Python
+            'nLRL_NcnK-4', // TechWithTim Python
+            'HvMSRWTE2mI', // Khan Academy
+            '7eh4d6sabA0', // Python variables
+            'rAvbpCPgkEI', // Control flow
+            '9Os0o3wzS_I', // Functions
+          ];
+
+    final phases = [
+      'Introduction & Setup',
+      'Core Fundamentals',
+      'Core Fundamentals',
+      'Building Basics',
+      'Intermediate Concepts',
+      'Intermediate Concepts',
+      'Intermediate Concepts',
+      'Advanced Topics',
+      'Advanced Topics',
+      'Project & Review',
+    ];
+
+    final days = List.generate(10, (i) {
       final dayNum = i + 1;
-      final phase = dayNum <= 4
-          ? (isHindi ? 'मूल बातें' : 'Foundations')
-          : dayNum <= 8
-              ? (isHindi ? 'मध्यवर्ती' : 'Intermediate')
-              : dayNum <= 12
-                  ? (isHindi ? 'उन्नत' : 'Advanced')
-                  : (isHindi ? 'अभ्यास' : 'Practice & Review');
-
-      final videoIds = [
-        'rfscVS0vtbw', 'aircAruvnKk', 'nu_pCVPKzTk', 'DHjqpvDnNGE',
-        'YYXdXT2l7Tc', 'nLRL_NcnK-4', 'HvMSRWTE2mI', '7eh4d6sabA0',
-        'rAvbpCPgkEI', '9Os0o3wzS_I', 'W8KRzm-HUcc', 'Uh2ebFW8OYM',
-        'NIWwJbo-9_8', 'QUT1VHiLmmI',
-      ];
-
+      final phase = phases[i];
       final watchDuration = (daily * 0.6).round();
       final practiceDuration = daily - watchDuration;
 
       return RoadmapDay(
         dayNumber: dayNum,
-        topic: isHindi 
-            ? 'दिन $dayNum: $phase — $goal'
-            : 'Day $dayNum: $phase — $goal',
-        description: isHindi
-            ? '$goal के बारे में $phase सीखें'
-            : 'Learn $phase concepts about $goal',
+        topic: 'Day $dayNum: $phase — $goal',
+        description: 'Learn $phase concepts for $goal',
         totalDurationMinutes: daily,
         tasks: [
           RoadmapTask(
             id: 'task_${dayNum}_1',
-            title: isHindi ? 'देखें: $phase वीडियो' : 'Watch: $phase Video',
-            description: isHindi
-                ? '$goal से संबंधित वीडियो देखें'
-                : 'Watch a video about $goal - $phase',
+            title: 'Watch: $phase Video',
+            description: 'Watch a tutorial covering $goal - $phase',
             durationMinutes: watchDuration,
             youtubeVideoId: videoIds[i % videoIds.length],
           ),
           RoadmapTask(
             id: 'task_${dayNum}_2',
-            title: isHindi ? 'अभ्यास: अवधारणाओं को लागू करें' : 'Practice: Apply Concepts',
-            description: isHindi
-                ? 'जो आपने सीखा उसका अभ्यास करें'
-                : 'Practice what you learned today',
+            title: 'Practice: Apply $phase Concepts',
+            description: 'Hands-on practice exercise for $goal',
             durationMinutes: practiceDuration,
           ),
         ],
@@ -180,9 +201,9 @@ Rules:
 
     return Roadmap(
       id: 'roadmap_${now.millisecondsSinceEpoch}',
-      title: isHindi ? '$goal — सीखने की योजना' : '$goal — Learning Plan',
+      title: '10-Day $goal Learning Plan',
       goal: goal,
-      language: prefs.language,
+      language: 'en', // Always English UI
       days: days,
       createdAt: now,
     );

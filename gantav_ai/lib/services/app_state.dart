@@ -9,9 +9,14 @@ import '../services/gemini_service.dart';
 import '../services/onboarding_service.dart';
 import '../services/youtube_api_service.dart';
 
-enum AuthStatus { unauthenticated, authenticated, skipped, needsVerification, needsOnboarding }
+enum AuthStatus {
+  unauthenticated,
+  authenticated,
+  skipped,
+  needsVerification,
+  needsOnboarding
+}
 
-/// Global app state using Provider — single source of truth
 class AppState extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.dark;
   UserProfile? _user;
@@ -29,27 +34,27 @@ class AppState extends ChangeNotifier {
   int _courseBatchIndex = 0;
   String? _authError;
   String? _notificationMessage;
+  Course? _lastCompletedCourse;
 
-  // ── Onboarding & Roadmap state ────────────────────────────────────────────
   UserPreferences? _preferences;
   List<Roadmap> _roadmaps = [];
   bool _needsOnboarding = false;
   bool _isGeneratingRoadmap = false;
 
-  // Legacy: Track if onboarding dream was collected
   bool _dreamCollectedInOnboarding = false;
   bool get dreamCollectedInOnboarding => _dreamCollectedInOnboarding;
 
-  // Services
   final FirestoreService _firestoreService = FirestoreService();
 
-  // ── Getters ───────────────────────────────────────────────────────────────
+  // Getters
   ThemeMode get themeMode => _themeMode;
   UserProfile? get user => _user;
   String? get profileImagePath => _profileImagePath;
   List<Course> get courses => [..._courses, ..._generatedCourses];
-  List<Course> get activeCourses => courses.where((c) => c.isInProgress).toList();
-  List<Course> get suggestedCourses => courses.where((c) => !c.isInProgress).toList();
+  List<Course> get activeCourses =>
+      courses.where((c) => c.isInProgress).toList();
+  List<Course> get suggestedCourses =>
+      courses.where((c) => !c.isInProgress).toList();
   List<PulseEvent> get pulseEvents => _pulseEvents;
   bool get isLoading => _isLoading;
   bool get isInitialLoading => _isInitialLoading;
@@ -59,37 +64,31 @@ class AppState extends ChangeNotifier {
   List<Course> get generatedCourses => _generatedCourses;
   bool get hasDream => _dream != null;
   AuthStatus get authStatus => _authStatus;
-  bool get isAuthenticated => _authStatus == AuthStatus.authenticated || _authStatus == AuthStatus.skipped;
+  bool get isAuthenticated =>
+      _authStatus == AuthStatus.authenticated ||
+      _authStatus == AuthStatus.skipped;
   bool get isGeneratingCourse => _isGeneratingCourse;
   bool get isLoadingMore => _isLoadingMore;
   String? get authError => _authError;
   String? get notificationMessage => _notificationMessage;
+  Course? get lastCompletedCourse => _lastCompletedCourse;
 
-  // ── Onboarding & Roadmap getters ──────────────────────────────────────────
   UserPreferences? get preferences => _preferences;
   List<Roadmap> get roadmaps => _roadmaps;
   bool get needsOnboarding => _needsOnboarding;
   bool get isGeneratingRoadmap => _isGeneratingRoadmap;
 
-  /// Active roadmap (most recent)
   Roadmap? get activeRoadmap =>
       _roadmaps.isNotEmpty ? _roadmaps.first : null;
-
-  /// Today's tasks from the active roadmap
   RoadmapDay? get todayRoadmapDay => activeRoadmap?.todayDay;
-
-  /// Today's completed task count
   int get todayCompletedTasks => todayRoadmapDay?.completedTaskCount ?? 0;
-
-  /// Today's total task count
   int get todayTotalTasks => todayRoadmapDay?.tasks.length ?? 0;
-
-  /// Whether today's tasks are all done
   bool get isTodayComplete => todayRoadmapDay?.allTasksCompleted ?? false;
 
   void clearNotification() {
     if (_notificationMessage != null) {
       _notificationMessage = null;
+      _lastCompletedCourse = null;
       notifyListeners();
     }
   }
@@ -99,23 +98,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
   // INITIALIZATION
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
 
   Future<void> init() async {
     _isInitialLoading = true;
     notifyListeners();
-    
+
     await _loadThemePreference();
     await _loadAuthStatus();
     await _loadDream();
     await _loadLocalCourses();
     await _loadLocalPreferences();
     await _loadLocalRoadmaps();
-    
+
     final firebaseUser = AuthService.currentUser;
-    if (firebaseUser != null && _authStatus == AuthStatus.unauthenticated) {
+    if (firebaseUser != null &&
+        _authStatus == AuthStatus.unauthenticated) {
       _authStatus = AuthStatus.authenticated;
       await _loadUserFromFirebase(firebaseUser);
     }
@@ -137,7 +137,9 @@ class AppState extends ChangeNotifier {
       _user = UserProfile(
         id: firebaseUser.uid,
         name: firebaseUser.displayName ?? 'Learner',
-        handle: (firebaseUser.displayName ?? 'learner').toLowerCase().replaceAll(' ', ''),
+        handle: (firebaseUser.displayName ?? 'learner')
+            .toLowerCase()
+            .replaceAll(' ', ''),
         email: firebaseUser.email ?? '',
         gantavScore: 0,
         streakDays: 0,
@@ -147,14 +149,12 @@ class AppState extends ChangeNotifier {
       );
     }
 
-    // Load generated courses from Firestore
     final storedCourses = await _firestoreService.getActiveCourses();
     if (storedCourses.isNotEmpty) {
       _generatedCourses.clear();
       _generatedCourses.addAll(storedCourses);
     }
 
-    // Load preferences & roadmaps from Firestore
     final prefs = await _firestoreService.getUserPreferences();
     if (prefs != null) {
       _preferences = prefs;
@@ -168,9 +168,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
   // AUTHENTICATION
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
 
   Future<bool> signInWithGoogle() async {
     _authError = null;
@@ -193,7 +193,6 @@ class AppState extends ChangeNotifier {
       if (_user != null) {
         await _firestoreService.saveUserProfile(_user!);
       }
-      // New user needs onboarding — but only if they don't have preferences already
       if (_preferences == null && _dream == null) {
         _authStatus = AuthStatus.needsOnboarding;
         _needsOnboarding = true;
@@ -201,8 +200,9 @@ class AppState extends ChangeNotifier {
         _authStatus = AuthStatus.authenticated;
       }
     } else {
-      // Returning user — check if they completed onboarding
-      if (_preferences == null && _dream == null && _generatedCourses.isEmpty) {
+      if (_preferences == null &&
+          _dream == null &&
+          _generatedCourses.isEmpty) {
         _authStatus = AuthStatus.needsOnboarding;
         _needsOnboarding = true;
       } else {
@@ -218,15 +218,14 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> signInWithEmail({required String email, required String password}) async {
+  Future<bool> signInWithEmail(
+      {required String email, required String password}) async {
     _authError = null;
     _isLoading = true;
     notifyListeners();
 
     final result = await AuthService.signInWithEmail(
-      email: email,
-      password: password,
-    );
+        email: email, password: password);
 
     if (!result.success || result.user == null) {
       _authError = result.error;
@@ -235,7 +234,6 @@ class AppState extends ChangeNotifier {
       return false;
     }
 
-    // Check if email is verified
     if (!result.user!.emailVerified) {
       _authStatus = AuthStatus.needsVerification;
       _isLoading = false;
@@ -246,8 +244,9 @@ class AppState extends ChangeNotifier {
     await _loadUserFromFirebase(result.user);
     await _saveAuthStatus();
 
-    // Check if onboarding is needed
-    if (_preferences == null && _dream == null && _generatedCourses.isEmpty) {
+    if (_preferences == null &&
+        _dream == null &&
+        _generatedCourses.isEmpty) {
       _authStatus = AuthStatus.needsOnboarding;
       _needsOnboarding = true;
     } else {
@@ -272,10 +271,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     final result = await AuthService.signUpWithEmail(
-      email: email,
-      password: password,
-      name: name,
-    );
+        email: email, password: password, name: name);
 
     if (!result.success || result.user == null) {
       _authError = result.error;
@@ -311,7 +307,6 @@ class AppState extends ChangeNotifier {
       await user.reload();
       if (user.emailVerified) {
         await _loadUserFromFirebase(user);
-        // New sign-up → needs onboarding
         _authStatus = AuthStatus.needsOnboarding;
         _needsOnboarding = true;
         await _saveAuthStatus();
@@ -332,8 +327,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sign in and trigger course generation (legacy flow — kept for backward compat)
-  Future<void> signInAndGenerate({required String dream, String? name}) async {
+  Future<void> signInAndGenerate(
+      {required String dream, String? name}) async {
     _isLoading = true;
     notifyListeners();
 
@@ -341,7 +336,8 @@ class AppState extends ChangeNotifier {
     _user = UserProfile(
       id: AuthService.currentUser?.uid ?? 'user_001',
       name: name ?? AuthService.currentUser?.displayName ?? 'Learner',
-      handle: (name ?? 'learner').toLowerCase().replaceAll(' ', ''),
+      handle:
+          (name ?? 'learner').toLowerCase().replaceAll(' ', ''),
       email: AuthService.currentUser?.email ?? 'user@gantavai.com',
       gantavScore: 0,
       streakDays: 0,
@@ -372,11 +368,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
   // ONBOARDING & ROADMAP
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
 
-  /// Complete onboarding with user preferences → trigger roadmap generation
   Future<void> completeOnboarding(UserPreferences prefs) async {
     _preferences = prefs;
     _needsOnboarding = false;
@@ -385,11 +380,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Save preferences
       await _saveLocalPreferences();
       await _firestoreService.saveUserPreferences(prefs).catchError((_) {});
 
-      // Generate the roadmap
       final roadmap = await OnboardingService.generateRoadmap(prefs);
       if (roadmap != null) {
         _roadmaps.insert(0, roadmap);
@@ -402,17 +395,17 @@ class AppState extends ChangeNotifier {
       _isGeneratingRoadmap = false;
       await _saveAuthStatus();
       notifyListeners();
-      refresh(); // Run asynchronously without awaiting to ensure UI updates immediately
+      refresh();
     }
   }
 
-  /// Mark a specific task in a roadmap day as completed
   void markTaskComplete(String roadmapId, int dayNumber, String taskId) {
     final roadmapIdx = _roadmaps.indexWhere((r) => r.id == roadmapId);
     if (roadmapIdx == -1) return;
 
     final roadmap = _roadmaps[roadmapIdx];
-    final dayIdx = roadmap.days.indexWhere((d) => d.dayNumber == dayNumber);
+    final dayIdx =
+        roadmap.days.indexWhere((d) => d.dayNumber == dayNumber);
     if (dayIdx == -1) return;
 
     final day = roadmap.days[dayIdx];
@@ -422,29 +415,31 @@ class AppState extends ChangeNotifier {
     day.tasks[taskIdx].isCompleted = true;
     day.tasks[taskIdx].completedAt = DateTime.now();
 
-    // Auto-complete the day if all tasks are done
     if (day.allTasksCompleted) {
       day.isCompleted = true;
       day.completedAt = DateTime.now();
     }
 
-    // Check if entire roadmap is complete
     if (roadmap.isComplete) {
       roadmap.completedAt = DateTime.now();
     }
+
+    // Bug #7 fix: Update user score and streak when tasks are completed
+    _updateUserProgressStats();
 
     notifyListeners();
     _saveLocalRoadmaps();
     _firestoreService.updateRoadmap(roadmap).catchError((_) {});
   }
 
-  /// Toggle a task's completion status
-  void toggleTaskComplete(String roadmapId, int dayNumber, String taskId) {
+  void toggleTaskComplete(
+      String roadmapId, int dayNumber, String taskId) {
     final roadmapIdx = _roadmaps.indexWhere((r) => r.id == roadmapId);
     if (roadmapIdx == -1) return;
 
     final roadmap = _roadmaps[roadmapIdx];
-    final dayIdx = roadmap.days.indexWhere((d) => d.dayNumber == dayNumber);
+    final dayIdx =
+        roadmap.days.indexWhere((d) => d.dayNumber == dayNumber);
     if (dayIdx == -1) return;
 
     final day = roadmap.days[dayIdx];
@@ -455,21 +450,85 @@ class AppState extends ChangeNotifier {
     task.isCompleted = !task.isCompleted;
     task.completedAt = task.isCompleted ? DateTime.now() : null;
 
-    // Update day completion
     day.isCompleted = day.allTasksCompleted;
     day.completedAt = day.isCompleted ? DateTime.now() : null;
-
-    // Update roadmap completion
     roadmap.completedAt = roadmap.isComplete ? DateTime.now() : null;
+
+    // Bug #7 fix: update score and streak on toggle
+    _updateUserProgressStats();
 
     notifyListeners();
     _saveLocalRoadmaps();
     _firestoreService.updateRoadmap(roadmap).catchError((_) {});
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  /// Bug #7 fix: Recalculate and update gantav score + streak from roadmap data.
+  /// Called whenever a task is toggled so the home screen stat chips always show
+  /// the correct live value.
+  void _updateUserProgressStats() {
+    if (_user == null || _roadmaps.isEmpty) return;
+
+    // Count all completed tasks across all roadmaps
+    int totalCompletedTasks = 0;
+    int completedDays = 0;
+
+    for (final roadmap in _roadmaps) {
+      totalCompletedTasks += roadmap.completedTasks;
+      completedDays += roadmap.completedDays;
+    }
+
+    // Gantav Score: 10 points per completed task
+    final newScore = totalCompletedTasks * 10;
+
+    // Streak: count consecutive days from today backwards that have completed tasks
+    int streak = 0;
+    if (_roadmaps.isNotEmpty) {
+      final roadmap = _roadmaps.first;
+      final today = roadmap.currentDayNumber;
+      for (int d = today; d >= 1; d--) {
+        try {
+          final day = roadmap.days.firstWhere((day) => day.dayNumber == d);
+          if (day.isCompleted || (d == today && day.progress > 0)) {
+            streak++;
+          } else {
+            break;
+          }
+        } catch (_) {
+          break;
+        }
+      }
+    }
+
+    // Update weekly activity (mark today as active if any task done today)
+    final weekActivity = List<bool>.from(_user!.weekActivity);
+    final todayWeekday = DateTime.now().weekday - 1; // 0=Mon, 6=Sun
+    if (todayWeekday < 7) {
+      final todayRoadmapDay = activeRoadmap?.todayDay;
+      weekActivity[todayWeekday] =
+          (todayRoadmapDay?.completedTaskCount ?? 0) > 0;
+    }
+
+    // Create updated profile
+    _user = UserProfile(
+      id: _user!.id,
+      name: _user!.name,
+      handle: _user!.handle,
+      email: _user!.email,
+      gantavScore: newScore,
+      streakDays: streak,
+      lessonsCompleted: completedDays,
+      quizzesPassed: _user!.quizzesPassed,
+      weekActivity: weekActivity,
+    );
+
+    // Persist to Firestore async
+    _firestoreService.saveUserProfile(_user!).catchError((_) {});
+    _saveAuthStatus();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
   // COURSE GENERATION
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
 
   Future<void> _generateCourse(String dream) async {
     final course = await ApiService.suggestPath(dream);
@@ -481,22 +540,18 @@ class AppState extends ChangeNotifier {
   }
 
   Future<Course?> generateCourseFromCategory(String prompt) async {
-    _isGeneratingCourse = true;
-    notifyListeners();
-
     try {
       final course = await ApiService.suggestPath(prompt)
-          .timeout(const Duration(seconds: 60), onTimeout: () => null);
+          .timeout(const Duration(seconds: 45), onTimeout: () => null);
       if (course != null) {
         _generatedCourses.add(course);
+        await _saveLocalCourses();
         await _firestoreService.saveActiveCourse(course);
       }
 
-      _isGeneratingCourse = false;
       notifyListeners();
       return course;
     } catch (_) {
-      _isGeneratingCourse = false;
       notifyListeners();
       return null;
     }
@@ -508,13 +563,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> generateCourseInBackground(String prompt, String dreamTopic) async {
+  Future<void> generateCourseInBackground(
+      String prompt, String dreamTopic) async {
     _isGeneratingCourse = true;
-    showNotification('AI is creating your learning path in the background. You will be notified when it is ready!');
+    showNotification(
+        'AI is creating your learning path in the background. You will be notified when it is ready!');
     notifyListeners();
 
     try {
-      final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: prompt);
+      final preFilteredVideos =
+          await YouTubeApiService.fetchHighQualityVideos(topic: prompt);
       final course = await GeminiService.generateLearningPath(
         dream: prompt,
         preFilteredVideos: preFilteredVideos,
@@ -522,12 +580,44 @@ class AppState extends ChangeNotifier {
       if (course != null) {
         await addGeneratedCourse(course);
         await setDream(dreamTopic, courseId: course.id);
-        showNotification('Success: Your new course "${course.title}" is ready in My Courses!');
+        _lastCompletedCourse = course;
+        showNotification(
+            'Success: Your new course "${course.title}" is ready!');
       } else {
-        showNotification('Error: Failed to generate course. Please try again.');
+        showNotification(
+            'Error: Failed to generate course. Please try again.');
       }
     } catch (e) {
-      showNotification('Error: Something went wrong generating your course.');
+      showNotification(
+          'Error: Something went wrong generating your course.');
+    } finally {
+      _isGeneratingCourse = false;
+      notifyListeners();
+    }
+  }
+
+  /// Generate course in background from category subcategory tap
+  /// Returns immediately, notifies via toast when done
+  Future<void> generateCourseInBackgroundFromCategory(String promptHint) async {
+    _isGeneratingCourse = true;
+    notifyListeners();
+
+    try {
+      final course = await ApiService.suggestPath(promptHint)
+          .timeout(const Duration(seconds: 60), onTimeout: () => null);
+      if (course != null) {
+        _generatedCourses.add(course);
+        await _saveLocalCourses();
+        await _firestoreService.saveActiveCourse(course);
+        _lastCompletedCourse = course;
+        showNotification('Success: Your course "${course.title}" is ready!');
+      } else {
+        showNotification(
+            'Error: Could not generate course. AI servers may be busy. Please try again.');
+      }
+    } catch (e) {
+      showNotification(
+          'Error: Something went wrong generating your course.');
     } finally {
       _isGeneratingCourse = false;
       notifyListeners();
@@ -556,20 +646,17 @@ class AppState extends ChangeNotifier {
       'Backend development with Go',
       'Full-stack JavaScript development',
       'Database design and SQL mastery',
-      'Kubernetes and container orchestration',
-      'Natural Language Processing',
-      'Computer vision with OpenCV',
-      'Rust programming language',
-      'TypeScript advanced patterns',
     ];
 
-    final startIdx = ((_courseBatchIndex - 1) * 3) % topics.length;
+    final startIdx =
+        ((_courseBatchIndex - 1) * 2) % topics.length; // Reduced to 2 per batch
     final batch = <Future<Course?>>[];
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
+      // Reduced from 3 to 2 for speed
       final topicIdx = (startIdx + i) % topics.length;
       batch.add(
         ApiService.suggestPath(topics[topicIdx])
-            .timeout(const Duration(seconds: 45), onTimeout: () => null),
+            .timeout(const Duration(seconds: 40), onTimeout: () => null),
       );
     }
 
@@ -585,9 +672,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
   // PERSISTENCE
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
 
   Future<void> _saveAuthStatus() async {
     try {
@@ -602,7 +689,8 @@ class AppState extends ChangeNotifier {
   Future<void> _loadAuthStatus() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _dreamCollectedInOnboarding = prefs.getBool('dream_collected') ?? false;
+      _dreamCollectedInOnboarding =
+          prefs.getBool('dream_collected') ?? false;
       final status = prefs.getString('authStatus');
       if (status == AuthStatus.authenticated.name) {
         _authStatus = AuthStatus.authenticated;
@@ -623,7 +711,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> toggleTheme() async {
-    _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    _themeMode =
+        _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', _themeMode == ThemeMode.dark);
@@ -672,7 +761,8 @@ class AppState extends ChangeNotifier {
   Future<void> _saveLocalCourses() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final data = jsonEncode(_generatedCourses.map((c) => c.toJson()).toList());
+      final data =
+          jsonEncode(_generatedCourses.map((c) => c.toJson()).toList());
       await prefs.setString('local_courses', data);
     } catch (e) {
       debugPrint('Error saving local courses: $e');
@@ -705,13 +795,12 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
-  // ── Local Preferences persistence ─────────────────────────────────────────
-
   Future<void> _saveLocalPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (_preferences != null) {
-        await prefs.setString('user_preferences', jsonEncode(_preferences!.toJson()));
+        await prefs.setString(
+            'user_preferences', jsonEncode(_preferences!.toJson()));
       }
     } catch (_) {}
   }
@@ -725,8 +814,6 @@ class AppState extends ChangeNotifier {
       }
     } catch (_) {}
   }
-
-  // ── Local Roadmaps persistence ────────────────────────────────────────────
 
   Future<void> _saveLocalRoadmaps() async {
     try {
@@ -751,9 +838,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
   // REFRESH & MISC
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
 
   Future<void> refresh() async {
     _isLoading = true;
@@ -771,19 +858,19 @@ class AppState extends ChangeNotifier {
         _generatedCourses.addAll(storedCourses);
       }
 
-      // Load roadmaps
       final firestoreRoadmaps = await _firestoreService.getRoadmaps();
       if (firestoreRoadmaps.isNotEmpty) {
         _roadmaps = firestoreRoadmaps;
         await _saveLocalRoadmaps();
       }
 
-      // Load preferences
       final prefs = await _firestoreService.getUserPreferences();
       if (prefs != null) {
         _preferences = prefs;
       }
 
+      // Fetch pulse for internal state but Bug #6 fix:
+      // We store them but DON'T show them on home screen anymore.
       final pulseResults = await ApiService.fetchPulse('user_001');
       _pulseEvents = pulseResults;
       _courses = [];
@@ -824,6 +911,8 @@ class AppState extends ChangeNotifier {
     return 'Good evening';
   }
 
+  // Bug #6 fix: pulse index retained internally for any future opt-in feature,
+  // but currentPulseEvent is not exposed to home screen anymore.
   int _pulseIndex = 0;
   PulseEvent? get currentPulseEvent {
     if (_pulseEvents.isEmpty) return null;

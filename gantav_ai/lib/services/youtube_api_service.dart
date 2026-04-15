@@ -13,7 +13,7 @@ class YouTubeVideoStats {
   final int likeCount;
   final int commentCount;
   final double engagementRatio;
-  final List<String> topComments; // Added for AI analysis
+  final List<String> topComments;
 
   YouTubeVideoStats({
     required this.id,
@@ -48,8 +48,8 @@ class YouTubeVideoStats {
         viewCount: json['viewCount'],
         likeCount: json['likeCount'],
         commentCount: json['commentCount'],
-        engagementRatio: json['engagementRatio'] is int 
-            ? (json['engagementRatio'] as int).toDouble() 
+        engagementRatio: json['engagementRatio'] is int
+            ? (json['engagementRatio'] as int).toDouble()
             : (json['engagementRatio'] ?? 0.0),
         topComments: List<String>.from(json['topComments'] ?? []),
       );
@@ -59,74 +59,55 @@ class YouTubeApiService {
   static const String _baseUrl = 'https://www.googleapis.com/youtube/v3';
   static const int _cacheDurationDays = 7;
 
+  /// Fetch high-quality YouTube videos for a topic.
+  /// [language] — 'Hindi' or 'English' — determines which language videos to prioritize.
+  /// This does NOT affect the roadmap UI language; it only changes which videos are fetched.
   static Future<List<YouTubeVideoStats>> fetchHighQualityVideos({
     required String topic,
-    String level = '',
-    int maxResults = 25,
+    String language = 'English',
+    int maxResults = 15, // Reduced from 25 for faster response
   }) async {
     if (!ApiConfig.hasYoutube) return [];
 
-    final query = '$topic $level tutorial'.trim();
-    final cacheKey = 'yt_search_v2_${query.toLowerCase().replaceAll(" ", "_")}';
+    // Build a language-aware search query
+    final langQuery = language == 'Hindi' ? '$topic in Hindi tutorial' : '$topic tutorial';
+    final cacheKey = 'yt_v3_${langQuery.toLowerCase().replaceAll(' ', '_')}';
 
     final cachedResult = await _getCachedVideos(cacheKey);
     if (cachedResult != null && cachedResult.isNotEmpty) return cachedResult;
 
-    // 1. Search for IDs
-    final videoIds = await _getVideoIdsFromSearch(query, maxResults);
+    // 1. Search for IDs with language filter
+    final videoIds = await _getVideoIdsFromSearch(
+      langQuery,
+      maxResults,
+      relevanceLanguage: language == 'Hindi' ? 'hi' : 'en',
+    );
     if (videoIds.isEmpty) return [];
 
-    // 2. Get Stats
+    // 2. Get Stats — batch call is fast
     final videos = await _getVideoStats(videoIds);
 
-    // 3. Filter strictly by ratio (> 1.5%) and minimum views (> 5000)
+    // 3. Filter by quality (engagement > 1.0% and > 3000 views for wider net)
     final List<YouTubeVideoStats> filtered = videos.where((v) {
-      return v.viewCount > 5000 && v.engagementRatio > 1.5;
+      return v.viewCount > 3000 && v.engagementRatio > 1.0;
     }).toList();
 
     filtered.sort((a, b) => b.engagementRatio.compareTo(a.engagementRatio));
-    final topCandidates = filtered.take(10).toList(); // Take top 10 to save API limits
+    // Take top 8 — skip comment fetching for speed (comments slow things down a lot)
+    final topVideos = filtered.take(8).toList();
 
-    // 4. Fetch comments for ONLY the top candidates (reduces quota usage)
-    List<YouTubeVideoStats> finalVideosWithComments = [];
-    for (var video in topCandidates) {
-      final comments = await _getTopComments(video.id);
-      finalVideosWithComments.add(YouTubeVideoStats(
-        id: video.id,
-        title: video.title,
-        channelTitle: video.channelTitle,
-        durationText: video.durationText,
-        viewCount: video.viewCount,
-        likeCount: video.likeCount,
-        commentCount: video.commentCount,
-        engagementRatio: video.engagementRatio,
-        topComments: comments,
-      ));
+    if (topVideos.isNotEmpty) {
+      await _cacheVideos(cacheKey, topVideos);
     }
 
-    if (finalVideosWithComments.isNotEmpty) {
-      await _cacheVideos(cacheKey, finalVideosWithComments);
-    }
-
-    return finalVideosWithComments;
+    return topVideos;
   }
 
-  static Future<List<String>> _getTopComments(String videoId) async {
-    try {
-      final uri = Uri.parse('$_baseUrl/commentThreads?part=snippet&videoId=$videoId&maxResults=5&order=relevance&key=${ApiConfig.youtubeApiKey}');
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final items = data['items'] as List;
-        return items.map((item) => item['snippet']['topLevelComment']['snippet']['textOriginal'] as String).toList();
-      }
-    } catch (e) {
-      debugPrint('[YouTube] Comment fetch error: $e');
-    }
-    return [];
-  }
-
-  static Future<List<String>> _getVideoIdsFromSearch(String query, int maxResults) async {
+  static Future<List<String>> _getVideoIdsFromSearch(
+    String query,
+    int maxResults, {
+    String relevanceLanguage = 'en',
+  }) async {
     try {
       final uri = Uri.parse(
         '$_baseUrl/search?'
@@ -134,17 +115,17 @@ class YouTubeApiService {
         '&maxResults=$maxResults'
         '&q=${Uri.encodeComponent(query)}'
         '&type=video'
-        '&relevanceLanguage=en'
+        '&relevanceLanguage=$relevanceLanguage'
         '&key=${ApiConfig.youtubeApiKey}',
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final items = data['items'] as List;
         return items.map((item) => item['id']['videoId'] as String).toList();
       } else {
-        debugPrint('[YouTube] Search error: ${response.body}');
+        debugPrint('[YouTube] Search error: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('[YouTube] Search exception: $e');
@@ -162,7 +143,7 @@ class YouTubeApiService {
         '&key=${ApiConfig.youtubeApiKey}',
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 15));
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final items = data['items'] as List;
@@ -178,9 +159,8 @@ class YouTubeApiService {
           final comments = double.tryParse(stats['commentCount']?.toString() ?? '0') ?? 0;
 
           final ratio = views > 0 ? (likes / views) * 100 : 0.0;
-          
           final durationIso = contentDetails['duration'] as String? ?? 'PT0M0S';
-          
+
           result.add(YouTubeVideoStats(
             id: item['id'],
             title: snippet['title'] ?? 'Unknown',
@@ -201,7 +181,6 @@ class YouTubeApiService {
   }
 
   static String _parseDuration(String isoDuration) {
-    // Basic ISO 8601 duration parser for YouTube (e.g. PT1H2M10S -> 1:02:10)
     final regExp = RegExp(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?');
     final match = regExp.firstMatch(isoDuration);
     if (match == null) return '0:00';
@@ -225,21 +204,18 @@ class YouTubeApiService {
     return res;
   }
 
-  // ── Local Caching ──────────────────────────────────────────────────────────
-
   static Future<List<YouTubeVideoStats>?> _getCachedVideos(String key) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cacheData = prefs.getString(key);
       final cacheTime = prefs.getInt('${key}_time');
-      
+
       if (cacheData != null && cacheTime != null) {
         final cacheDate = DateTime.fromMillisecondsSinceEpoch(cacheTime);
         if (DateTime.now().difference(cacheDate).inDays < _cacheDurationDays) {
           final List<dynamic> jsonList = json.decode(cacheData);
           return jsonList.map((j) => YouTubeVideoStats.fromJson(j)).toList();
         } else {
-          // Cache expired
           await prefs.remove(key);
           await prefs.remove('${key}_time');
         }

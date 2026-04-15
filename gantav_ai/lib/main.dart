@@ -10,6 +10,7 @@ import 'screens/profile_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/roadmap_generation_screen.dart';
+import 'screens/course_detail_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
@@ -405,35 +406,59 @@ class _AppShellState extends State<AppShell> {
     _NavItem(Icons.person_rounded, Icons.person_outline, 'Profile'),
   ];
 
+  // Save reference to avoid accessing context in dispose()
+  AppState? _appState;
+
   @override
   void initState() {
     super.initState();
     // Use post frame callback to set up the listener so context is fully constructed
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final appState = context.read<AppState>();
-      appState.addListener(_onStateChange);
+      _appState = context.read<AppState>();
+      _appState?.addListener(_onStateChange);
     });
   }
 
   @override
   void dispose() {
-    final appState = context.read<AppState>();
-    appState.removeListener(_onStateChange);
+    // Use saved reference instead of context.read (fixes deactivated widget crash)
+    _appState?.removeListener(_onStateChange);
+    _appState = null;
     super.dispose();
   }
 
   void _onStateChange() {
-    if (!mounted) return;
-    final appState = context.read<AppState>();
-    if (appState.notificationMessage != null) {
-      final msg = appState.notificationMessage!;
-      appState.clearNotification();
+    if (!mounted || _appState == null) return;
+    if (_appState!.notificationMessage != null) {
+      final msg = _appState!.notificationMessage!;
+      final completedCourse = _appState!.lastCompletedCourse;
+      _appState!.clearNotification();
+
+      // Show toast with "View Course" action if course was generated
+      final isSuccess = msg.startsWith('Success:');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(msg, style: GoogleFonts.dmSans()),
+          content: Text(
+            msg.replaceFirst('Success: ', '').replaceFirst('Error: ', ''),
+            style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13),
+          ),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          backgroundColor: AppColors.violet,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          backgroundColor: isSuccess ? AppColors.teal : AppColors.violet,
+          duration: Duration(seconds: isSuccess ? 6 : 3),
+          action: (isSuccess && completedCourse != null)
+              ? SnackBarAction(
+                  label: 'View Course',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CourseDetailScreen(course: completedCourse),
+                      ),
+                    );
+                  },
+                )
+              : null,
         ),
       );
     }

@@ -350,7 +350,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       children: [
         if (showTopBar)
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+            padding: const EdgeInsets.fromLTRB(4, 4, 8, 0),
             child: Row(
               children: [
                 IconButton(
@@ -358,6 +358,16 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                   icon: const Icon(Icons.keyboard_arrow_down, size: 28),
                 ),
                 const Spacer(),
+                // Settings gear for speed/quality/subtitles
+                IconButton(
+                  onPressed: () => _ytKey.currentState?.showSettingsSheet(),
+                  icon: Icon(
+                    Icons.settings_rounded,
+                    size: 20,
+                    color: isDark ? Colors.white54 : Colors.black45,
+                  ),
+                  tooltip: 'Video settings',
+                ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
@@ -588,12 +598,29 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           return GestureDetector(
             onTap: () {
               Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => LessonPlayerScreen(
+                PageRouteBuilder(
+                  pageBuilder: (_, __, ___) => LessonPlayerScreen(
                     lesson: lesson,
                     module: widget.module,
                     course: widget.course,
                   ),
+                  transitionDuration: const Duration(milliseconds: 300),
+                  reverseTransitionDuration: const Duration(milliseconds: 200),
+                  transitionsBuilder: (_, animation, __, child) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.05, 0),
+                          end: Offset.zero,
+                        ).animate(CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                        )),
+                        child: child,
+                      ),
+                    );
+                  },
                 ),
               );
             },
