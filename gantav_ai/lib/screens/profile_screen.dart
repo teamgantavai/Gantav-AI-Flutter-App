@@ -10,8 +10,11 @@ import 'package:image_picker/image_picker.dart';
 import 'roadmap_screen.dart';
 import 'course_detail_screen.dart';
 import '../services/auth_service.dart';
+import '../services/certificate_service.dart';
 import 'admin_panel_screen.dart';
+import 'certificate_screen.dart';
 import '../models/models.dart';
+import '../models/certificate.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -28,7 +31,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    // 4 tabs: Courses, Favorites, Certificates, Badges
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -38,7 +42,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    final XFile? image =
+        await _picker.pickImage(source: ImageSource.gallery);
     if (image != null && mounted) {
       context.read<AppState>().updateProfileImage(image.path);
     }
@@ -89,8 +94,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _GeneratedCoursesTab(appState: appState, isDark: isDark),
+                    _GeneratedCoursesTab(
+                        appState: appState, isDark: isDark),
                     _FavoritesTab(appState: appState, isDark: isDark),
+                    _CertificatesTab(isDark: isDark),
                     _AchievementsTab(user: user, isDark: isDark),
                   ],
                 ),
@@ -106,27 +113,32 @@ class _ProfileScreenState extends State<ProfileScreen>
       BuildContext context, AppState appState, bool isDark) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      backgroundColor:
+          isDark ? AppColors.darkSurface : AppColors.lightSurface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => _SettingsSheet(
-          appState: appState,
-          isDark: isDark,
-          onEditProfile: () {
-            Navigator.pop(ctx);
-            _showEditProfileSheet(context, appState, isDark);
-          }),
+        appState: appState,
+        isDark: isDark,
+        onEditProfile: () {
+          Navigator.pop(ctx);
+          _showEditProfileSheet(context, appState, isDark);
+        },
+      ),
     );
   }
 
   void _showEditProfileSheet(
       BuildContext context, AppState appState, bool isDark) {
-    final nameCtrl = TextEditingController(text: appState.user?.name ?? '');
-    final handleCtrl = TextEditingController(text: appState.user?.handle ?? '');
+    final nameCtrl =
+        TextEditingController(text: appState.user?.name ?? '');
+    final handleCtrl =
+        TextEditingController(text: appState.user?.handle ?? '');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      backgroundColor:
+          isDark ? AppColors.darkSurface : AppColors.lightSurface,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => Padding(
@@ -139,11 +151,13 @@ class _ProfileScreenState extends State<ProfileScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Edit Profile', style: Theme.of(context).textTheme.titleLarge),
+            Text('Edit Profile',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 20),
             TextField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Full Name')),
+                decoration:
+                    const InputDecoration(labelText: 'Full Name')),
             const SizedBox(height: 16),
             TextField(
                 controller: handleCtrl,
@@ -179,12 +193,13 @@ class _ProfileHero extends StatelessWidget {
   final VoidCallback onAvatarTap;
   final VoidCallback onSettingsTap;
 
-  const _ProfileHero(
-      {required this.user,
-      required this.appState,
-      required this.isDark,
-      required this.onAvatarTap,
-      required this.onSettingsTap});
+  const _ProfileHero({
+    required this.user,
+    required this.appState,
+    required this.isDark,
+    required this.onAvatarTap,
+    required this.onSettingsTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -195,14 +210,18 @@ class _ProfileHero extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDark
-              ? [AppColors.violet.withValues(alpha: 0.15), AppColors.darkSurface]
+              ? [
+                  AppColors.violet.withValues(alpha: 0.15),
+                  AppColors.darkSurface
+                ]
               : [
                   AppColors.violet.withValues(alpha: 0.05),
                   AppColors.lightSurface
                 ],
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
+        border:
+            Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -212,13 +231,13 @@ class _ProfileHero extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
                     color: AppColors.gold.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(100),
-                    border:
-                        Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+                    border: Border.all(
+                        color: AppColors.gold.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -251,8 +270,9 @@ class _ProfileHero extends StatelessWidget {
                     ),
                     child: Icon(Icons.settings_outlined,
                         size: 18,
-                        color:
-                            isDark ? AppColors.textLight : AppColors.textDark),
+                        color: isDark
+                            ? AppColors.textLight
+                            : AppColors.textDark),
                   ),
                 ),
               ],
@@ -268,7 +288,10 @@ class _ProfileHero extends StatelessWidget {
                     height: 84,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                          colors: [AppColors.violet, AppColors.violetDark],
+                          colors: [
+                            AppColors.violet,
+                            AppColors.violetDark
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight),
                       shape: BoxShape.circle,
@@ -277,7 +300,8 @@ class _ProfileHero extends StatelessWidget {
                           width: 3),
                       image: appState.profileImagePath != null
                           ? DecorationImage(
-                              image: FileImage(File(appState.profileImagePath!)),
+                              image: FileImage(
+                                  File(appState.profileImagePath!)),
                               fit: BoxFit.cover)
                           : null,
                     ),
@@ -293,7 +317,8 @@ class _ProfileHero extends StatelessWidget {
                   Container(
                       padding: const EdgeInsets.all(5),
                       decoration: const BoxDecoration(
-                          color: AppColors.violet, shape: BoxShape.circle),
+                          color: AppColors.violet,
+                          shape: BoxShape.circle),
                       child: const Icon(Icons.camera_alt,
                           color: Colors.white, size: 12)),
                 ],
@@ -304,7 +329,9 @@ class _ProfileHero extends StatelessWidget {
                 style: GoogleFonts.dmSans(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: isDark ? AppColors.textLight : AppColors.textDark)),
+                    color: isDark
+                        ? AppColors.textLight
+                        : AppColors.textDark)),
             const SizedBox(height: 2),
             Text('@${user.handle}',
                 style: GoogleFonts.dmMono(
@@ -313,12 +340,14 @@ class _ProfileHero extends StatelessWidget {
             if (appState.activeRoadmap != null)
               Container(
                 margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                     color: AppColors.violet.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                        color: AppColors.violet.withValues(alpha: 0.2))),
+                        color:
+                            AppColors.violet.withValues(alpha: 0.2))),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -352,8 +381,8 @@ class _ProfileHero extends StatelessWidget {
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.violet,
-                  side:
-                      BorderSide(color: AppColors.violet.withValues(alpha: 0.4)),
+                  side: BorderSide(
+                      color: AppColors.violet.withValues(alpha: 0.4)),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                   padding: EdgeInsets.zero,
@@ -365,7 +394,8 @@ class _ProfileHero extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text('Share Profile',
                         style: GoogleFonts.dmSans(
-                            fontSize: 13, fontWeight: FontWeight.w600)),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -442,10 +472,12 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(value,
                 style: GoogleFonts.dmMono(
-                    fontSize: 20, fontWeight: FontWeight.w700, color: color)),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: color)),
             Text(label,
-                style:
-                    GoogleFonts.dmSans(fontSize: 11, color: AppColors.textMuted)),
+                style: GoogleFonts.dmSans(
+                    fontSize: 11, color: AppColors.textMuted)),
           ],
         ),
       ),
@@ -458,10 +490,12 @@ class _StatCard extends StatelessWidget {
 class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   final TabController tabController;
   final bool isDark;
-  const _TabBarDelegate({required this.tabController, required this.isDark});
+  const _TabBarDelegate(
+      {required this.tabController, required this.isDark});
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
       color: isDark ? AppColors.darkBg : AppColors.lightBg,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -474,17 +508,19 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
         child: TabBar(
           controller: tabController,
           indicator: BoxDecoration(
-              color: AppColors.violet, borderRadius: BorderRadius.circular(10)),
+              color: AppColors.violet,
+              borderRadius: BorderRadius.circular(10)),
           indicatorSize: TabBarIndicatorSize.tab,
           dividerColor: Colors.transparent,
           labelColor: Colors.white,
           unselectedLabelColor: AppColors.textMuted,
           labelStyle:
-              GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600),
+              GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600),
           indicatorPadding: const EdgeInsets.all(3),
           tabs: const [
             Tab(text: 'Courses'),
             Tab(text: 'Favorites'),
+            Tab(text: 'Certs'),
             Tab(text: 'Badges'),
           ],
         ),
@@ -500,124 +536,196 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
 }
 
-// ─── Roadmaps Tab ─────────────────────────────────────────────────────────────
+// ─── Certificates Tab ─────────────────────────────────────────────────────────
 
-class _ActivePathsTab extends StatelessWidget {
-  final AppState appState;
+class _CertificatesTab extends StatefulWidget {
   final bool isDark;
-  const _ActivePathsTab({required this.appState, required this.isDark});
+  const _CertificatesTab({required this.isDark});
+
+  @override
+  State<_CertificatesTab> createState() => _CertificatesTabState();
+}
+
+class _CertificatesTabState extends State<_CertificatesTab> {
+  List<Certificate> _certificates = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCertificates();
+  }
+
+  Future<void> _loadCertificates() async {
+    final certs = await CertificateService.getMyCertificates();
+    if (mounted) {
+      setState(() {
+        _certificates = certs;
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final roadmaps = appState.roadmaps;
+    if (_loading) {
+      return const Center(
+          child: CircularProgressIndicator(color: AppColors.violet));
+    }
 
-    if (roadmaps.isEmpty) {
+    if (_certificates.isEmpty) {
       return SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Container(
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(vertical: 40),
+          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.route_outlined,
-                  color: AppColors.textMuted, size: 56),
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                    color: AppColors.gold.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20)),
+                child: const Icon(Icons.workspace_premium_outlined,
+                    color: AppColors.gold, size: 32),
+              ),
               const SizedBox(height: 16),
-              Text('No roadmaps yet',
+              Text('No certificates yet',
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              Text('Complete onboarding to get your first roadmap',
-                  style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                'Complete a course to earn your certificate.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(height: 1.5),
+              ),
             ],
           ),
         ),
       );
     }
 
-    return ListView(
+    return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       physics: const BouncingScrollPhysics(),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text('My Roadmaps',
-              style: GoogleFonts.dmSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? AppColors.textLight : AppColors.textDark)),
-        ),
-        ...roadmaps.map((roadmap) => GestureDetector(
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => RoadmapScreen(roadmap: roadmap))),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+      itemCount: _certificates.length,
+      itemBuilder: (context, index) {
+        final cert = _certificates[index];
+        return GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+                builder: (_) => CertificateScreen(certificate: cert)),
+          ),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color:
+                  widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                  color: AppColors.gold.withValues(alpha: 0.3)),
+              boxShadow: [
+                BoxShadow(
+                    color: AppColors.gold.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4))
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: AppColors.gold.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: AppColors.gold.withValues(alpha: 0.3)),
+                  ),
+                  child: const Icon(Icons.workspace_premium_rounded,
+                      color: AppColors.gold, size: 28),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                              color: AppColors.violet.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10)),
-                          child: const Icon(Icons.route_rounded,
-                              size: 20, color: AppColors.violet),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(roadmap.title,
-                                  style: GoogleFonts.dmSans(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark
-                                          ? AppColors.textLight
-                                          : AppColors.textDark),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
-                              Text(
-                                  '${roadmap.completedDays}/${roadmap.totalDays} days • ${roadmap.completedTasks}/${roadmap.totalTasks} tasks',
-                                  style: GoogleFonts.dmSans(
-                                      fontSize: 11, color: AppColors.textMuted)),
-                            ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        cert.courseTitle,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: widget.isDark
+                                ? AppColors.textLight
+                                : AppColors.textDark),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.gold.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(cert.courseCategory,
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.gold)),
                           ),
-                        ),
-                        Text('${(roadmap.taskProgress * 100).round()}%',
-                            style: GoogleFonts.dmMono(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.progressColor(
-                                    roadmap.taskProgress))),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    SimpleProgressBar(progress: roadmap.taskProgress, height: 6),
-                  ],
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatDate(cert.issuedAt),
+                            style: GoogleFonts.dmSans(
+                                fontSize: 11, color: AppColors.textMuted),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        cert.verificationCode,
+                        style: GoogleFonts.dmMono(
+                            fontSize: 10,
+                            color: AppColors.textMuted.withValues(alpha: 0.7)),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            )),
-      ],
+                const Icon(Icons.chevron_right,
+                    size: 18, color: AppColors.textMuted),
+              ],
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  String _formatDate(DateTime dt) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 }
 
-// ─── My Generated Courses Tab ─────────────────────────────────────────────────
+// ─── Generated Courses Tab ─────────────────────────────────────────────────────
 
 class _GeneratedCoursesTab extends StatelessWidget {
   final AppState appState;
   final bool isDark;
-  const _GeneratedCoursesTab({required this.appState, required this.isDark});
+  const _GeneratedCoursesTab(
+      {required this.appState, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +736,8 @@ class _GeneratedCoursesTab extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         child: Container(
           alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+          padding:
+              const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -647,13 +756,17 @@ class _GeneratedCoursesTab extends StatelessWidget {
               const SizedBox(height: 8),
               Text('Generate your first AI course from the Explore tab',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(height: 1.5)),
               const SizedBox(height: 20),
               ElevatedButton.icon(
                 onPressed: () => appState.setTabIndex(1),
                 icon: const Icon(Icons.explore_outlined, size: 16),
                 label: Text('Go to Explore',
-                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+                    style:
+                        GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.violet,
                   foregroundColor: Colors.white,
@@ -677,15 +790,18 @@ class _GeneratedCoursesTab extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 16),
             child: Row(
               children: [
-                Text('${courses.length} Course${courses.length != 1 ? 's' : ''}',
+                Text(
+                    '${courses.length} Course${courses.length != 1 ? 's' : ''}',
                     style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.textLight : AppColors.textDark)),
+                        color: isDark
+                            ? AppColors.textLight
+                            : AppColors.textDark)),
                 const Spacer(),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                       color: AppColors.violet.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(100)),
@@ -709,25 +825,29 @@ class _GeneratedCoursesTab extends StatelessWidget {
         }
 
         final course = courses[index - 1];
-        final displayTitle = course.title.replaceAll('\$dream', course.category);
+        final displayTitle =
+            course.title.replaceAll('\$dream', course.category);
 
         return GestureDetector(
-          onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course))),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => CourseDetailScreen(course: course))),
           child: Container(
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              color: isDark
+                  ? AppColors.darkSurface
+                  : AppColors.lightSurface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                  color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                  color: isDark
+                      ? AppColors.darkBorder
+                      : AppColors.lightBorder),
             ),
             child: Row(
               children: [
-                // Thumbnail
                 ClipRRect(
-                  borderRadius:
-                      const BorderRadius.horizontal(left: Radius.circular(16)),
+                  borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(16)),
                   child: SizedBox(
                     width: 90,
                     height: 75,
@@ -750,12 +870,12 @@ class _GeneratedCoursesTab extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Category pill
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                              color: AppColors.violet.withValues(alpha: 0.12),
+                              color:
+                                  AppColors.violet.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(100)),
                           child: Text(course.category,
                               style: GoogleFonts.dmSans(
@@ -783,7 +903,8 @@ class _GeneratedCoursesTab extends StatelessWidget {
                             const SizedBox(width: 4),
                             Text('${course.totalLessons} lessons',
                                 style: GoogleFonts.dmSans(
-                                    fontSize: 11, color: AppColors.textMuted)),
+                                    fontSize: 11,
+                                    color: AppColors.textMuted)),
                             const SizedBox(width: 10),
                             const Icon(Icons.star_rounded,
                                 size: 12, color: AppColors.gold),
@@ -797,7 +918,8 @@ class _GeneratedCoursesTab extends StatelessWidget {
                         ),
                         if (course.isInProgress) ...[
                           const SizedBox(height: 6),
-                          SimpleProgressBar(progress: course.progress, height: 3),
+                          SimpleProgressBar(
+                              progress: course.progress, height: 3),
                         ],
                       ],
                     ),
@@ -862,6 +984,13 @@ class _AchievementsTab extends StatelessWidget {
         'earned': user.gantavScore >= 1000,
         'color': AppColors.gold
       },
+      {
+        'icon': Icons.workspace_premium_outlined,
+        'title': 'Certified',
+        'desc': 'Earned first certificate',
+        'earned': user.lessonsCompleted >= 10,
+        'color': AppColors.gold,
+      },
     ];
 
     return GridView.builder(
@@ -887,7 +1016,9 @@ class _AchievementsTab extends StatelessWidget {
             border: Border.all(
                 color: earned
                     ? color.withValues(alpha: 0.3)
-                    : isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                    : isDark
+                        ? AppColors.darkBorder
+                        : AppColors.lightBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -900,17 +1031,22 @@ class _AchievementsTab extends StatelessWidget {
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: earned
-                          ? (isDark ? AppColors.textLight : AppColors.textDark)
+                          ? (isDark
+                              ? AppColors.textLight
+                              : AppColors.textDark)
                           : AppColors.textMuted)),
               Text(a['desc'] as String,
                   style: GoogleFonts.dmSans(
-                      fontSize: 11, color: AppColors.textMuted, height: 1.3)),
+                      fontSize: 11,
+                      color: AppColors.textMuted,
+                      height: 1.3)),
               if (!earned) ...[
                 const SizedBox(height: 6),
                 Text('Locked',
                     style: GoogleFonts.dmSans(
                         fontSize: 10,
-                        color: AppColors.textMuted.withValues(alpha: 0.6)))
+                        color:
+                            AppColors.textMuted.withValues(alpha: 0.6)))
               ],
             ],
           ),
@@ -927,7 +1063,9 @@ class _SettingsSheet extends StatelessWidget {
   final bool isDark;
   final VoidCallback onEditProfile;
   const _SettingsSheet(
-      {required this.appState, required this.isDark, required this.onEditProfile});
+      {required this.appState,
+      required this.isDark,
+      required this.onEditProfile});
 
   @override
   Widget build(BuildContext context) {
@@ -943,7 +1081,8 @@ class _SettingsSheet extends StatelessWidget {
                   color: AppColors.textMuted.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2))),
           const SizedBox(height: 20),
-          Text('Settings', style: Theme.of(context).textTheme.titleLarge),
+          Text('Settings',
+              style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 20),
           _SettingsTile(
               icon: Icons.edit_outlined,
@@ -951,8 +1090,12 @@ class _SettingsSheet extends StatelessWidget {
               onTap: onEditProfile,
               isDark: isDark),
           _SettingsTile(
-            icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-            title: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+            icon: isDark
+                ? Icons.light_mode_outlined
+                : Icons.dark_mode_outlined,
+            title: isDark
+                ? 'Switch to Light Mode'
+                : 'Switch to Dark Mode',
             onTap: () {
               appState.toggleTheme();
               Navigator.pop(context);
@@ -1020,7 +1163,8 @@ class _SettingsTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final finalColor = isDestructive
         ? AppColors.error
-        : color ?? (isDark ? AppColors.textLight : AppColors.textDark);
+        : color ??
+            (isDark ? AppColors.textLight : AppColors.textDark);
     return ListTile(
       leading: Container(
         width: 38,
@@ -1036,17 +1180,20 @@ class _SettingsTile extends StatelessWidget {
       ),
       title: Text(title,
           style: GoogleFonts.dmSans(
-              fontSize: 15, fontWeight: FontWeight.w500, color: finalColor)),
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: finalColor)),
       trailing: isDestructive
           ? null
-          : const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+          : const Icon(Icons.chevron_right,
+              size: 18, color: AppColors.textMuted),
       contentPadding: EdgeInsets.zero,
       onTap: onTap,
     );
   }
 }
 
-// ─── Favorite Courses Tab ──────────────────────────────────────────────────
+// ─── Favorites Tab ──────────────────────────────────────────────────────
 
 class _FavoritesTab extends StatelessWidget {
   final AppState appState;
@@ -1063,12 +1210,14 @@ class _FavoritesTab extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.favorite_border, size: 48, color: AppColors.textMuted),
+            const Icon(Icons.favorite_border,
+                size: 48, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            Text('No favorites yet', style: Theme.of(context).textTheme.titleMedium),
+            Text('No favorites yet',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            Text('Saved courses and starred videos will appear here.', 
-              style: Theme.of(context).textTheme.bodySmall),
+            Text('Saved courses and starred videos will appear here.',
+                style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       );
@@ -1085,9 +1234,12 @@ class _FavoritesTab extends StatelessWidget {
                 style: GoogleFonts.dmSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.textLight : AppColors.textDark)),
+                    color: isDark
+                        ? AppColors.textLight
+                        : AppColors.textDark)),
           ),
-          ...favorites.map((c) => _CourseListTile(course: c, isDark: isDark)),
+          ...favorites.map((c) =>
+              _CourseListTile(course: c, isDark: isDark)),
         ],
         if (starredLessons.isNotEmpty) ...[
           Padding(
@@ -1096,9 +1248,12 @@ class _FavoritesTab extends StatelessWidget {
                 style: GoogleFonts.dmSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.textLight : AppColors.textDark)),
+                    color: isDark
+                        ? AppColors.textLight
+                        : AppColors.textDark)),
           ),
-          ...starredLessons.map((l) => _LessonListTile(lesson: l, isDark: isDark)),
+          ...starredLessons.map((l) =>
+              _LessonListTile(lesson: l, isDark: isDark)),
         ],
       ],
     );
@@ -1112,17 +1267,15 @@ class _LessonListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // We need the course and module to open LessonPlayerScreen
-    // For simplicity in this view, we might just show the video or warn
-    // But better if we can find them.
-    // For now, let's just make it a beautiful card.
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(
+            color:
+                isDark ? AppColors.darkBorder : AppColors.lightBorder),
       ),
       child: Row(
         children: [
@@ -1130,8 +1283,11 @@ class _LessonListTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             child: Image.network(
               'https://img.youtube.com/vi/${lesson.youtubeVideoId}/0.jpg',
-              width: 100, height: 60, fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(color: AppColors.darkSurface2, width: 100, height: 60),
+              width: 100,
+              height: 60,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                  color: AppColors.darkSurface2, width: 100, height: 60),
             ),
           ),
           const SizedBox(width: 12),
@@ -1139,15 +1295,22 @@ class _LessonListTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(lesson.title, 
-                  style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 13),
-                  maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(lesson.title,
+                    style: GoogleFonts.dmSans(
+                        fontWeight: FontWeight.bold, fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 4),
-                Text(lesson.duration, style: GoogleFonts.dmMono(color: AppColors.violet, fontSize: 10, fontWeight: FontWeight.bold)),
+                Text(lesson.duration,
+                    style: GoogleFonts.dmMono(
+                        color: AppColors.violet,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
               ],
             ),
           ),
-          const Icon(Icons.star_rounded, size: 18, color: AppColors.gold),
+          const Icon(Icons.star_rounded,
+              size: 18, color: AppColors.gold),
         ],
       ),
     );
@@ -1162,35 +1325,48 @@ class _CourseListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course))),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => CourseDetailScreen(course: course))),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+          color:
+              isDark ? AppColors.darkSurface : AppColors.lightSurface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+          border: Border.all(
+              color:
+                  isDark ? AppColors.darkBorder : AppColors.lightBorder),
         ),
         child: Row(
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(course.thumbnailUrl, width: 80, height: 60, fit: BoxFit.cover),
+              child: Image.network(course.thumbnailUrl,
+                  width: 80, height: 60, fit: BoxFit.cover),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(course.title.replaceAll('\$dream', course.category), 
-                    style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 13),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                  Text(course.category, style: GoogleFonts.dmSans(color: AppColors.violet, fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text(
+                      course.title
+                          .replaceAll('\$dream', course.category),
+                      style: GoogleFonts.dmSans(
+                          fontWeight: FontWeight.bold, fontSize: 13),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  Text(course.category,
+                      style: GoogleFonts.dmSans(
+                          color: AppColors.violet,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+            const Icon(Icons.chevron_right,
+                size: 18, color: AppColors.textMuted),
           ],
         ),
       ),

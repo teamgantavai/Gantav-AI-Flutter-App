@@ -10,7 +10,9 @@ import '../widgets/widgets.dart';
 import 'course_detail_screen.dart';
 import 'roadmap_screen.dart';
 import 'lesson_player_screen.dart';
+import 'exam_detail_screen.dart';
 import '../models/models.dart';
+import '../models/exam_models.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -44,7 +46,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadRecommendations({bool reset = false}) async {
     if (reset) {
-      if (mounted) setState(() { _loadingRecs = true; _recPage = 0; _seenVideoIds.clear(); });
+      if (mounted) {
+        setState(() {
+          _loadingRecs = true;
+          _recPage = 0;
+          _seenVideoIds.clear();
+        });
+      }
     }
 
     final appState = context.read<AppState>();
@@ -79,7 +87,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadMoreRecommendations() async {
     if (_loadingMoreRecs) return;
-    if (mounted) setState(() { _loadingMoreRecs = true; _recPage++; });
+    if (mounted) {
+      setState(() {
+        _loadingMoreRecs = true;
+        _recPage++;
+      });
+    }
     await _loadRecommendations(reset: false);
   }
 
@@ -153,6 +166,52 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 12),
                       StatChip(icon: Icons.local_fire_department, label: 'Day streak', value: '${user.streakDays}', color: AppColors.teal),
                     ],
+                  ),
+                ),
+              ),
+
+              // ─── Exam Prep Grid ─────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                  child: SectionHeader(
+                    title: 'Exam Preparation',
+                    actionText: 'All exams',
+                    onAction: () {},
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: Text(
+                    'Timed mock tests with AI-generated PYQ-style questions (2024–2026 pattern).',
+                    style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted, height: 1.4),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                sliver: SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: isLandscape ? 4 : 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 1.15,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final exam = ExamCategory.catalog()[index];
+                      return _ExamCard(
+                        exam: exam,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ExamDetailScreen(exam: exam),
+                          ),
+                        ),
+                      );
+                    },
+                    childCount: ExamCategory.catalog().length,
                   ),
                 ),
               ),
@@ -492,6 +551,132 @@ class _RoadmapCard extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Exam Card ───────────────────────────────────────────────────────────────
+
+class _ExamCard extends StatelessWidget {
+  final ExamCategory exam;
+  final VoidCallback onTap;
+  const _ExamCard({required this.exam, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: exam.gradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: exam.gradient.first.withValues(alpha: 0.28),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(exam.icon, color: Colors.white, size: 20),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        exam.difficulty,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      exam.name,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      exam.tagline,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.menu_book_rounded, size: 11, color: Colors.white.withValues(alpha: 0.8)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${exam.subjects.length} subjects',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Icon(Icons.assignment_rounded, size: 11, color: Colors.white.withValues(alpha: 0.8)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${exam.mockTestCount}+ tests',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

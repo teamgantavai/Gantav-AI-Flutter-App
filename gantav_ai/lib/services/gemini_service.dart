@@ -5,26 +5,41 @@ import '../models/models.dart';
 import 'api_config.dart';
 import 'youtube_api_service.dart';
 
-/// Multi-provider AI Service with automatic fallback and performance optimizations.
+/// Multi-provider AI Service with automatic fallback, rate limiting, and HuggingFace support.
 class GeminiService {
   static final Map<AIProvider, DateTime> _rateLimitExpirations = {};
+  static final Map<AIProvider, int> _consecutiveFailures = {};
 
   static bool _isRateLimited(AIProvider provider) {
-    if (!_rateLimitExpirations.containsKey(provider)) return false;
-    if (DateTime.now().isAfter(_rateLimitExpirations[provider]!)) {
+    final expiry = _rateLimitExpirations[provider];
+    if (expiry == null) return false;
+    if (DateTime.now().isAfter(expiry)) {
       _rateLimitExpirations.remove(provider);
+      _consecutiveFailures.remove(provider);
       return false;
     }
     return true;
   }
 
-  static void _setRateLimited(AIProvider provider) {
-    debugPrint('[AI] ! ${provider.name} rate limited. Cooling down for 1 min.');
+  static void _setRateLimited(AIProvider provider, {int minutes = 2}) {
+    debugPrint('[AI] ⚠ ${provider.name} rate limited. Cooling down $minutes min.');
     _rateLimitExpirations[provider] =
-        DateTime.now().add(const Duration(minutes: 1));
+        DateTime.now().add(Duration(minutes: minutes));
+  }
+
+  static void _recordFailure(AIProvider provider) {
+    _consecutiveFailures[provider] = (_consecutiveFailures[provider] ?? 0) + 1;
+    if ((_consecutiveFailures[provider] ?? 0) >= 3) {
+      _setRateLimited(provider, minutes: 5);
+    }
+  }
+
+  static void _recordSuccess(AIProvider provider) {
+    _consecutiveFailures.remove(provider);
   }
 
   // ── Quiz Generation ──────────────────────────────────────────────────────
+
   static Future<List<QuizQuestion>> generateQuiz({
     required String lessonTitle,
     required String courseTitle,
@@ -34,15 +49,16 @@ class GeminiService {
     if (!ApiConfig.isConfigured) return QuizQuestion.mockQuestions();
 
     final prompt =
-        'Generate 5 MCQ quiz questions for lesson: "$lessonTitle" (Course: "$courseTitle").\n'
-        'Return ONLY JSON array, no markdown:\n'
+        'Generate 5 MCQ quiz questions for lesson: "$lessonTitle" (Course: "$courseTitle", Topic: "$topic").\n'
+        'Make questions relevant and educational. Return ONLY JSON array, no markdown:\n'
         '[{"id":"q_1","question":"...?","options":["A","B","C","D"],"correct_index":0,"explanation":"..."}]';
 
     try {
       final response = await _smartCall(
         prompt,
-        task: AITask.courseGeneration,
+        task: AITask.quiz,
         maxTokens: 1500,
+        temperature: 0.4,
       );
       if (response == null) return QuizQuestion.mockQuestions();
       final jsonStr = extractJson(response);
@@ -56,6 +72,7 @@ class GeminiService {
   }
 
   // ── Doubt Resolution ─────────────────────────────────────────────────────
+
   static Future<String> askDoubt({
     required String question,
     required String lessonTitle,
@@ -74,29 +91,45 @@ class GeminiService {
         'You are a helpful tutor. Course: "$courseTitle" | Lesson: "$lessonTitle"\n'
         '${historyText.isNotEmpty ? "History:\n$historyText\n" : ""}'
         'Student: $question\n'
-        'Give a clear, concise answer (max 120 words). Use examples if helpful.';
+        'Give a clear, concise answer (max 120 words). Use examples if helpful. Reply in plain text, no markdown.';
 
     try {
       final response = await _smartCall(
         prompt,
         task: AITask.chat,
         maxTokens: 400,
+        temperature: 0.7,
       );
-      return response ?? 'Sorry, I could not answer that. Please try again.';
+      if (response == null || _looksLikeProviderNotice(response)) {
+        return 'I couldn\'t fetch a response right now. Please try again in a moment.';
+      }
+      return response;
     } catch (e) {
       return 'Connection error. Please check your internet and try again.';
     }
   }
 
+  static bool _looksLikeProviderNotice(String text) {
+    final lower = text.toLowerCase();
+    const markers = [
+      'pollinations', 'legacy text api', 'deprecated for authenticated',
+      'migrate to our new service', 'rate limit exceeded', 'upgrade your plan',
+      'invalid api key', '401 unauthorized', 'quota exceeded',
+    ];
+    for (final m in markers) {
+      if (lower.contains(m)) return true;
+    }
+    return false;
+  }
+
   // ── Learning Path Generation ─────────────────────────────────────────────
-  /// Generates a course with the ACTUAL course name in the title (no $dream placeholder).
+
   static Future<Course?> generateLearningPath({
     required String dream,
     List<YouTubeVideoStats>? preFilteredVideos,
   }) async {
     if (!ApiConfig.isConfigured) return null;
 
-    // Clean the dream/topic to extract the actual course name
     final courseName = _extractCourseName(dream);
     final courseCategory = _extractCategory(dream);
 
@@ -110,48 +143,49 @@ class GeminiService {
           '${topVideos.map((v) => '- ID:${v.id} Title:"${v.title}" Duration:${v.durationText} Channel:${v.channelTitle}').join('\n')}\n';
     }
 
-    // Generate unique module descriptions based on the course topic
     final moduleTopics = _generateModuleTopics(courseName);
+    final thumbUrl = firstVideoId.isNotEmpty
+        ? 'https://img.youtube.com/vi/$firstVideoId/maxresdefault.jpg'
+        : 'https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg';
 
     final prompt =
         'Create a complete learning course for: "$courseName"\n'
         '$videoContext'
-        'IMPORTANT: The course title MUST be exactly "$courseName" - do NOT use any placeholder like \$dream.\n'
+        'CRITICAL: The course title MUST be exactly "$courseName". Do NOT use \$dream placeholder.\n'
         'Return ONLY valid JSON (no markdown backticks, no extra text):\n'
         '{\n'
         '  "id": "gen_${DateTime.now().millisecondsSinceEpoch}",\n'
         '  "title": "$courseName",\n'
-        '  "description": "A comprehensive course covering all aspects of ${courseName.toLowerCase()}",\n'
+        '  "description": "A comprehensive course on ${courseName.toLowerCase()}",\n'
         '  "category": "$courseCategory",\n'
-        '  "thumbnail_url": "${firstVideoId.isNotEmpty ? "https://img.youtube.com/vi/$firstVideoId/maxresdefault.jpg" : "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"}",\n'
+        '  "thumbnail_url": "$thumbUrl",\n'
         '  "total_lessons": 9,\n'
         '  "rating": 4.8,\n'
         '  "learner_count": 0,\n'
         '  "skills": ["${moduleTopics[0]}", "${moduleTopics[1]}", "${moduleTopics[2]}"],\n'
         '  "modules": [\n'
         '    {"id":"mod_1","title":"${moduleTopics[0]}","lesson_count":3,"is_locked":false,"lessons":[\n'
-        '      {"id":"les_1","title":"Introduction to ${courseName}","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"15:00","chapters":[{"title":"Overview","timestamp":"0:00"}]},\n'
-        '      {"id":"les_2","title":"Core ${moduleTopics[0]} Concepts","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"18:00"},\n'
-        '      {"id":"les_3","title":"${moduleTopics[0]} in Practice","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"20:00"}\n'
+        '      {"id":"les_1","title":"Introduction to $courseName","youtube_video_id":"VIDEO_ID_1","duration":"15:00"},\n'
+        '      {"id":"les_2","title":"Core ${moduleTopics[0]} Concepts","youtube_video_id":"VIDEO_ID_2","duration":"18:00"},\n'
+        '      {"id":"les_3","title":"${moduleTopics[0]} in Practice","youtube_video_id":"VIDEO_ID_3","duration":"20:00"}\n'
         '    ]},\n'
         '    {"id":"mod_2","title":"${moduleTopics[1]}","lesson_count":3,"is_locked":true,"lessons":[\n'
-        '      {"id":"les_4","title":"${moduleTopics[1]} Fundamentals","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"22:00"},\n'
-        '      {"id":"les_5","title":"Advanced ${moduleTopics[1]}","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"25:00"},\n'
-        '      {"id":"les_6","title":"${moduleTopics[1]} Projects","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"19:00"}\n'
+        '      {"id":"les_4","title":"${moduleTopics[1]} Fundamentals","youtube_video_id":"VIDEO_ID_4","duration":"22:00"},\n'
+        '      {"id":"les_5","title":"Advanced ${moduleTopics[1]}","youtube_video_id":"VIDEO_ID_5","duration":"25:00"},\n'
+        '      {"id":"les_6","title":"${moduleTopics[1]} Projects","youtube_video_id":"VIDEO_ID_6","duration":"19:00"}\n'
         '    ]},\n'
         '    {"id":"mod_3","title":"${moduleTopics[2]}","lesson_count":3,"is_locked":true,"lessons":[\n'
-        '      {"id":"les_7","title":"${moduleTopics[2]} Deep Dive","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"23:00"},\n'
-        '      {"id":"les_8","title":"Real-world ${moduleTopics[2]}","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"27:00"},\n'
-        '      {"id":"les_9","title":"Final ${courseName} Project","youtube_video_id":"VIDEO_ID_FROM_LIST","duration":"35:00"}\n'
+        '      {"id":"les_7","title":"${moduleTopics[2]} Deep Dive","youtube_video_id":"VIDEO_ID_7","duration":"23:00"},\n'
+        '      {"id":"les_8","title":"Real-world ${moduleTopics[2]}","youtube_video_id":"VIDEO_ID_8","duration":"27:00"},\n'
+        '      {"id":"les_9","title":"Final $courseName Project","youtube_video_id":"VIDEO_ID_9","duration":"35:00"}\n'
         '    ]}\n'
         '  ]\n'
         '}\n\n'
         'Rules:\n'
-        '1. Replace each VIDEO_ID_FROM_LIST with a REAL YouTube video ID from the provided list above.\n'
-        '2. Match video IDs to lesson topics (most relevant video for each lesson).\n'
-        '3. Keep the title EXACTLY as "$courseName".\n'
-        '4. Each module must have a UNIQUE title describing a different aspect of $courseName.\n'
-        '5. Module 1 is_locked:false, modules 2 and 3 is_locked:true.';
+        '1. Replace VIDEO_ID_N with REAL YouTube video IDs from the list above.\n'
+        '2. Match each video to its lesson topic.\n'
+        '3. Keep title EXACTLY as "$courseName".\n'
+        '4. Module 1: is_locked=false, Modules 2-3: is_locked=true.';
 
     try {
       final response = await _smartCall(
@@ -164,17 +198,16 @@ class GeminiService {
 
       final jsonStr = extractJson(response);
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-      
-      // Ensure title never contains $dream
-      if (data['title'] == null || 
-          (data['title'] as String).contains('\$dream') || 
+
+      if (data['title'] == null ||
+          (data['title'] as String).contains('\$dream') ||
           (data['title'] as String).trim().isEmpty) {
         data['title'] = courseName;
       }
       if (data['category'] == null || (data['category'] as String).trim().isEmpty) {
         data['category'] = courseCategory;
       }
-      
+
       return Course.fromJson(data);
     } catch (e) {
       debugPrint('[AI] Course gen error: $e');
@@ -182,41 +215,74 @@ class GeminiService {
     }
   }
 
-  /// Extract a clean course name from the prompt
   static String _extractCourseName(String dream) {
-    // Remove common prefix patterns
-    var name = dream
+    return dream
         .replaceAll(RegExp(r'I want to learn:\s*', caseSensitive: false), '')
         .replaceAll(RegExp(r'in \w+ language.*', caseSensitive: false), '')
         .replaceAll(RegExp(r'taught by.*', caseSensitive: false), '')
         .replaceAll(RegExp(r'with videos from.*', caseSensitive: false), '')
-        .trim();
-    
-    // Capitalize first letter of each word
-    if (name.isEmpty) return 'Complete Programming Course';
-    return name;
+        .trim()
+        .isNotEmpty
+        ? dream
+            .replaceAll(
+                RegExp(r'I want to learn:\s*', caseSensitive: false), '')
+            .replaceAll(
+                RegExp(r'in \w+ language.*', caseSensitive: false), '')
+            .trim()
+        : 'Complete Programming Course';
   }
 
-  /// Extract category from course name
   static String _extractCategory(String dream) {
     final lower = dream.toLowerCase();
-    if (lower.contains('python') || lower.contains('programming')) return 'Programming';
-    if (lower.contains('flutter') || lower.contains('mobile') || lower.contains('android') || lower.contains('ios')) return 'Mobile Development';
-    if (lower.contains('react') || lower.contains('web') || lower.contains('html') || lower.contains('css') || lower.contains('javascript')) return 'Web Development';
-    if (lower.contains('machine learning') || lower.contains('ai') || lower.contains('deep learning')) return 'AI & ML';
+    if (lower.contains('python') || lower.contains('programming')) {
+      return 'Programming';
+    }
+    if (lower.contains('flutter') ||
+        lower.contains('mobile') ||
+        lower.contains('android') ||
+        lower.contains('ios')) {
+      return 'Mobile Development';
+    }
+    if (lower.contains('react') ||
+        lower.contains('web') ||
+        lower.contains('html') ||
+        lower.contains('css') ||
+        lower.contains('javascript')) {
+      return 'Web Development';
+    }
+    if (lower.contains('machine learning') ||
+        lower.contains('ai') ||
+        lower.contains('deep learning')) {
+      return 'AI & ML';
+    }
     if (lower.contains('data')) return 'Data Science';
-    if (lower.contains('cloud') || lower.contains('aws') || lower.contains('devops')) return 'Cloud & DevOps';
-    if (lower.contains('design') || lower.contains('ui') || lower.contains('ux')) return 'Design';
+    if (lower.contains('cloud') ||
+        lower.contains('aws') ||
+        lower.contains('devops')) {
+      return 'Cloud & DevOps';
+    }
+    if (lower.contains('design') ||
+        lower.contains('ui') ||
+        lower.contains('ux')) {
+      return 'Design';
+    }
+    if (lower.contains('video editing') ||
+        lower.contains('premiere') ||
+        lower.contains('davinci')) {
+      return 'Video Editing';
+    }
     if (lower.contains('game')) return 'Game Development';
-    if (lower.contains('cyber') || lower.contains('security')) return 'Cybersecurity';
-    if (lower.contains('blockchain') || lower.contains('web3')) return 'Blockchain';
+    if (lower.contains('cyber') || lower.contains('security')) {
+      return 'Cybersecurity';
+    }
+    if (lower.contains('blockchain') || lower.contains('web3')) {
+      return 'Blockchain';
+    }
     return 'Technology';
   }
 
-  /// Generate unique module topic names for a course
   static List<String> _generateModuleTopics(String courseName) {
     final lower = courseName.toLowerCase();
-    
     if (lower.contains('python')) {
       return ['Python Fundamentals', 'Data Structures & OOP', 'Advanced Python & Projects'];
     }
@@ -232,6 +298,9 @@ class GeminiService {
     if (lower.contains('web')) {
       return ['HTML & CSS Basics', 'JavaScript & DOM', 'Backend & Deployment'];
     }
+    if (lower.contains('video editing') || lower.contains('premiere') || lower.contains('davinci')) {
+      return ['Editing Fundamentals', 'Color Grading & Effects', 'Advanced Techniques & Export'];
+    }
     if (lower.contains('data science')) {
       return ['Python & Pandas', 'Data Visualization', 'Statistical Analysis & ML'];
     }
@@ -244,8 +313,9 @@ class GeminiService {
     if (lower.contains('design') || lower.contains('ui')) {
       return ['Design Principles', 'Figma & Prototyping', 'Design Systems & Case Studies'];
     }
-    // Generic fallback
-    final cleanName = courseName.replaceAll(RegExp(r'(Complete|Course|Basics|Fundamentals)', caseSensitive: false), '').trim();
+    final cleanName = courseName
+        .replaceAll(RegExp(r'(Complete|Course|Basics|Fundamentals)', caseSensitive: false), '')
+        .trim();
     return [
       '$cleanName Foundations',
       'Intermediate $cleanName',
@@ -254,6 +324,7 @@ class GeminiService {
   }
 
   // ── Daily Recommendations ─────────────────────────────────────────────────
+
   static Future<List<Map<String, String>>> generateRecommendations({
     required String? dream,
     required List<String> categories,
@@ -265,16 +336,17 @@ class GeminiService {
         [dream, ...categories].where((s) => s != null && s.isNotEmpty).join(', ');
 
     final prompt =
-        'Recommend 6 educational YouTube videos for: "$context" (page $page, vary content).\n'
-        'Return ONLY JSON array:\n'
-        '[{"title":"Title","channel":"Channel","video_id":"realId","duration":"15:30","category":"Cat","description":"Why valuable"}]\n'
-        'Use REAL video IDs. Prioritize: freeCodeCamp, 3Blue1Brown, Fireship, Traversy Media.';
+        'Recommend 6 educational YouTube videos for someone learning: "$context" (page $page, vary each page).\n'
+        'Return ONLY JSON array, no markdown:\n'
+        '[{"title":"Title","channel":"Channel","video_id":"realYTid","duration":"15:30","category":"Cat","description":"Why it is valuable"}]\n'
+        'Use REAL video IDs. Prioritize: freeCodeCamp, 3Blue1Brown, Fireship, Traversy Media, MIT OpenCourseWare.';
 
     try {
       final response = await _smartCall(
         prompt,
         task: AITask.recommendations,
         maxTokens: 1200,
+        temperature: 0.8,
       );
       if (response == null) return _mockRecommendations();
       final jsonStr = extractJson(response);
@@ -286,7 +358,7 @@ class GeminiService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // SMART ROUTING ENGINE
+  // SMART ROUTING ENGINE — Different AI for different tasks
   // ═══════════════════════════════════════════════════════════════════════
 
   static Future<String?> _smartCall(
@@ -295,45 +367,83 @@ class GeminiService {
     int maxTokens = 1500,
     double temperature = 0.7,
   }) async {
-    AIProvider? provider = ApiConfig.primaryProvider(task);
+    // Get ordered provider list for this task
+    final providers = _getProvidersForTask(task);
 
-    int attempts = 0;
-    const maxAttempts = 3;
-
-    while (provider != null && attempts < maxAttempts) {
+    for (final provider in providers) {
       if (_isRateLimited(provider)) {
-        provider = ApiConfig.fallbackAfter(provider);
+        debugPrint('[AI] ⏳ ${provider.name} rate-limited, skipping');
         continue;
       }
 
-      attempts++;
       try {
-        debugPrint('[AI] Trying ${provider.name} for ${task.name}...');
-        final result = await _callProviderWithBackoff(
+        debugPrint('[AI] → Trying ${provider.name} for ${task.name}...');
+        final result = await _callProviderWithRetry(
           provider,
           prompt,
           maxTokens: maxTokens,
           temperature: temperature,
         );
-        if (result != null) {
+
+        if (result != null && !_looksLikeProviderNotice(result)) {
+          _recordSuccess(provider);
           debugPrint('[AI] ✓ ${provider.name} responded');
           return result;
         }
       } catch (e) {
         debugPrint('[AI] ✗ ${provider.name} failed: $e');
-      }
-
-      provider = ApiConfig.fallbackAfter(provider);
-      if (provider != null) {
-        await Future.delayed(const Duration(milliseconds: 200));
+        _recordFailure(provider);
       }
     }
 
-    debugPrint('[AI] All providers exhausted for: ${task.name}');
+    debugPrint('[AI] ✗ All providers exhausted for: ${task.name}');
     return null;
   }
 
-  static Future<String?> _callProviderWithBackoff(
+  /// Returns ordered list of providers for a given task.
+  /// Different tasks use different primary providers for load balancing.
+  static List<AIProvider> _getProvidersForTask(AITask task) {
+    final available = <AIProvider>[];
+
+    switch (task) {
+      case AITask.chat:
+      // Chat: Groq (fastest) → HuggingFace → OpenRouter → Gemini
+        if (ApiConfig.hasGroq) available.add(AIProvider.groq);
+        if (ApiConfig.hasHuggingFace) available.add(AIProvider.huggingFace);
+        if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
+        if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
+        break;
+
+      case AITask.recommendations:
+      // Recommendations: OpenRouter → Groq → HuggingFace → Gemini
+        if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
+        if (ApiConfig.hasGroq) available.add(AIProvider.groq);
+        if (ApiConfig.hasHuggingFace) available.add(AIProvider.huggingFace);
+        if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
+        break;
+
+      case AITask.courseGeneration:
+      case AITask.quiz:
+      // JSON tasks: Gemini best → Groq → OpenRouter → HuggingFace
+        if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
+        if (ApiConfig.hasGroq) available.add(AIProvider.groq);
+        if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
+        if (ApiConfig.hasHuggingFace) available.add(AIProvider.huggingFace);
+        break;
+    }
+
+    // If none available, add all that exist
+    if (available.isEmpty) {
+      if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
+      if (ApiConfig.hasGroq) available.add(AIProvider.groq);
+      if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
+      if (ApiConfig.hasHuggingFace) available.add(AIProvider.huggingFace);
+    }
+
+    return available;
+  }
+
+  static Future<String?> _callProviderWithRetry(
     AIProvider provider,
     String prompt, {
     int maxTokens = 1500,
@@ -349,12 +459,16 @@ class GeminiService {
             maxTokens: maxTokens, temperature: temperature);
       } catch (e) {
         final errorString = e.toString();
-        if (errorString.contains('Rate limited') || errorString.contains('429')) {
-          if (attempts >= maxRetries) {
-            _setRateLimited(provider);
-            rethrow;
-          }
-          await Future.delayed(Duration(seconds: attempts));
+        if (errorString.contains('429') || errorString.contains('Rate limit')) {
+          _setRateLimited(provider, minutes: attempts * 2);
+          if (attempts >= maxRetries) rethrow;
+          await Future.delayed(Duration(seconds: attempts * 2));
+        } else if (errorString.contains('401') ||
+            errorString.contains('Unauthorized')) {
+          // Auth failure — don't retry
+          debugPrint('[AI] ✗ ${provider.name} auth failure (401) — check API key');
+          _setRateLimited(provider, minutes: 60); // Long cooldown for bad keys
+          rethrow;
         } else {
           rethrow;
         }
@@ -371,22 +485,32 @@ class GeminiService {
   }) {
     switch (provider) {
       case AIProvider.gemini:
-        return _callGemini(prompt, maxTokens: maxTokens, temperature: temperature);
+        return _callGemini(prompt,
+            maxTokens: maxTokens, temperature: temperature);
       case AIProvider.groq:
-        return _callGroq(prompt, maxTokens: maxTokens, temperature: temperature);
+        return _callGroq(prompt,
+            maxTokens: maxTokens, temperature: temperature);
       case AIProvider.openRouter:
-        return _callOpenRouter(prompt, maxTokens: maxTokens, temperature: temperature);
+        return _callOpenRouter(prompt,
+            maxTokens: maxTokens, temperature: temperature);
+      case AIProvider.huggingFace:
+        return _callHuggingFace(prompt,
+            maxTokens: maxTokens, temperature: temperature);
     }
   }
 
   // ── 1. Google Gemini ─────────────────────────────────────────────────────
+
   static Future<String?> _callGemini(
     String prompt, {
     int maxTokens = 1500,
     double temperature = 0.7,
   }) async {
+    final key = ApiConfig.geminiApiKey;
+    if (key.isEmpty) return null;
+
     final url = Uri.parse(
-      '${ApiConfig.geminiBaseUrl}/${ApiConfig.geminiModel}:generateContent?key=${ApiConfig.geminiApiKey}',
+      '${ApiConfig.geminiBaseUrl}/${ApiConfig.geminiModel}:generateContent?key=$key',
     );
 
     final body = jsonEncode({
@@ -425,19 +549,26 @@ class GeminiService {
         }
       }
     } else {
-      debugPrint('[Gemini] API status ${response.statusCode}');
+      debugPrint('[Gemini] HTTP ${response.statusCode}: ${response.body.substring(0, response.body.length.clamp(0, 200))}');
       if (response.statusCode == 429) throw Exception('Rate limited');
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw Exception('Unauthorized');
+      }
       if (response.statusCode >= 500) throw Exception('Server error');
     }
     return null;
   }
 
   // ── 2. Groq ───────────────────────────────────────────────────────────────
+
   static Future<String?> _callGroq(
     String prompt, {
     int maxTokens = 1500,
     double temperature = 0.7,
   }) async {
+    final key = ApiConfig.groqApiKey;
+    if (key.isEmpty) return null;
+
     final url = Uri.parse(ApiConfig.groqBaseUrl);
 
     final body = jsonEncode({
@@ -455,7 +586,7 @@ class GeminiService {
           url,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ${ApiConfig.groqApiKey}',
+            'Authorization': 'Bearer $key',
           },
           body: body,
         )
@@ -468,18 +599,23 @@ class GeminiService {
         return choices[0]['message']['content'] as String?;
       }
     } else {
-      debugPrint('[Groq] API status ${response.statusCode}');
+      debugPrint('[Groq] HTTP ${response.statusCode}');
       if (response.statusCode == 429) throw Exception('Rate limited');
+      if (response.statusCode == 401) throw Exception('Unauthorized');
     }
     return null;
   }
 
   // ── 3. OpenRouter ─────────────────────────────────────────────────────────
+
   static Future<String?> _callOpenRouter(
     String prompt, {
     int maxTokens = 1500,
     double temperature = 0.7,
   }) async {
+    final key = ApiConfig.openRouterApiKey;
+    if (key.isEmpty) return null;
+
     final url = Uri.parse(ApiConfig.openRouterBaseUrl);
 
     final body = jsonEncode({
@@ -497,7 +633,7 @@ class GeminiService {
           url,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ${ApiConfig.openRouterApiKey}',
+            'Authorization': 'Bearer $key',
             'HTTP-Referer': 'https://gantavai.com',
             'X-Title': 'Gantav AI Learning',
           },
@@ -512,8 +648,60 @@ class GeminiService {
         return choices[0]['message']['content'] as String?;
       }
     } else {
-      debugPrint('[OpenRouter] API status ${response.statusCode}');
+      debugPrint('[OpenRouter] HTTP ${response.statusCode}');
       if (response.statusCode == 429) throw Exception('Rate limited');
+      if (response.statusCode == 401) throw Exception('Unauthorized');
+    }
+    return null;
+  }
+
+  // ── 4. HuggingFace (Free) ─────────────────────────────────────────────────
+
+  static Future<String?> _callHuggingFace(
+    String prompt, {
+    int maxTokens = 1000,
+    double temperature = 0.7,
+  }) async {
+    final key = ApiConfig.huggingFaceApiKey;
+    if (key.isEmpty) return null;
+
+    // Use Mistral-7B via HuggingFace Inference API (free tier)
+    final url = Uri.parse(ApiConfig.huggingFaceBaseUrl);
+
+    final body = jsonEncode({
+      'inputs': prompt,
+      'parameters': {
+        'max_new_tokens': maxTokens.clamp(100, 1000),
+        'temperature': temperature,
+        'top_p': 0.9,
+        'do_sample': true,
+        'return_full_text': false,
+      },
+    });
+
+    final response = await http
+        .post(
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $key',
+          },
+          body: body,
+        )
+        .timeout(const Duration(seconds: 45));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data is List && data.isNotEmpty) {
+        return data[0]['generated_text'] as String?;
+      }
+      if (data is Map) {
+        return data['generated_text'] as String?;
+      }
+    } else {
+      debugPrint('[HuggingFace] HTTP ${response.statusCode}: ${response.body.substring(0, response.body.length.clamp(0, 200))}');
+      if (response.statusCode == 429) throw Exception('Rate limited');
+      if (response.statusCode == 401) throw Exception('Unauthorized');
     }
     return null;
   }
@@ -528,7 +716,8 @@ class GeminiService {
     int maxTokens = 1500,
     double temperature = 0.7,
   }) async {
-    return _smartCall(prompt, task: task, maxTokens: maxTokens, temperature: temperature);
+    return _smartCall(prompt,
+        task: task, maxTokens: maxTokens, temperature: temperature);
   }
 
   static Future<String?> callGemini(String prompt) =>
@@ -554,11 +743,12 @@ class GeminiService {
 
       if (objStart != -1 && (arrayStart == -1 || objStart < arrayStart)) {
         final end = cleaned.lastIndexOf('}');
-        return cleaned.substring(objStart, end + 1);
-      } else {
+        if (end > objStart) return cleaned.substring(objStart, end + 1);
+      } else if (arrayStart != -1) {
         final end = cleaned.lastIndexOf(']');
-        return cleaned.substring(arrayStart, end + 1);
+        if (end > arrayStart) return cleaned.substring(arrayStart, end + 1);
       }
+      return cleaned;
     } catch (e) {
       return text;
     }

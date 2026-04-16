@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -type f \\\\\\( -name \"*.dart\" -o -name \"*.js\" -o -name \"*.json\" \\\\\\) -exec grep -l \"pollinations\\\\|Pollinations\\\\|image.*generate\\\\|generate.*image\\\\|tutor\\\\|Tutor\\\\|AI.*Tutor\" {} \\\\;)",
+      "Bash(wc -l lib/**/*.dart)",
+      "Bash(flutter analyze:*)"
+    ]
+  }
+}

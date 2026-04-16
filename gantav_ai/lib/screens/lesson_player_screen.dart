@@ -4,12 +4,13 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/gemini_service.dart';
-import '../services/api_config.dart';
 import 'quiz_screen.dart';
 import '../widgets/youtube_player_wrapper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state.dart';
+import '../services/certificate_service.dart';
+import 'certificate_screen.dart';
 import 'dart:convert';
 
 class LessonPlayerScreen extends StatefulWidget {
@@ -62,13 +63,15 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       final data = prefs.getString(key);
       if (data != null) {
         final map = jsonDecode(data) as Map<String, dynamic>;
-        setState(() {
-          _isLiked = map['liked'] ?? false;
-          _isDisliked = map['disliked'] ?? false;
-          _isStarred = map['starred'] ?? false;
-          _isCompleted = map['completed'] ?? false;
-          _likeCount = map['like_count'] ?? 0;
-        });
+        if (mounted) {
+          setState(() {
+            _isLiked = map['liked'] ?? false;
+            _isDisliked = map['disliked'] ?? false;
+            _isStarred = map['starred'] ?? false;
+            _isCompleted = map['completed'] ?? false;
+            _likeCount = map['like_count'] ?? 0;
+          });
+        }
       }
     } catch (_) {}
   }
@@ -77,13 +80,15 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = 'lesson_${widget.lesson.id}';
-      await prefs.setString(key, jsonEncode({
-        'liked': _isLiked,
-        'disliked': _isDisliked,
-        'starred': _isStarred,
-        'completed': _isCompleted,
-        'like_count': _likeCount,
-      }));
+      await prefs.setString(
+          key,
+          jsonEncode({
+            'liked': _isLiked,
+            'disliked': _isDisliked,
+            'starred': _isStarred,
+            'completed': _isCompleted,
+            'like_count': _likeCount,
+          }));
     } catch (_) {}
   }
 
@@ -122,7 +127,8 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           duration: const Duration(seconds: 1),
           backgroundColor: AppColors.gold,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -177,7 +183,8 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     if (text.isEmpty || _isAiTyping) return;
 
     if (_includeTimestamp) {
-      final time = (await _ytKey.currentState?.getCurrentTime() ?? 0.0).toInt();
+      final time =
+          (await _ytKey.currentState?.getCurrentTime() ?? 0.0).toInt();
       final minutes = (time / 60).floor();
       final seconds = (time % 60).floor().toString().padLeft(2, '0');
       text = '[At $minutes:$seconds]: $text';
@@ -248,13 +255,8 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ─── Simple Top bar - just back + settings, NO module text ────
             _buildTopBar(isDark),
-
-            // ─── Full-width Video ───────────────────────────────
             _buildVideoPlayer(),
-
-            // ─── Content section ─────────────────────────────────
             Expanded(
               child: _showAiChat
                   ? _buildAiChatPanel(isDark)
@@ -285,7 +287,8 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             child: GestureDetector(
               onTap: () {
                 SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-                SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+                SystemChrome.setPreferredOrientations(
+                    [DeviceOrientation.portraitUp]);
                 Future.delayed(const Duration(milliseconds: 500), () {
                   if (mounted) {
                     SystemChrome.setPreferredOrientations([
@@ -303,7 +306,8 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                   color: Colors.black.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 28),
+                child: const Icon(Icons.fullscreen_exit,
+                    color: Colors.white, size: 28),
               ),
             ),
           ),
@@ -312,7 +316,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  // ─── Clean top bar - ONLY back arrow + lesson title (no module pill) ─────
   Widget _buildTopBar(bool isDark) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 2, 8, 0),
@@ -334,17 +337,17 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          // Settings gear - opens speed + quality sheet
           IconButton(
             onPressed: () => _ytKey.currentState?.showSettingsSheet(),
-            icon: Icon(Icons.settings_rounded, size: 20, color: isDark ? Colors.white54 : Colors.black45),
+            icon: Icon(Icons.settings_rounded,
+                size: 20,
+                color: isDark ? Colors.white54 : Colors.black45),
           ),
         ],
       ),
     );
   }
 
-  /// Full-width video player
   Widget _buildVideoPlayer() {
     return SizedBox(
       width: double.infinity,
@@ -358,18 +361,24 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             if (!_isCompleted) {
               setState(() => _isCompleted = true);
               _saveInteractionState();
-              // Notify app state
+              // Mark lesson complete in app state
               context.read<AppState>().markLessonAsCompleted(
-                widget.course.id, 
-                widget.module.id, 
-                widget.lesson.id
-              );
-              
+                    widget.course.id,
+                    widget.module.id,
+                    widget.lesson.id,
+                  );
+
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Video completed! You can now proceed.'),
+                SnackBar(
+                  content: Text(
+                    '✅ Lesson complete! Take the quiz to continue.',
+                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                  ),
                   backgroundColor: AppColors.teal,
                   behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -385,31 +394,33 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── Title + Actions Block ─────────────────────────
           _buildYouTubeInfoBlock(isDark),
-
-          // ─── Content/AI Tab Toggle ────────────────────────
           _buildContentToggle(isDark),
 
-          // ─── Speed Controls REMOVED from here (now in gear only) ─
-
-          // ─── Chapters ─────────────────────────────────────
+          // Chapters
           if (widget.lesson.chapters.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-              child: Text('Chapters', style: Theme.of(context).textTheme.titleMedium),
+              child: Text('Chapters',
+                  style: Theme.of(context).textTheme.titleMedium),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
-                children: widget.lesson.chapters.asMap().entries.map((entry) {
-                  return _ChapterTile(chapter: entry.value, index: entry.key, isActive: entry.key == 0);
-                }).toList(),
+                children: widget.lesson.chapters
+                    .asMap()
+                    .entries
+                    .map((entry) => _ChapterTile(
+                          chapter: entry.value,
+                          index: entry.key,
+                          isActive: entry.key == 0,
+                        ))
+                    .toList(),
               ),
             ),
           ],
 
-          // ─── Up next ──────────────────────────────────────
+          // Up next
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _buildUpNext(isDark),
@@ -421,7 +432,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// YouTube-style title + like/dislike/save/focus bar
   Widget _buildYouTubeInfoBlock(bool isDark) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
@@ -441,21 +451,27 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.violet.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(100),
                 ),
                 child: Text(
                   widget.course.category,
-                  style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet),
+                  style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.violet),
                 ),
               ),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  widget.course.title.replaceAll('\$dream', widget.course.category),
-                  style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted),
+                  widget.course.title
+                      .replaceAll('\$dream', widget.course.category),
+                  style: GoogleFonts.dmSans(
+                      fontSize: 12, color: AppColors.textMuted),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -463,8 +479,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             ],
           ),
           const SizedBox(height: 14),
-
-          // ─── Like / Dislike / Save / Focus row ─────────────
           Row(
             children: [
               _LikePill(
@@ -495,9 +509,11 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 10),
-          Divider(color: isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.07)),
+          Divider(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.07)
+                  : Colors.black.withValues(alpha: 0.07)),
         ],
       ),
     );
@@ -530,9 +546,11 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
+  /// Fixed up-next navigation — properly opens next lesson
   Widget _buildUpNext(bool isDark) {
     final currentIdx = widget.module.lessons.indexOf(widget.lesson);
-    final remaining = widget.module.lessons.skip(currentIdx + 1).take(3).toList();
+    final remaining =
+        widget.module.lessons.skip(currentIdx + 1).take(3).toList();
     if (remaining.isEmpty) return const SizedBox();
 
     return Column(
@@ -540,11 +558,13 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 20, bottom: 10),
-          child: Text('Up next', style: Theme.of(context).textTheme.titleMedium),
+          child: Text('Up next',
+              style: Theme.of(context).textTheme.titleMedium),
         ),
         ...remaining.map((lesson) {
           return GestureDetector(
             onTap: () {
+              // FIX: use pushReplacement with proper fade transition
               Navigator.of(context).pushReplacement(
                 PageRouteBuilder(
                   pageBuilder: (_, __, ___) => LessonPlayerScreen(
@@ -565,18 +585,23 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04)),
+                border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.04)
+                        : Colors.black.withValues(alpha: 0.04)),
               ),
               child: Row(
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(6),
                     child: SizedBox(
-                      width: 72, height: 42,
+                      width: 72,
+                      height: 42,
                       child: Image.network(
                         'https://img.youtube.com/vi/${lesson.youtubeVideoId}/0.jpg',
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(color: AppColors.darkSurface2),
+                        errorBuilder: (_, __, ___) =>
+                            Container(color: AppColors.darkSurface2),
                       ),
                     ),
                   ),
@@ -585,17 +610,30 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(lesson.title,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: isDark ? AppColors.textLight : AppColors.textDark,
-                          ),
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
-                        Text(lesson.duration,
-                          style: GoogleFonts.dmMono(fontSize: 11, color: AppColors.textMuted)),
+                        Text(
+                          lesson.title,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w500,
+                                color: isDark
+                                    ? AppColors.textLight
+                                    : AppColors.textDark,
+                              ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          lesson.duration,
+                          style: GoogleFonts.dmMono(
+                              fontSize: 11, color: AppColors.textMuted),
+                        ),
                       ],
                     ),
                   ),
+                  Icon(Icons.play_circle_outline,
+                      color: AppColors.violet.withValues(alpha: 0.7), size: 20),
                 ],
               ),
             ),
@@ -608,36 +646,52 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   Widget _buildAiChatPanel(bool isDark) {
     return Column(
       children: [
+        // Header
         Container(
           padding: const EdgeInsets.fromLTRB(4, 4, 14, 4),
           decoration: BoxDecoration(
             border: Border(
-              bottom: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+              bottom: BorderSide(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.06)),
             ),
           ),
           child: Row(
             children: [
               IconButton(
                 onPressed: () => setState(() => _showAiChat = false),
-                icon: Icon(Icons.arrow_back, size: 20, color: isDark ? AppColors.textLight : AppColors.textDark),
+                icon: Icon(Icons.arrow_back,
+                    size: 20,
+                    color:
+                        isDark ? AppColors.textLight : AppColors.textDark),
               ),
               Container(
-                width: 28, height: 28,
+                width: 28,
+                height: 28,
                 decoration: BoxDecoration(
                   color: AppColors.violet.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 14),
+                child: const Icon(Icons.auto_awesome,
+                    color: AppColors.violet, size: 14),
               ),
               const SizedBox(width: 10),
               Text('AI Tutor',
-                style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w600,
-                  color: isDark ? AppColors.textLight : AppColors.textDark)),
+                  style: GoogleFonts.dmSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isDark
+                          ? AppColors.textLight
+                          : AppColors.textDark)),
               const Spacer(),
               if (_chatMessages.isNotEmpty)
                 TextButton(
-                  onPressed: () => setState(() => _chatMessages.clear()),
-                  child: Text('Clear', style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted)),
+                  onPressed: () =>
+                      setState(() => _chatMessages.clear()),
+                  child: Text('Clear',
+                      style: GoogleFonts.dmSans(
+                          fontSize: 12, color: AppColors.textMuted)),
                 ),
             ],
           ),
@@ -648,13 +702,16 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               : ListView.builder(
                   controller: _chatScrollController,
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  itemCount: _chatMessages.length + (_isAiTyping ? 1 : 0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  itemCount:
+                      _chatMessages.length + (_isAiTyping ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == _chatMessages.length && _isAiTyping) {
                       return _TypingIndicator(isDark: isDark);
                     }
-                    return _ChatBubble(message: _chatMessages[index], isDark: isDark);
+                    return _ChatBubble(
+                        message: _chatMessages[index], isDark: isDark);
                   },
                 ),
         ),
@@ -664,7 +721,10 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
             decoration: BoxDecoration(
               border: Border(
-                top: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+                top: BorderSide(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.black.withValues(alpha: 0.06)),
               ),
             ),
             child: Column(
@@ -676,13 +736,18 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                       height: 32,
                       child: Checkbox(
                         value: _includeTimestamp,
-                        onChanged: (val) => setState(() => _includeTimestamp = val ?? false),
+                        onChanged: (val) =>
+                            setState(() => _includeTimestamp = val ?? false),
                         activeColor: AppColors.violet,
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
                     Text('Include video timestamp',
-                      style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : Colors.black87)),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? Colors.white70
+                                : Colors.black87)),
                   ],
                 ),
                 Row(
@@ -692,15 +757,26 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                         height: 40,
                         child: TextField(
                           controller: _chatController,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13),
-                          textCapitalization: TextCapitalization.sentences,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(fontSize: 13),
+                          textCapitalization:
+                              TextCapitalization.sentences,
                           decoration: InputDecoration(
                             hintText: 'Ask a doubt...',
-                            hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                            hintStyle: const TextStyle(
+                                color: AppColors.textMuted, fontSize: 13),
                             filled: true,
-                            fillColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                            fillColor: isDark
+                                ? AppColors.darkSurface
+                                : AppColors.lightSurface,
+                            contentPadding:
+                                const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 0),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none),
                           ),
                           onSubmitted: (_) => _sendMessage(),
                         ),
@@ -710,12 +786,16 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                     GestureDetector(
                       onTap: _sendMessage,
                       child: Container(
-                        width: 38, height: 38,
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
-                          color: _isAiTyping ? AppColors.textMuted.withValues(alpha: 0.3) : AppColors.violet,
+                          color: _isAiTyping
+                              ? AppColors.textMuted.withValues(alpha: 0.3)
+                              : AppColors.violet,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 18),
+                        child: const Icon(Icons.arrow_upward_rounded,
+                            color: Colors.white, size: 18),
                       ),
                     ),
                   ],
@@ -736,36 +816,52 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 48, height: 48,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 color: AppColors.violet.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.auto_awesome, color: AppColors.violet, size: 24),
+              child: const Icon(Icons.auto_awesome,
+                  color: AppColors.violet, size: 24),
             ),
             const SizedBox(height: 12),
-            Text('AI Tutor', style: Theme.of(context).textTheme.titleMedium),
+            Text('AI Tutor',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             Text('Ask any doubt about this lesson.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12)),
+                textAlign: TextAlign.center,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(fontSize: 12)),
             const SizedBox(height: 16),
             Wrap(
-              spacing: 6, runSpacing: 6,
+              spacing: 6,
+              runSpacing: 6,
               alignment: WrapAlignment.center,
               children: [
-                _SuggestionChip(text: 'Key concepts', onTap: () {
-                  _chatController.text = 'Explain the key concepts in this lesson';
-                  _sendMessage();
-                }),
-                _SuggestionChip(text: 'Summary', onTap: () {
-                  _chatController.text = 'Give me a quick summary of this lesson';
-                  _sendMessage();
-                }),
-                _SuggestionChip(text: 'Example', onTap: () {
-                  _chatController.text = 'Show me a practical example related to this lesson';
-                  _sendMessage();
-                }),
+                _SuggestionChip(
+                    text: 'Key concepts',
+                    onTap: () {
+                      _chatController.text =
+                          'Explain the key concepts in this lesson';
+                      _sendMessage();
+                    }),
+                _SuggestionChip(
+                    text: 'Summary',
+                    onTap: () {
+                      _chatController.text =
+                          'Give me a quick summary of this lesson';
+                      _sendMessage();
+                    }),
+                _SuggestionChip(
+                    text: 'Example',
+                    onTap: () {
+                      _chatController.text =
+                          'Show me a practical example related to this lesson';
+                      _sendMessage();
+                    }),
               ],
             ),
           ],
@@ -779,38 +875,57 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkBg : AppColors.lightBg,
-        border: Border(top: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06))),
+        border: Border(
+            top: BorderSide(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.06))),
       ),
       child: SizedBox(
-        width: double.infinity, height: 48,
+        width: double.infinity,
+        height: 48,
         child: ElevatedButton(
           onPressed: () {
-             if (!_isCompleted) {
-               ScaffoldMessenger.of(context).showSnackBar(
-                 const SnackBar(
-                   content: Text('Please watch the entire video to unlock the next part!'),
-                   backgroundColor: AppColors.error,
-                   behavior: SnackBarBehavior.floating,
-                 ),
-               );
-               return;
-             }
-             Navigator.of(context).push(
-               MaterialPageRoute(
-                 builder: (_) => QuizScreen(
-                   lesson: widget.lesson,
-                   course: widget.course,
-                   module: widget.module,
-                 ),
-               ),
-             );
+            if (!_isCompleted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '⚠️ Watch the full video to unlock the quiz!',
+                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                  ),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+              return;
+            }
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => QuizScreen(
+                  lesson: widget.lesson,
+                  course: widget.course,
+                  module: widget.module,
+                ),
+              ),
+            );
           },
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Complete & Continue', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w600)),
-              const SizedBox(width: 6),
-              const Icon(Icons.arrow_forward, size: 16),
+              Icon(
+                _isCompleted
+                    ? Icons.quiz_rounded
+                    : Icons.lock_outline_rounded,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _isCompleted ? 'Take Quiz & Continue' : 'Complete Video First',
+                style: GoogleFonts.dmSans(
+                    fontSize: 15, fontWeight: FontWeight.w600),
+              ),
             ],
           ),
         ),
@@ -844,7 +959,10 @@ class _LikePill extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
+        border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -852,15 +970,21 @@ class _LikePill extends StatelessWidget {
           GestureDetector(
             onTap: onLike,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: isLiked ? AppColors.violet.withValues(alpha: 0.15) : Colors.transparent,
-                borderRadius: const BorderRadius.horizontal(left: Radius.circular(100)),
+                color: isLiked
+                    ? AppColors.violet.withValues(alpha: 0.15)
+                    : Colors.transparent,
+                borderRadius:
+                    const BorderRadius.horizontal(left: Radius.circular(100)),
               ),
               child: Row(
                 children: [
                   Icon(
-                    isLiked ? Icons.thumb_up_rounded : Icons.thumb_up_outlined,
+                    isLiked
+                        ? Icons.thumb_up_rounded
+                        : Icons.thumb_up_outlined,
                     size: 18,
                     color: isLiked ? AppColors.violet : AppColors.textMuted,
                   ),
@@ -871,7 +995,9 @@ class _LikePill extends StatelessWidget {
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isLiked ? AppColors.violet : AppColors.textMuted,
+                        color: isLiked
+                            ? AppColors.violet
+                            : AppColors.textMuted,
                       ),
                     ),
                   ],
@@ -879,17 +1005,28 @@ class _LikePill extends StatelessWidget {
               ),
             ),
           ),
-          Container(width: 1, height: 20, color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1)),
+          Container(
+              width: 1,
+              height: 20,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : Colors.black.withValues(alpha: 0.1)),
           GestureDetector(
             onTap: onDislike,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: isDisliked ? AppColors.error.withValues(alpha: 0.1) : Colors.transparent,
-                borderRadius: const BorderRadius.horizontal(right: Radius.circular(100)),
+                color: isDisliked
+                    ? AppColors.error.withValues(alpha: 0.1)
+                    : Colors.transparent,
+                borderRadius:
+                    const BorderRadius.horizontal(right: Radius.circular(100)),
               ),
               child: Icon(
-                isDisliked ? Icons.thumb_down_rounded : Icons.thumb_down_outlined,
+                isDisliked
+                    ? Icons.thumb_down_rounded
+                    : Icons.thumb_down_outlined,
                 size: 18,
                 color: isDisliked ? AppColors.error : AppColors.textMuted,
               ),
@@ -935,18 +1072,24 @@ class _ActionPill extends StatelessWidget {
         decoration: BoxDecoration(
           color: isActive
               ? activeColor.withValues(alpha: 0.15)
-              : isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+              : isDark
+                  ? AppColors.darkSurface2
+                  : AppColors.lightSurface2,
           borderRadius: BorderRadius.circular(100),
           border: Border.all(
             color: isActive
                 ? activeColor.withValues(alpha: 0.3)
-                : isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
+                : isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.08),
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: isActive ? activeColor : AppColors.textMuted),
+            Icon(icon,
+                size: 16,
+                color: isActive ? activeColor : AppColors.textMuted),
             const SizedBox(width: 6),
             Text(
               label,
@@ -971,7 +1114,11 @@ class _TabButton extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  const _TabButton({required this.label, required this.icon, required this.isActive, required this.onTap});
+  const _TabButton(
+      {required this.label,
+      required this.icon,
+      required this.isActive,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -988,9 +1135,15 @@ class _TabButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 15, color: isActive ? Colors.white : AppColors.textMuted),
+              Icon(icon,
+                  size: 15,
+                  color: isActive ? Colors.white : AppColors.textMuted),
               const SizedBox(width: 6),
-              Text(label, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w600, color: isActive ? Colors.white : AppColors.textMuted)),
+              Text(label,
+                  style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isActive ? Colors.white : AppColors.textMuted)),
             ],
           ),
         ),
@@ -1004,7 +1157,8 @@ class _ChapterTile extends StatelessWidget {
   final int index;
   final bool isActive;
 
-  const _ChapterTile({required this.chapter, required this.index, this.isActive = false});
+  const _ChapterTile(
+      {required this.chapter, required this.index, this.isActive = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1015,35 +1169,56 @@ class _ChapterTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: isActive
             ? AppColors.violet.withValues(alpha: 0.08)
-            : isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            : isDark
+                ? AppColors.darkSurface
+                : AppColors.lightSurface,
         borderRadius: BorderRadius.circular(10),
         border: isActive
             ? Border.all(color: AppColors.violet.withValues(alpha: 0.2))
-            : Border.all(color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04)),
+            : Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.black.withValues(alpha: 0.04)),
       ),
       child: Row(
         children: [
           Container(
-            width: 24, height: 24,
+            width: 24,
+            height: 24,
             decoration: BoxDecoration(
-              color: isActive ? AppColors.violet.withValues(alpha: 0.15) : isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+              color: isActive
+                  ? AppColors.violet.withValues(alpha: 0.15)
+                  : isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Center(
               child: Text('${index + 1}',
-                style: GoogleFonts.dmMono(fontSize: 11, fontWeight: FontWeight.w600, color: isActive ? AppColors.violet : AppColors.textMuted)),
+                  style: GoogleFonts.dmMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isActive
+                          ? AppColors.violet
+                          : AppColors.textMuted)),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(chapter.title,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: isActive ? (isDark ? AppColors.textLight : AppColors.textDark) : AppColors.textMuted,
-              )),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: isActive
+                          ? (isDark ? AppColors.textLight : AppColors.textDark)
+                          : AppColors.textMuted,
+                    )),
           ),
           Text(chapter.timestamp,
-            style: GoogleFonts.dmMono(fontSize: 11, color: isActive ? AppColors.violet : AppColors.textMuted, fontWeight: FontWeight.w500)),
+              style: GoogleFonts.dmMono(
+                  fontSize: 11,
+                  color:
+                      isActive ? AppColors.violet : AppColors.textMuted,
+                  fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -1058,20 +1233,35 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Align(
-      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment:
+          message.isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+        constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.78),
         decoration: BoxDecoration(
-          color: message.isUser ? AppColors.violet : isDark ? AppColors.darkSurface : AppColors.lightSurface,
+          color: message.isUser
+              ? AppColors.violet
+              : isDark
+                  ? AppColors.darkSurface
+                  : AppColors.lightSurface,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
-            bottomLeft: message.isUser ? const Radius.circular(16) : Radius.zero,
-            bottomRight: message.isUser ? Radius.zero : const Radius.circular(16),
+            bottomLeft: message.isUser
+                ? const Radius.circular(16)
+                : Radius.zero,
+            bottomRight: message.isUser
+                ? Radius.zero
+                : const Radius.circular(16),
           ),
-          border: message.isUser ? null : Border.all(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+          border: message.isUser
+              ? null
+              : Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.06)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1082,17 +1272,29 @@ class _ChatBubble extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.auto_awesome, size: 12, color: AppColors.violet),
+                    const Icon(Icons.auto_awesome,
+                        size: 12, color: AppColors.violet),
                     const SizedBox(width: 4),
-                    Text('AI Tutor', style: GoogleFonts.dmSans(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.violet)),
+                    Text('AI Tutor',
+                        style: GoogleFonts.dmSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.violet)),
                   ],
                 ),
               ),
-            Text(message.text,
+            Text(
+              message.text,
               style: GoogleFonts.dmSans(
-                fontSize: 13, height: 1.5,
-                color: message.isUser ? Colors.white : isDark ? AppColors.textLight : AppColors.textDark,
-              )),
+                fontSize: 13,
+                height: 1.5,
+                color: message.isUser
+                    ? Colors.white
+                    : isDark
+                        ? AppColors.textLight
+                        : AppColors.textDark,
+              ),
+            ),
           ],
         ),
       ),
@@ -1107,15 +1309,23 @@ class _TypingIndicator extends StatefulWidget {
   State<_TypingIndicator> createState() => _TypingIndicatorState();
 }
 
-class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerProviderStateMixin {
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat();
   }
+
   @override
-  void dispose() { _controller.dispose(); super.dispose(); }
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Align(
@@ -1125,8 +1335,14 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
-          borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16), bottomRight: Radius.circular(16)),
-          border: Border.all(color: widget.isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
+          borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+              bottomRight: Radius.circular(16)),
+          border: Border.all(
+              color: widget.isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.06)),
         ),
         child: AnimatedBuilder(
           animation: _controller,
@@ -1135,9 +1351,11 @@ class _TypingIndicatorState extends State<_TypingIndicator> with SingleTickerPro
               mainAxisSize: MainAxisSize.min,
               children: List.generate(3, (i) {
                 final offset = (_controller.value + i * 0.2) % 1.0;
-                final opacity = (1 - (offset - 0.5).abs() * 2).clamp(0.3, 1.0);
+                final opacity =
+                    (1 - (offset - 0.5).abs() * 2).clamp(0.3, 1.0);
                 return Container(
-                  width: 7, height: 7,
+                  width: 7,
+                  height: 7,
                   margin: const EdgeInsets.symmetric(horizontal: 2),
                   decoration: BoxDecoration(
                     color: AppColors.violet.withValues(alpha: opacity),
@@ -1166,11 +1384,17 @@ class _SuggestionChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(100),
           border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
         ),
-        child: Text(text, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.violet)),
+        child: Text(text,
+            style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.violet)),
       ),
     );
   }

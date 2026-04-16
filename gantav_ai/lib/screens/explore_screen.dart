@@ -63,10 +63,6 @@ class _ExploreScreenState extends State<ExploreScreen>
   List<Course> _filteredCourses(List<Course> courses) {
     return courses.where((course) {
       // Fix $dream in title for display/search
-      final title = course.title
-          .replaceAll('\$dream', course.category)
-          .replaceAll('Complete ', '')
-          .replaceAll(' Course', '');
       final displayTitle = course.title.replaceAll('\$dream', course.category);
       final matchesSearch = _searchQuery.isEmpty ||
           displayTitle.toLowerCase().contains(_searchQuery.toLowerCase()) ||
