@@ -73,6 +73,13 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
           });
         }
       }
+      if (mounted) {
+        final appState = context.read<AppState>();
+        final starredInAppState = appState.isLessonStarred(widget.lesson.id);
+        if (starredInAppState != _isStarred) {
+          setState(() => _isStarred = starredInAppState);
+        }
+      }
     } catch (_) {}
   }
 
@@ -120,6 +127,9 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   void _toggleStar() {
     setState(() => _isStarred = !_isStarred);
     _saveInteractionState();
+    // Sync with AppState so it persists to Firestore and appears in
+    // the Favorites/Starred list across the app.
+    context.read<AppState>().toggleStarredLesson(widget.lesson.id);
     if (_isStarred) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

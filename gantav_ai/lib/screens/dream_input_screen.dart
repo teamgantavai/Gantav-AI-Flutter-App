@@ -89,8 +89,24 @@ class _DreamInputScreenState extends State<DreamInputScreen>
     }
 
     final appState = context.read<AppState>();
-    appState.generateCourseInBackground(combinedPrompt, topic);
+    appState.generateCourseInBackground(combinedPrompt, topic,
+        dailyMinutes: _timeCommitmentMinutes());
     Navigator.of(context).pop(true);
+  }
+
+  int _timeCommitmentMinutes() {
+    switch (_timeCommitment) {
+      case '30 Mins':
+        return 30;
+      case '1 Hour':
+        return 60;
+      case '2 Hours':
+        return 120;
+      case '3+ Hours':
+        return 180;
+      default:
+        return 60;
+    }
   }
 
   void _acceptPath() {

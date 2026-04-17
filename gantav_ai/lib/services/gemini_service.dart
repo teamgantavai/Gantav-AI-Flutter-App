@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import 'api_config.dart';
 import 'youtube_api_service.dart';
@@ -9,6 +10,44 @@ import 'youtube_api_service.dart';
 class GeminiService {
   static final Map<AIProvider, DateTime> _rateLimitExpirations = {};
   static final Map<AIProvider, int> _consecutiveFailures = {};
+  static bool _cooldownsLoaded = false;
+  static const String _cooldownPrefsKey = 'ai_provider_cooldowns_v1';
+
+  /// Load persisted cooldowns from SharedPreferences on first use.
+  /// Without this, every cold start retries already-limited providers and
+  /// burns daily quota even though we already know they're limited.
+  static Future<void> _ensureCooldownsLoaded() async {
+    if (_cooldownsLoaded) return;
+    _cooldownsLoaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cooldownPrefsKey);
+      if (raw == null) return;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      final now = DateTime.now();
+      for (final entry in map.entries) {
+        final provider = AIProvider.values.firstWhere(
+          (p) => p.name == entry.key,
+          orElse: () => AIProvider.gemini,
+        );
+        final expiry = DateTime.tryParse(entry.value.toString());
+        if (expiry != null && expiry.isAfter(now)) {
+          _rateLimitExpirations[provider] = expiry;
+        }
+      }
+    } catch (_) {}
+  }
+
+  static Future<void> _persistCooldowns() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final map = <String, String>{};
+      _rateLimitExpirations.forEach((provider, expiry) {
+        map[provider.name] = expiry.toIso8601String();
+      });
+      await prefs.setString(_cooldownPrefsKey, jsonEncode(map));
+    } catch (_) {}
+  }
 
   static bool _isRateLimited(AIProvider provider) {
     final expiry = _rateLimitExpirations[provider];
@@ -16,6 +55,7 @@ class GeminiService {
     if (DateTime.now().isAfter(expiry)) {
       _rateLimitExpirations.remove(provider);
       _consecutiveFailures.remove(provider);
+      _persistCooldowns();
       return false;
     }
     return true;
@@ -25,6 +65,7 @@ class GeminiService {
     debugPrint('[AI] ⚠ ${provider.name} rate limited. Cooling down $minutes min.');
     _rateLimitExpirations[provider] =
         DateTime.now().add(Duration(minutes: minutes));
+    _persistCooldowns();
   }
 
   static void _recordFailure(AIProvider provider) {
@@ -40,6 +81,57 @@ class GeminiService {
 
   // ── Quiz Generation ──────────────────────────────────────────────────────
 
+  static const String _quizCachePrefix = 'ai_quiz_cache_v1_';
+  static const Duration _quizCacheTtl = Duration(days: 7);
+
+  static String _quizCacheKey(String lessonTitle, String courseTitle, String topic) {
+    final normalized = '${lessonTitle.trim().toLowerCase()}|'
+        '${courseTitle.trim().toLowerCase()}|'
+        '${topic.trim().toLowerCase()}';
+    return '$_quizCachePrefix${normalized.hashCode}';
+  }
+
+  static Future<List<QuizQuestion>?> _readQuizCache(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(key);
+      if (raw == null) return null;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      final savedAt = DateTime.tryParse(map['saved_at']?.toString() ?? '');
+      if (savedAt == null ||
+          DateTime.now().difference(savedAt) > _quizCacheTtl) {
+        await prefs.remove(key);
+        return null;
+      }
+      final List<dynamic> data = map['questions'] as List;
+      return data.map((j) => QuizQuestion.fromJson(j)).toList();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _writeQuizCache(
+      String key, List<QuizQuestion> questions) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        key,
+        jsonEncode({
+          'saved_at': DateTime.now().toIso8601String(),
+          'questions': questions
+              .map((q) => {
+                    'id': q.id,
+                    'question': q.question,
+                    'options': q.options,
+                    'correct_index': q.correctIndex,
+                    'explanation': q.explanation,
+                  })
+              .toList(),
+        }),
+      );
+    } catch (_) {}
+  }
+
   static Future<List<QuizQuestion>> generateQuiz({
     required String lessonTitle,
     required String courseTitle,
@@ -47,6 +139,13 @@ class GeminiService {
     int count = 5,
   }) async {
     if (!ApiConfig.isConfigured) return QuizQuestion.mockQuestions();
+
+    final cacheKey = _quizCacheKey(lessonTitle, courseTitle, topic);
+    final cached = await _readQuizCache(cacheKey);
+    if (cached != null && cached.isNotEmpty) {
+      debugPrint('[AI] ✓ quiz cache hit ($lessonTitle)');
+      return cached;
+    }
 
     final prompt =
         'Generate 5 MCQ quiz questions for lesson: "$lessonTitle" (Course: "$courseTitle", Topic: "$topic").\n'
@@ -64,7 +163,11 @@ class GeminiService {
       final jsonStr = extractJson(response);
       final List<dynamic> data = jsonDecode(jsonStr);
       final questions = data.map((j) => QuizQuestion.fromJson(j)).toList();
-      return questions.isNotEmpty ? questions : QuizQuestion.mockQuestions();
+      if (questions.isNotEmpty) {
+        await _writeQuizCache(cacheKey, questions);
+        return questions;
+      }
+      return QuizQuestion.mockQuestions();
     } catch (e) {
       debugPrint('[AI] Quiz error: $e');
       return QuizQuestion.mockQuestions();
@@ -361,7 +464,46 @@ class GeminiService {
   // SMART ROUTING ENGINE — Different AI for different tasks
   // ═══════════════════════════════════════════════════════════════════════
 
+  // In-flight request dedup. If two widgets both call generateQuiz for the
+  // same lesson in the same frame (happens on rebuild storms), the second
+  // caller should await the first future instead of firing a duplicate API
+  // call that burns provider quota.
+  static final Map<String, Future<String?>> _inFlight = {};
+
+  static String _inFlightKey(AITask task, String prompt, int maxTokens,
+          double temperature) =>
+      '${task.name}|$maxTokens|${temperature.toStringAsFixed(2)}|${prompt.hashCode}';
+
   static Future<String?> _smartCall(
+    String prompt, {
+    required AITask task,
+    int maxTokens = 1500,
+    double temperature = 0.7,
+  }) async {
+    await _ensureCooldownsLoaded();
+
+    final key = _inFlightKey(task, prompt, maxTokens, temperature);
+    final existing = _inFlight[key];
+    if (existing != null) {
+      debugPrint('[AI] ⇆ dedup: joining in-flight ${task.name} request');
+      return existing;
+    }
+
+    final future = _smartCallInner(
+      prompt,
+      task: task,
+      maxTokens: maxTokens,
+      temperature: temperature,
+    );
+    _inFlight[key] = future;
+    try {
+      return await future;
+    } finally {
+      _inFlight.remove(key);
+    }
+  }
+
+  static Future<String?> _smartCallInner(
     String prompt, {
     required AITask task,
     int maxTokens = 1500,
@@ -400,6 +542,10 @@ class GeminiService {
     return null;
   }
 
+  /// HuggingFace Inference API does not return CORS headers, so direct
+  /// browser calls fail with `ERR_FAILED`. On mobile/desktop it works fine.
+  static bool get _huggingFaceUsable => ApiConfig.hasHuggingFace && !kIsWeb;
+
   /// Returns ordered list of providers for a given task.
   /// Different tasks use different primary providers for load balancing.
   static List<AIProvider> _getProvidersForTask(AITask task) {
@@ -409,7 +555,7 @@ class GeminiService {
       case AITask.chat:
       // Chat: Groq (fastest) → HuggingFace → OpenRouter → Gemini
         if (ApiConfig.hasGroq) available.add(AIProvider.groq);
-        if (ApiConfig.hasHuggingFace) available.add(AIProvider.huggingFace);
+        if (_huggingFaceUsable) available.add(AIProvider.huggingFace);
         if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
         if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
         break;
@@ -418,7 +564,7 @@ class GeminiService {
       // Recommendations: OpenRouter → Groq → HuggingFace → Gemini
         if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
         if (ApiConfig.hasGroq) available.add(AIProvider.groq);
-        if (ApiConfig.hasHuggingFace) available.add(AIProvider.huggingFace);
+        if (_huggingFaceUsable) available.add(AIProvider.huggingFace);
         if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
         break;
 
@@ -428,7 +574,7 @@ class GeminiService {
         if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
         if (ApiConfig.hasGroq) available.add(AIProvider.groq);
         if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
-        if (ApiConfig.hasHuggingFace) available.add(AIProvider.huggingFace);
+        if (_huggingFaceUsable) available.add(AIProvider.huggingFace);
         break;
     }
 
@@ -437,7 +583,7 @@ class GeminiService {
       if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
       if (ApiConfig.hasGroq) available.add(AIProvider.groq);
       if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
-      if (ApiConfig.hasHuggingFace) available.add(AIProvider.huggingFace);
+      if (_huggingFaceUsable) available.add(AIProvider.huggingFace);
     }
 
     return available;
@@ -449,32 +595,25 @@ class GeminiService {
     int maxTokens = 1500,
     double temperature = 0.7,
   }) async {
-    int attempts = 0;
-    const maxRetries = 2;
-
-    while (attempts < maxRetries) {
-      attempts++;
-      try {
-        return await _callProvider(provider, prompt,
-            maxTokens: maxTokens, temperature: temperature);
-      } catch (e) {
-        final errorString = e.toString();
-        if (errorString.contains('429') || errorString.contains('Rate limit')) {
-          _setRateLimited(provider, minutes: attempts * 2);
-          if (attempts >= maxRetries) rethrow;
-          await Future.delayed(Duration(seconds: attempts * 2));
-        } else if (errorString.contains('401') ||
-            errorString.contains('Unauthorized')) {
-          // Auth failure — don't retry
-          debugPrint('[AI] ✗ ${provider.name} auth failure (401) — check API key');
-          _setRateLimited(provider, minutes: 60); // Long cooldown for bad keys
-          rethrow;
-        } else {
-          rethrow;
-        }
+    try {
+      return await _callProvider(provider, prompt,
+          maxTokens: maxTokens, temperature: temperature);
+    } catch (e) {
+      final errorString = e.toString();
+      if (errorString.contains('429') || errorString.contains('Rate limit')) {
+        // Don't retry — the provider is rate-limited. Cool it down and let
+        // the fallback chain pick the next provider.
+        _setRateLimited(provider, minutes: 4);
+        rethrow;
+      } else if (errorString.contains('401') ||
+          errorString.contains('Unauthorized')) {
+        debugPrint('[AI] ✗ ${provider.name} auth failure (401) — check API key');
+        _setRateLimited(provider, minutes: 60);
+        rethrow;
+      } else {
+        rethrow;
       }
     }
-    return null;
   }
 
   static Future<String?> _callProvider(

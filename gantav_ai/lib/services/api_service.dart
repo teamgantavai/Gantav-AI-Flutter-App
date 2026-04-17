@@ -101,46 +101,137 @@ class ApiService {
 
   static Future<Course?> suggestPath(String dream) async {
     try {
-      // 1. Check for Gantav Verified courses first (by category or keywords)
+      // 1. Verified curated courses take priority
       final verifiedCourses = await AdminService.getVerifiedCourses(dream);
-      if (verifiedCourses.isNotEmpty) {
-        // Pick the best match or first one
-        return verifiedCourses.first;
+      if (verifiedCourses.isNotEmpty) return verifiedCourses.first;
+
+      // 2. PLAYLIST-FIRST: try to find a single-channel YouTube playlist that
+      // covers the whole topic. This gives consistent teaching style and
+      // avoids the "mixed random videos from 9 channels" problem.
+      final playlist = await YouTubeApiService.findBestPlaylist(topic: dream);
+      if (playlist != null) {
+        final videos =
+            await YouTubeApiService.fetchPlaylistVideos(playlist.id);
+        if (videos.length >= 3) {
+          return _buildCourseFromPlaylist(dream, playlist, videos);
+        }
       }
 
-      // 2. If no verified course, and since user wants to disable AI generation, 
-      // we can either return a default verified course or continue searching.
-      // For now, we'll keep the AI as a fallback but mark it clearly, 
-      // or we can implement a "Request Verified Course" flow.
-      
-      // USER REQUEST: "disable the ai course generation feature"
-      // So I will comment out the Gemini call and return a generic verified course if available, 
-      // or a message.
-      
-      final allVerified = await AdminService.getAllVerifiedCourses();
-      if (allVerified.isNotEmpty) {
-        // Return a related one or just the best one we have
-        return allVerified.first;
-      }
-
-      // If absolutely no verified courses exist yet, fallback to AI but this should be rare once admin populates data.
-      final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(topic: dream);
-      
-      // We'll keep the fallback logic for now but the primary goal is manual.
+      // 3. If no playlist works, fall back to AI-stitched individual videos.
+      final preFilteredVideos =
+          await YouTubeApiService.fetchHighQualityVideos(topic: dream);
       final course = await GeminiService.generateLearningPath(
         dream: dream,
         preFilteredVideos: preFilteredVideos,
       );
-
       if (course != null) return course;
 
-      // Fallback if AI fails completely
+      // 4. Last-resort fallback from raw video list.
       if (preFilteredVideos.isNotEmpty) {
-         return _buildFallbackCourse(dream, preFilteredVideos);
+        return _buildFallbackCourse(dream, preFilteredVideos);
       }
+
+      // 5. Nothing else worked: use a verified course if any exist.
+      final allVerified = await AdminService.getAllVerifiedCourses();
+      if (allVerified.isNotEmpty) return allVerified.first;
     } catch (_) {}
 
     return Course.mockCourses().first;
+  }
+
+  /// Build a Course from a single YouTube playlist. Videos are split into
+  /// modules of ~3 lessons each while preserving playlist order. All lessons
+  /// come from the same channel so the teaching style stays consistent.
+  static Course _buildCourseFromPlaylist(
+    String dream,
+    YouTubePlaylistCandidate playlist,
+    List<YouTubeVideoStats> videos,
+  ) {
+    const lessonsPerModule = 3;
+    final moduleCount =
+        (videos.length / lessonsPerModule).ceil().clamp(1, 6);
+    final modules = <Module>[];
+    int vidIdx = 0;
+    int totalLessons = 0;
+
+    for (int m = 0; m < moduleCount && vidIdx < videos.length; m++) {
+      final lessons = <Lesson>[];
+      for (int l = 0;
+          l < lessonsPerModule && vidIdx < videos.length;
+          l++, vidIdx++) {
+        final v = videos[vidIdx];
+        lessons.add(Lesson(
+          id: 'pl_${playlist.id}_l$vidIdx',
+          title: v.title,
+          youtubeVideoId: v.id,
+          duration: v.durationText,
+        ));
+        totalLessons++;
+      }
+      modules.add(Module(
+        id: 'pl_${playlist.id}_m$m',
+        title: _moduleTitleForIndex(m, moduleCount, dream),
+        lessonCount: lessons.length,
+        isLocked: m > 0,
+        lessons: lessons,
+      ));
+    }
+
+    final firstThumb =
+        videos.isNotEmpty ? 'https://img.youtube.com/vi/${videos.first.id}/maxresdefault.jpg' : playlist.thumbnailUrl;
+
+    final prettyDream = dream.trim().isEmpty
+        ? 'Learning'
+        : dream
+            .trim()
+            .split(RegExp(r'\s+'))
+            .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+            .join(' ');
+
+    return Course(
+      id: 'playlist_${playlist.id}',
+      title: playlist.title.isNotEmpty
+          ? playlist.title
+          : 'Complete $prettyDream Course',
+      description:
+          'A full course curated from a single channel (${playlist.channelTitle}) — ${videos.length} lessons in order.',
+      category: dream,
+      thumbnailUrl: firstThumb,
+      rating: 4.8,
+      learnerCount: 128,
+      totalLessons: totalLessons,
+      estimatedTime: _estimateTotalTime(videos),
+      skills: [dream],
+      modules: modules,
+    );
+  }
+
+  static String _moduleTitleForIndex(int index, int total, String dream) {
+    if (total == 1) return 'Full Course';
+    if (index == 0) return 'Module 1 · Foundations';
+    if (index == total - 1) return 'Module ${index + 1} · Mastery';
+    return 'Module ${index + 1} · Deep Dive';
+  }
+
+  static String _estimateTotalTime(List<YouTubeVideoStats> videos) {
+    int totalSeconds = 0;
+    for (final v in videos) {
+      final parts = v.durationText.split(':');
+      try {
+        if (parts.length == 3) {
+          totalSeconds += int.parse(parts[0]) * 3600 +
+              int.parse(parts[1]) * 60 +
+              int.parse(parts[2]);
+        } else if (parts.length == 2) {
+          totalSeconds +=
+              int.parse(parts[0]) * 60 + int.parse(parts[1]);
+        }
+      } catch (_) {}
+    }
+    final hours = totalSeconds ~/ 3600;
+    final mins = (totalSeconds % 3600) ~/ 60;
+    if (hours > 0) return '${hours}h ${mins}m';
+    return '${mins}m';
   }
 
   static Course _buildFallbackCourse(String dream, List<YouTubeVideoStats> videos) {
@@ -172,12 +263,20 @@ class ApiService {
        }
     }
 
+    final prettyDream = dream.trim().isEmpty
+        ? 'Learning'
+        : dream
+            .trim()
+            .split(RegExp(r'\s+'))
+            .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+            .join(' ');
+
     return Course(
-      id: 'fallback_\${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Complete \$dream Course',
-      description: 'A curated list of high quality tutorials for \$dream',
+      id: 'fallback_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Complete $prettyDream Course',
+      description: 'A curated list of high quality tutorials for $prettyDream',
       category: dream,
-      thumbnailUrl: videos.isNotEmpty ? 'https://img.youtube.com/vi/\${videos.first.id}/maxresdefault.jpg' : '',
+      thumbnailUrl: videos.isNotEmpty ? 'https://img.youtube.com/vi/${videos.first.id}/maxresdefault.jpg' : '',
       rating: 4.8,
       learnerCount: 154,
       totalLessons: vidIdx,

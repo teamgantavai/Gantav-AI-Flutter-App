@@ -140,11 +140,19 @@ class Course {
   bool get isInProgress => completedLessons > 0 && completedLessons < totalLessons;
 
   factory Course.fromJson(Map<String, dynamic> json) {
+    final rawCategory = (json['category'] ?? '').toString();
+    final rawTitle = (json['title'] ?? '').toString();
+    final rawDesc = (json['description'] ?? '').toString();
+    final fallbackName = rawCategory.trim().isEmpty ? 'Learning' : rawCategory;
+    String sanitize(String s) => s
+        .replaceAll(r'${dream}', fallbackName)
+        .replaceAll(r'$dream', fallbackName)
+        .replaceAll('Complete  Course', 'Complete $fallbackName Course');
     return Course(
       id: json['id'] ?? '',
-      title: json['title'] ?? '',
-      description: json['description'] ?? '',
-      category: json['category'] ?? '',
+      title: sanitize(rawTitle),
+      description: sanitize(rawDesc),
+      category: rawCategory,
       language: json['language'] ?? 'English',
       thumbnailUrl: json['thumbnail_url'] ?? '',
       rating: (json['rating'] ?? 0.0).toDouble(),

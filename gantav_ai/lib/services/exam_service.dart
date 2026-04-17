@@ -24,35 +24,105 @@ class ExamService {
   static const String _cachePrefix = 'mock_test_cache_';
   static const String _attemptsKey = 'mock_attempts';
 
+  // Persistent per exam+subject question bank. First attempt fills it with ~50
+  // AI-generated questions; every subsequent attempt reshuffles a random subset
+  // instead of calling the AI again. This is what keeps quota alive and ensures
+  // the user never sees the tiny 2-question static fallback after day one.
+  static const String _bankPrefix = 'exam_qbank_v1_';
+  static const int _bankTargetSize = 50;
+  static const Duration _bankTtl = Duration(days: 30);
+
   // ─── Mock Test Generation ─────────────────────────────────────────────────
 
-  /// Generates a fresh mock test for the given exam+subject via AI.
-  /// Falls back to a deterministic sample test if AI is unavailable.
+  /// Generates a mock test for the given exam+subject.
+  ///
+  /// Strategy: maintain a persistent bank of ~50 questions per (exam, subject).
+  /// A mock test is a random subset of `questionCount` drawn from the bank, so
+  /// the very first user pays the AI cost and every later attempt is instant
+  /// and works offline. The bank auto-refreshes after [_bankTtl].
   static Future<MockTest> generateMockTest({
     required ExamCategory exam,
     required ExamSubject subject,
     int questionCount = 25,
     int durationMinutes = 30,
   }) async {
+    final bank = await _getOrBuildBank(exam: exam, subject: subject);
+
+    final picked = _pickSubset(bank.questions, questionCount);
+    final source = bank.source;
+    final description = bank.description;
+
     final testId =
         'mt_${exam.id}_${subject.id}_${DateTime.now().millisecondsSinceEpoch}';
 
-    // Try cache first
-    final cached = await _loadCachedTest(testId);
-    if (cached != null) return cached;
+    final test = MockTest(
+      id: testId,
+      examId: exam.id,
+      subjectId: subject.id,
+      title: '${subject.name} — Full Mock Test',
+      description: description,
+      durationMinutes: durationMinutes,
+      questions: picked,
+      createdAt: DateTime.now(),
+      source: source,
+    );
 
+    await _cacheTest(test);
+    return test;
+  }
+
+  /// Re-rolls the bank from scratch (used when the user taps "Fresh questions"
+  /// in the mock-test intro screen, if exposed). Safe to call — falls back to
+  /// the existing bank if AI is unavailable.
+  static Future<void> refreshBank({
+    required ExamCategory exam,
+    required ExamSubject subject,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_bankKey(exam, subject));
+    await _getOrBuildBank(exam: exam, subject: subject);
+  }
+
+  // ─── Question Bank ────────────────────────────────────────────────────────
+
+  static String _bankKey(ExamCategory exam, ExamSubject subject) =>
+      '$_bankPrefix${exam.id}_${subject.id}';
+
+  static Future<_QuestionBank> _getOrBuildBank({
+    required ExamCategory exam,
+    required ExamSubject subject,
+  }) async {
+    // 1. Local cache
+    final cached = await _loadBank(exam, subject);
+    if (cached != null && cached.questions.length >= 10) return cached;
+
+    // 2. Firestore mirror (so a second device/user doesn't re-pay the AI cost)
+    final remote = await _loadBankFromFirestore(exam, subject);
+    if (remote != null && remote.questions.length >= 10) {
+      await _saveBank(exam, subject, remote);
+      return remote;
+    }
+
+    // 3. Build fresh
+    return _buildBank(exam: exam, subject: subject);
+  }
+
+  static Future<_QuestionBank> _buildBank({
+    required ExamCategory exam,
+    required ExamSubject subject,
+  }) async {
     List<ExamQuestion> questions = [];
     String source = 'ai-pyq-style';
     String description =
         'AI-generated, PYQ-style questions modelled on ${exam.name} (2024–2026) pattern.';
 
-    // 1. Try real online PYQs via Gemini Google-Search grounding
+    // Try real online PYQs via Gemini Google-Search grounding
     if (ApiConfig.hasGemini) {
       try {
         questions = await PyqService.fetchOnlinePyqs(
           exam: exam,
           subject: subject,
-          count: questionCount,
+          count: _bankTargetSize,
         );
         if (questions.isNotEmpty) {
           source = 'online-pyq';
@@ -64,38 +134,145 @@ class ExamService {
       }
     }
 
-    // 2. Fall back to AI-generated PYQ-style questions
-    if (questions.isEmpty && ApiConfig.isConfigured) {
+    // Fall back to AI-generated PYQ-style questions
+    if (questions.length < 10 && ApiConfig.isConfigured) {
       try {
-        questions = await _aiGenerateQuestions(
+        final generated = await _aiGenerateQuestions(
           exam: exam,
           subject: subject,
-          count: questionCount,
+          count: _bankTargetSize,
         );
+        // Merge, dedupe on question text
+        final existing = questions.map((q) => q.question.toLowerCase()).toSet();
+        for (final q in generated) {
+          if (existing.add(q.question.toLowerCase())) questions.add(q);
+        }
       } catch (e) {
         debugPrint('[ExamService] AI generation failed: $e');
       }
     }
 
-    // 3. Final offline fallback
+    // Final offline fallback — only used when we have zero questions
     if (questions.isEmpty) {
-      questions = _fallbackQuestions(exam: exam, subject: subject, count: questionCount);
+      questions = _fallbackQuestions(
+        exam: exam,
+        subject: subject,
+        count: 10,
+      );
+      source = 'offline-fallback';
+      description =
+          'Offline starter questions. Connect to internet to unlock the full AI-generated bank.';
     }
 
-    final test = MockTest(
-      id: testId,
-      examId: exam.id,
-      subjectId: subject.id,
-      title: '${subject.name} — Full Mock Test',
-      description: description,
-      durationMinutes: durationMinutes,
+    final bank = _QuestionBank(
       questions: questions,
-      createdAt: DateTime.now(),
       source: source,
+      description: description,
+      builtAt: DateTime.now(),
     );
+    await _saveBank(exam, subject, bank);
+    // Mirror to Firestore (best effort, don't block)
+    _saveBankToFirestore(exam, subject, bank);
+    return bank;
+  }
 
-    await _cacheTest(test);
-    return test;
+  static Future<_QuestionBank?> _loadBank(
+      ExamCategory exam, ExamSubject subject) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_bankKey(exam, subject));
+      if (raw == null) return null;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      final builtAt = DateTime.tryParse(map['built_at']?.toString() ?? '');
+      if (builtAt == null ||
+          DateTime.now().difference(builtAt) > _bankTtl) {
+        await prefs.remove(_bankKey(exam, subject));
+        return null;
+      }
+      final list = (map['questions'] as List)
+          .map((j) => ExamQuestion.fromJson(j as Map<String, dynamic>))
+          .toList();
+      return _QuestionBank(
+        questions: list,
+        source: map['source']?.toString() ?? 'ai-pyq-style',
+        description: map['description']?.toString() ?? '',
+        builtAt: builtAt,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _saveBank(
+      ExamCategory exam, ExamSubject subject, _QuestionBank bank) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _bankKey(exam, subject),
+        jsonEncode({
+          'built_at': bank.builtAt.toIso8601String(),
+          'source': bank.source,
+          'description': bank.description,
+          'questions': bank.questions.map((q) => q.toJson()).toList(),
+        }),
+      );
+    } catch (_) {}
+  }
+
+  static Future<_QuestionBank?> _loadBankFromFirestore(
+      ExamCategory exam, ExamSubject subject) async {
+    try {
+      final snap = await _db
+          .collection('exam_banks')
+          .doc('${exam.id}_${subject.id}')
+          .get();
+      if (!snap.exists) return null;
+      final data = snap.data();
+      if (data == null) return null;
+      final builtAt = DateTime.tryParse(data['built_at']?.toString() ?? '');
+      if (builtAt == null ||
+          DateTime.now().difference(builtAt) > _bankTtl) {
+        return null;
+      }
+      final list = (data['questions'] as List)
+          .map((j) => ExamQuestion.fromJson(Map<String, dynamic>.from(j as Map)))
+          .toList();
+      return _QuestionBank(
+        questions: list,
+        source: data['source']?.toString() ?? 'ai-pyq-style',
+        description: data['description']?.toString() ?? '',
+        builtAt: builtAt,
+      );
+    } catch (e) {
+      debugPrint('[ExamService] firestore bank load error: $e');
+      return null;
+    }
+  }
+
+  static Future<void> _saveBankToFirestore(
+      ExamCategory exam, ExamSubject subject, _QuestionBank bank) async {
+    try {
+      await _db.collection('exam_banks').doc('${exam.id}_${subject.id}').set({
+        'built_at': bank.builtAt.toIso8601String(),
+        'source': bank.source,
+        'description': bank.description,
+        'questions': bank.questions.map((q) => q.toJson()).toList(),
+        'exam_id': exam.id,
+        'subject_id': subject.id,
+      });
+    } catch (e) {
+      debugPrint('[ExamService] firestore bank save error: $e');
+    }
+  }
+
+  static List<ExamQuestion> _pickSubset(
+      List<ExamQuestion> bank, int count) {
+    if (bank.length <= count) {
+      final copy = List<ExamQuestion>.from(bank)..shuffle(Random());
+      return copy;
+    }
+    final copy = List<ExamQuestion>.from(bank)..shuffle(Random());
+    return copy.take(count).toList();
   }
 
   static Future<List<ExamQuestion>> _aiGenerateQuestions({
@@ -112,13 +289,14 @@ Generate exactly $count multiple-choice questions for the subject "${subject.nam
 Guidelines:
 - Match the *style, difficulty curve, and topic distribution* of past year questions from 2024, 2025, and 2026.
 - Do NOT copy any specific real PYQ verbatim. Create original questions in the same pattern.
-- Cover a variety of topics within ${subject.name}.
+- Ensure strong TOPIC DIVERSITY — spread across every major sub-topic of ${subject.name}. No two questions should test the exact same concept.
 - Mix difficulty: ~30% easy, ~50% medium, ~20% hard.
-- Each question must have exactly 4 options.
+- Each question must have exactly 4 options, unambiguous, and only ONE correct.
 - Provide a concise 1–2 line explanation for the correct answer.
 - For numerical/math: keep answers precise. For theory: avoid ambiguity.
+- Use unique ids q_1, q_2, … q_$count.
 
-Return ONLY a valid JSON array, no markdown, no prose:
+Return ONLY a valid JSON array (no markdown, no prose, no trailing commas):
 [
   {
     "id": "q_1",
@@ -133,11 +311,14 @@ Return ONLY a valid JSON array, no markdown, no prose:
 ]
 ''';
 
+    // Larger bank needs a bigger token budget. Gemini 1.5 Flash handles ~8K
+    // comfortably for JSON arrays of this shape.
+    final tokenBudget = (count * 180).clamp(2000, 8000);
     final response = await GeminiService.callAI(
       prompt,
       task: AITask.courseGeneration, // uses the strongest JSON-capable provider
-      maxTokens: 4500,
-      temperature: 0.4,
+      maxTokens: tokenBudget,
+      temperature: 0.5,
     );
     if (response == null) return [];
 
@@ -214,17 +395,6 @@ Return ONLY a valid JSON array, no markdown, no prose:
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_cachePrefix + test.id, jsonEncode(test.toJson()));
     } catch (_) {}
-  }
-
-  static Future<MockTest?> _loadCachedTest(String testId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_cachePrefix + testId);
-      if (raw == null) return null;
-      return MockTest.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) {
-      return null;
-    }
   }
 
   // ─── Scoring ───────────────────────────────────────────────────────────────
@@ -347,4 +517,18 @@ Return ONLY a valid JSON array, no markdown, no prose:
       return [];
     }
   }
+}
+
+class _QuestionBank {
+  final List<ExamQuestion> questions;
+  final String source;
+  final String description;
+  final DateTime builtAt;
+
+  _QuestionBank({
+    required this.questions,
+    required this.source,
+    required this.description,
+    required this.builtAt,
+  });
 }

@@ -55,6 +55,51 @@ class YouTubeVideoStats {
       );
 }
 
+class YouTubePlaylistCandidate {
+  final String id;
+  final String title;
+  final String channelTitle;
+  final String channelId;
+  final String description;
+  final String thumbnailUrl;
+  final int videoCount;
+  final double score;
+
+  const YouTubePlaylistCandidate({
+    required this.id,
+    required this.title,
+    required this.channelTitle,
+    required this.channelId,
+    required this.description,
+    required this.thumbnailUrl,
+    required this.videoCount,
+    required this.score,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'channelTitle': channelTitle,
+        'channelId': channelId,
+        'description': description,
+        'thumbnailUrl': thumbnailUrl,
+        'videoCount': videoCount,
+        'score': score,
+      };
+
+  factory YouTubePlaylistCandidate.fromJson(Map<String, dynamic> json) =>
+      YouTubePlaylistCandidate(
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        channelTitle: json['channelTitle']?.toString() ?? '',
+        channelId: json['channelId']?.toString() ?? '',
+        description: json['description']?.toString() ?? '',
+        thumbnailUrl: json['thumbnailUrl']?.toString() ?? '',
+        videoCount: (json['videoCount'] as num?)?.toInt() ?? 0,
+        score: (json['score'] as num?)?.toDouble() ?? 0.0,
+      );
+}
+
 class YouTubeApiService {
   static const String _baseUrl = 'https://www.googleapis.com/youtube/v3';
   static const int _cacheDurationDays = 7;
@@ -185,6 +230,252 @@ class YouTubeApiService {
       debugPrint('[YouTube] Stats exception: $e');
     }
     return [];
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // PLAYLIST-FIRST COURSE GENERATION
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /// Search for the best YouTube playlist for a topic.
+  /// Returns a candidate with id, title, channelTitle, videoCount and
+  /// a computed quality score. Picks from a single channel so the whole
+  /// course flows in one teaching style.
+  ///
+  /// Returns null if no suitable playlist found.
+  static Future<YouTubePlaylistCandidate?> findBestPlaylist({
+    required String topic,
+    String language = 'English',
+    int minVideos = 5,
+    int maxVideos = 40,
+  }) async {
+    if (!ApiConfig.hasYoutube) return null;
+
+    final langQuery = language == 'Hindi'
+        ? '$topic complete course playlist in Hindi'
+        : '$topic complete course playlist';
+    final cacheKey =
+        'yt_playlist_v1_${langQuery.toLowerCase().replaceAll(' ', '_')}';
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString(cacheKey);
+      final cachedTime = prefs.getInt('${cacheKey}_time');
+      if (cached != null && cachedTime != null) {
+        final age = DateTime.now()
+            .difference(DateTime.fromMillisecondsSinceEpoch(cachedTime));
+        if (age.inDays < _cacheDurationDays) {
+          return YouTubePlaylistCandidate.fromJson(jsonDecode(cached));
+        }
+      }
+    } catch (_) {}
+
+    // 1. Search playlists
+    final playlistIds = await _searchPlaylistIds(
+      langQuery,
+      relevanceLanguage: language == 'Hindi' ? 'hi' : 'en',
+    );
+    if (playlistIds.isEmpty) return null;
+
+    // 2. Fetch details + video counts
+    final candidates = await _fetchPlaylistDetails(playlistIds);
+    if (candidates.isEmpty) return null;
+
+    // 3. Filter: must have between min and max videos (enough content, not
+    //    a junk 200-video dump)
+    final filtered = candidates
+        .where((c) => c.videoCount >= minVideos && c.videoCount <= maxVideos)
+        .toList();
+    if (filtered.isEmpty) return null;
+
+    // 4. Rank by score (favors higher video count, well-known channels)
+    filtered.sort((a, b) => b.score.compareTo(a.score));
+    final best = filtered.first;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'yt_playlist_v1_${langQuery.toLowerCase().replaceAll(' ', '_')}',
+          jsonEncode(best.toJson()));
+      await prefs.setInt(
+          'yt_playlist_v1_${langQuery.toLowerCase().replaceAll(' ', '_')}_time',
+          DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {}
+
+    return best;
+  }
+
+  static Future<List<String>> _searchPlaylistIds(
+    String query, {
+    String relevanceLanguage = 'en',
+    int maxResults = 10,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/search?'
+        'part=snippet'
+        '&maxResults=$maxResults'
+        '&q=${Uri.encodeComponent(query)}'
+        '&type=playlist'
+        '&relevanceLanguage=$relevanceLanguage'
+        '&key=${ApiConfig.youtubeApiKey}',
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final items = data['items'] as List;
+        return items
+            .map((item) => item['id']?['playlistId'] as String?)
+            .whereType<String>()
+            .toList();
+      } else {
+        debugPrint('[YouTube] Playlist search error: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('[YouTube] Playlist search exception: $e');
+    }
+    return [];
+  }
+
+  static Future<List<YouTubePlaylistCandidate>> _fetchPlaylistDetails(
+      List<String> playlistIds) async {
+    try {
+      final idString = playlistIds.join(',');
+      final uri = Uri.parse(
+        '$_baseUrl/playlists?'
+        'part=snippet,contentDetails'
+        '&id=$idString'
+        '&maxResults=50'
+        '&key=${ApiConfig.youtubeApiKey}',
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return [];
+
+      final data = json.decode(response.body);
+      final items = data['items'] as List;
+      final out = <YouTubePlaylistCandidate>[];
+      for (final item in items) {
+        final snippet = item['snippet'] ?? {};
+        final details = item['contentDetails'] ?? {};
+        final videoCount = (details['itemCount'] as num?)?.toInt() ?? 0;
+        final title = snippet['title']?.toString() ?? '';
+        final channel = snippet['channelTitle']?.toString() ?? '';
+        final channelId = snippet['channelId']?.toString() ?? '';
+        final description = snippet['description']?.toString() ?? '';
+        final thumb = (snippet['thumbnails']?['high']?['url'] ??
+                snippet['thumbnails']?['default']?['url'] ??
+                '')
+            .toString();
+
+        // Score: favor reasonable length (8-25 videos is sweet spot for a
+        // course), penalize extremes, prefer titles that look course-like.
+        double score = 0;
+        if (videoCount >= 8 && videoCount <= 25) {
+          score += 30;
+        } else if (videoCount >= 5) {
+          score += 15;
+        }
+        final lowerTitle = title.toLowerCase();
+        if (lowerTitle.contains('complete') ||
+            lowerTitle.contains('full course') ||
+            lowerTitle.contains('tutorial') ||
+            lowerTitle.contains('bootcamp')) {
+          score += 10;
+        }
+        score += videoCount.clamp(0, 30).toDouble() * 0.5;
+
+        out.add(YouTubePlaylistCandidate(
+          id: item['id']?.toString() ?? '',
+          title: title,
+          channelTitle: channel,
+          channelId: channelId,
+          description: description,
+          thumbnailUrl: thumb,
+          videoCount: videoCount,
+          score: score,
+        ));
+      }
+      return out;
+    } catch (e) {
+      debugPrint('[YouTube] Playlist details exception: $e');
+      return [];
+    }
+  }
+
+  /// Fetch all videos from a playlist in order. Single channel guaranteed
+  /// because playlists are owned by one channel. Returns videos with full
+  /// stats so caller can build lessons.
+  static Future<List<YouTubeVideoStats>> fetchPlaylistVideos(
+      String playlistId,
+      {int maxVideos = 30}) async {
+    if (!ApiConfig.hasYoutube || playlistId.isEmpty) return [];
+
+    final cacheKey = 'yt_playlist_items_v1_$playlistId';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString(cacheKey);
+      final cachedTime = prefs.getInt('${cacheKey}_time');
+      if (cached != null && cachedTime != null) {
+        final age = DateTime.now()
+            .difference(DateTime.fromMillisecondsSinceEpoch(cachedTime));
+        if (age.inDays < _cacheDurationDays) {
+          final List<dynamic> list = jsonDecode(cached);
+          return list.map((j) => YouTubeVideoStats.fromJson(j)).toList();
+        }
+      }
+    } catch (_) {}
+
+    final ids = <String>[];
+    String? pageToken;
+    int safety = 0;
+    while (ids.length < maxVideos && safety < 3) {
+      safety++;
+      try {
+        final uri = Uri.parse(
+          '$_baseUrl/playlistItems?'
+          'part=contentDetails'
+          '&maxResults=50'
+          '&playlistId=$playlistId'
+          '${pageToken != null ? '&pageToken=$pageToken' : ''}'
+          '&key=${ApiConfig.youtubeApiKey}',
+        );
+        final response =
+            await http.get(uri).timeout(const Duration(seconds: 10));
+        if (response.statusCode != 200) break;
+        final data = json.decode(response.body);
+        final items = (data['items'] as List? ?? []);
+        for (final item in items) {
+          final vid = item['contentDetails']?['videoId']?.toString();
+          if (vid != null && vid.isNotEmpty) ids.add(vid);
+          if (ids.length >= maxVideos) break;
+        }
+        pageToken = data['nextPageToken']?.toString();
+        if (pageToken == null || pageToken.isEmpty) break;
+      } catch (e) {
+        debugPrint('[YouTube] Playlist items exception: $e');
+        break;
+      }
+    }
+
+    if (ids.isEmpty) return [];
+
+    // Stats fetch supports up to 50 ids per call; we capped maxVideos anyway.
+    final stats = await _getVideoStats(ids);
+    // Preserve the playlist ordering (stats call may reorder)
+    final byId = {for (final s in stats) s.id: s};
+    final ordered = ids
+        .map((id) => byId[id])
+        .whereType<YouTubeVideoStats>()
+        .toList();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(cacheKey,
+          jsonEncode(ordered.map((v) => v.toJson()).toList()));
+      await prefs.setInt(
+          '${cacheKey}_time', DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {}
+
+    return ordered;
   }
 
   static String _parseDuration(String isoDuration) {

@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../models/catalog_data.dart';
 import '../widgets/widgets.dart';
 import 'course_detail_screen.dart';
+import '../widgets/daily_time_dialog.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -75,7 +76,10 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Future<void> _generateCourseFromSubCategory(SubCategory sub) async {
     final appState = context.read<AppState>();
-    appState.generateCourseInBackgroundFromCategory(sub.promptHint);
+    final dailyMinutes = await showDailyTimeDialog(context);
+    if (!mounted) return;
+    appState.generateCourseInBackgroundFromCategory(sub.promptHint,
+        dailyMinutes: dailyMinutes);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -105,11 +109,16 @@ class _ExploreScreenState extends State<ExploreScreen>
       backgroundColor: Colors.transparent,
       builder: (ctx) => _CustomCourseBuilderSheet(
         isDark: isDark,
-        onGenerate: (courseName, language, channel) {
+        onGenerate: (courseName, language, channel) async {
           Navigator.pop(ctx);
           // Build a well-formed prompt with the actual course name
           final prompt = _buildCoursePrompt(courseName, language, channel);
-          context.read<AppState>().generateCourseInBackgroundFromCategory(prompt);
+          if (!context.mounted) return;
+          final dailyMinutes = await showDailyTimeDialog(context);
+          if (!context.mounted) return;
+          context.read<AppState>().generateCourseInBackgroundFromCategory(
+              prompt,
+              dailyMinutes: dailyMinutes);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(

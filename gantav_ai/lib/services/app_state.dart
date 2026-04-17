@@ -5,10 +5,9 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
-import '../services/gemini_service.dart';
 import '../services/onboarding_service.dart';
-import '../services/youtube_api_service.dart';
 import '../services/admin_service.dart';
+import '../services/course_roadmap_builder.dart';
 
 enum AuthStatus {
   unauthenticated,
@@ -58,8 +57,28 @@ class AppState extends ChangeNotifier {
     return all.where((c) => seen.add(c.id)).toList();
   }
   
-  List<Course> get activeCourses =>
-      courses.where((c) => c.isInProgress).toList();
+  /// Courses the user is actively learning.
+  /// For authenticated users: include all generated/enrolled courses that are
+  /// not yet fully complete, even if no lessons have been completed yet.
+  /// For guests: fall back to legacy isInProgress filter on mock data.
+  List<Course> get activeCourses {
+    if (isAuthenticated && _generatedCourses.isNotEmpty) {
+      final seen = <String>{};
+      final result = <Course>[];
+      for (final c in _generatedCourses) {
+        if (!seen.add(c.id)) continue;
+        final notFullyDone =
+            c.totalLessons == 0 || c.completedLessons < c.totalLessons;
+        if (notFullyDone) result.add(c);
+      }
+      // Also include any in-progress verified courses merged from _courses
+      for (final c in _courses) {
+        if (c.isInProgress && seen.add(c.id)) result.add(c);
+      }
+      return result;
+    }
+    return courses.where((c) => c.isInProgress).toList();
+  }
       
   List<Course> get favoriteCourses {
     // For now, let's assume courses with high rating or that user marked as starred are favorites
@@ -576,6 +595,27 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Build a personalized Roadmap for a freshly generated Course using the
+  /// user's daily available minutes. Persists to local + Firestore.
+  Future<Roadmap?> buildRoadmapForCourse(
+      Course course, int dailyMinutes) async {
+    try {
+      final roadmap = CourseRoadmapBuilder.buildFromCourse(
+        course: course,
+        dailyMinutes: dailyMinutes,
+        language: _preferences?.language == 'hi' ? 'hi' : 'en',
+      );
+      _roadmaps.insert(0, roadmap);
+      await _saveLocalRoadmaps();
+      _firestoreService.saveRoadmap(roadmap).catchError((_) {});
+      notifyListeners();
+      return roadmap;
+    } catch (e) {
+      debugPrint('[AppState] buildRoadmapForCourse failed: $e');
+      return null;
+    }
+  }
+
   Future<Course?> generateCourseFromCategory(String prompt) async {
     try {
       final course = await ApiService.suggestPath(prompt)
@@ -601,7 +641,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> generateCourseInBackground(
-      String prompt, String dreamTopic) async {
+      String prompt, String dreamTopic,
+      {int? dailyMinutes}) async {
     _isGeneratingCourse = true;
     showNotification(
         'AI is creating your learning path in the background. You will be notified when it is ready!');
@@ -620,17 +661,16 @@ class AppState extends ChangeNotifier {
         return;
       }
 
-      // 2. If not found, proceed with AI generation
-      final preFilteredVideos =
-          await YouTubeApiService.fetchHighQualityVideos(topic: prompt);
-      final course = await GeminiService.generateLearningPath(
-        dream: prompt,
-        preFilteredVideos: preFilteredVideos,
-      );
+      // 2. Use playlist-first suggestPath (tries YouTube playlist, then AI).
+      //    This guarantees single-channel content when a good playlist exists.
+      final course = await ApiService.suggestPath(prompt)
+          .timeout(const Duration(seconds: 60), onTimeout: () => null);
       if (course != null) {
         await addGeneratedCourse(course);
         await setDream(dreamTopic, courseId: course.id);
         _lastCompletedCourse = course;
+        final minutes = dailyMinutes ?? _preferences?.dailyStudyMinutes ?? 30;
+        await buildRoadmapForCourse(course, minutes);
         showNotification(
             'Success: Your new course "${course.title}" is ready!');
       } else {
@@ -648,7 +688,8 @@ class AppState extends ChangeNotifier {
 
   /// Generate course in background from category subcategory tap
   /// Returns immediately, notifies via toast when done
-  Future<void> generateCourseInBackgroundFromCategory(String promptHint) async {
+  Future<void> generateCourseInBackgroundFromCategory(String promptHint,
+      {int? dailyMinutes}) async {
     _isGeneratingCourse = true;
     notifyListeners();
 
@@ -670,6 +711,8 @@ class AppState extends ChangeNotifier {
         await _saveLocalCourses();
         await _firestoreService.saveActiveCourse(course);
         _lastCompletedCourse = course;
+        final minutes = dailyMinutes ?? _preferences?.dailyStudyMinutes ?? 30;
+        await buildRoadmapForCourse(course, minutes);
         showNotification('Success: Your course "${course.title}" is ready!');
       } else {
         showNotification(
