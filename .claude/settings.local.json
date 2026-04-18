@@ -3,7 +3,8 @@
     "allow": [
       "Bash(find . -type f \\\\\\( -name \"*.dart\" -o -name \"*.js\" -o -name \"*.json\" \\\\\\) -exec grep -l \"pollinations\\\\|Pollinations\\\\|image.*generate\\\\|generate.*image\\\\|tutor\\\\|Tutor\\\\|AI.*Tutor\" {} \\\\;)",
       "Bash(wc -l lib/**/*.dart)",
-      "Bash(flutter analyze:*)"
+      "Bash(flutter analyze:*)",
+      "Bash(find \"/mnt/d/Gantav AI Flutter/gantav_ai/.claude/worktrees/elastic-swartz-4e8187/gantav_ai/lib\" -name \"*.dart\" -type f -exec grep -l \"completeLesson\\\\|markComplete\\\\|completedLessons\" {} \\\\;)"
     ]
   }
 }

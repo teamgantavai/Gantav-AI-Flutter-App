@@ -7,7 +7,6 @@ import '../widgets/widgets.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'roadmap_screen.dart';
 import 'course_detail_screen.dart';
 import '../services/auth_service.dart';
 import '../services/certificate_service.dart';
@@ -729,7 +728,10 @@ class _GeneratedCoursesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final courses = appState.courses;
+    // Profile "My Courses" must show ONLY the user's own generated / enrolled
+    // courses. Previously this used `appState.courses` which merges suggested
+    // mock data with user content — the profile looked polluted.
+    final courses = appState.generatedCourses;
 
     if (courses.isEmpty) {
       return SingleChildScrollView(
@@ -1069,126 +1071,215 @@ class _SettingsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Horizontally-scrolling row of compact setting chips, Seekho-style.
+    // Sign out stays as a clearly separate destructive button at the bottom.
+    final items = <_SettingAction>[
+      _SettingAction(
+        icon: Icons.edit_outlined,
+        title: 'Edit\nProfile',
+        color: AppColors.violet,
+        onTap: onEditProfile,
+      ),
+      _SettingAction(
+        icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+        title: isDark ? 'Light\nMode' : 'Dark\nMode',
+        color: AppColors.gold,
+        onTap: () {
+          appState.toggleTheme();
+          Navigator.pop(context);
+        },
+      ),
+      if (AuthService.isAdmin)
+        _SettingAction(
+          icon: Icons.admin_panel_settings_outlined,
+          title: 'Admin\nPanel',
+          color: AppColors.violet,
+          onTap: () {
+            Navigator.pop(context);
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const AdminPanelScreen()));
+          },
+        ),
+      _SettingAction(
+        icon: Icons.notifications_outlined,
+        title: 'Notifi\u00adcations',
+        color: AppColors.teal,
+        onTap: () {},
+      ),
+      _SettingAction(
+        icon: Icons.help_outline,
+        title: 'Help &\nSupport',
+        color: AppColors.teal,
+        onTap: () {},
+      ),
+      _SettingAction(
+        icon: Icons.info_outline,
+        title: 'About\nApp',
+        color: AppColors.textMuted,
+        onTap: () {},
+      ),
+    ];
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      padding: const EdgeInsets.fromLTRB(0, 20, 0, 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: AppColors.textMuted.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 20),
-          Text('Settings',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 20),
-          _SettingsTile(
-              icon: Icons.edit_outlined,
-              title: 'Edit Profile',
-              onTap: onEditProfile,
-              isDark: isDark),
-          _SettingsTile(
-            icon: isDark
-                ? Icons.light_mode_outlined
-                : Icons.dark_mode_outlined,
-            title: isDark
-                ? 'Switch to Light Mode'
-                : 'Switch to Dark Mode',
-            onTap: () {
-              appState.toggleTheme();
-              Navigator.pop(context);
-            },
-            isDark: isDark,
+          Center(
+            child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: AppColors.textMuted.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2))),
           ),
-          if (AuthService.isAdmin)
-            _SettingsTile(
-              icon: Icons.admin_panel_settings_outlined,
-              title: 'Admin Panel',
-              color: AppColors.violet,
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const AdminPanelScreen()));
-              },
-              isDark: isDark,
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Text('Settings',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                Text('Swipe →',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textMuted)),
+              ],
             ),
-          _SettingsTile(
-              icon: Icons.notifications_outlined,
-              title: 'Notifications',
-              onTap: () {},
-              isDark: isDark),
-          _SettingsTile(
-              icon: Icons.help_outline,
-              title: 'Help & Support',
-              onTap: () {},
-              isDark: isDark),
-          const SizedBox(height: 8),
-          _SettingsTile(
-              icon: Icons.logout_rounded,
-              title: 'Sign Out',
-              isDestructive: true,
-              onTap: () async {
-                Navigator.pop(context);
-                await appState.signOut();
-              },
-              isDark: isDark),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 100,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              physics: const BouncingScrollPhysics(),
+              itemCount: items.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) =>
+                  _SettingActionTile(action: items[index], isDark: isDark),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await appState.signOut();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: AppColors.error.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.logout_rounded,
+                            size: 18, color: AppColors.error),
+                      ),
+                      const SizedBox(width: 12),
+                      Text('Sign Out',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.error)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _SettingsTile extends StatelessWidget {
+class _SettingAction {
   final IconData icon;
   final String title;
+  final Color color;
   final VoidCallback onTap;
-  final bool isDestructive;
-  final bool isDark;
-  final Color? color;
-
-  const _SettingsTile({
+  const _SettingAction({
     required this.icon,
     required this.title,
+    required this.color,
     required this.onTap,
-    this.isDestructive = false,
-    required this.isDark,
-    this.color,
   });
+}
+
+class _SettingActionTile extends StatelessWidget {
+  final _SettingAction action;
+  final bool isDark;
+  const _SettingActionTile({required this.action, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final finalColor = isDestructive
-        ? AppColors.error
-        : color ??
-            (isDark ? AppColors.textLight : AppColors.textDark);
-    return ListTile(
-      leading: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: isDestructive
-              ? AppColors.error.withValues(alpha: 0.1)
-              : (color ?? (isDark ? Colors.white : Colors.black))
-                  .withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: action.onTap,
+        child: Ink(
+          width: 86,
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: action.color.withValues(alpha: 0.2)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: action.color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(action.icon, size: 20, color: action.color),
+                ),
+                const SizedBox(height: 6),
+                Flexible(
+                  child: Text(
+                    action.title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.15,
+                      color: isDark ? AppColors.textLight : AppColors.textDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Icon(icon, size: 18, color: finalColor),
       ),
-      title: Text(title,
-          style: GoogleFonts.dmSans(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: finalColor)),
-      trailing: isDestructive
-          ? null
-          : const Icon(Icons.chevron_right,
-              size: 18, color: AppColors.textMuted),
-      contentPadding: EdgeInsets.zero,
-      onTap: onTap,
     );
   }
 }

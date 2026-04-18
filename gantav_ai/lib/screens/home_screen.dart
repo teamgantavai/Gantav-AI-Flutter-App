@@ -1,18 +1,16 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
-import '../services/gemini_service.dart';
 import '../widgets/widgets.dart';
+import '../widgets/daily_time_dialog.dart';
 import 'course_detail_screen.dart';
 import 'roadmap_screen.dart';
-import 'lesson_player_screen.dart';
 import 'exam_detail_screen.dart';
 import '../models/models.dart';
 import '../models/exam_models.dart';
+import '../models/trending_data.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,83 +21,45 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
-  List<Map<String, String>> _recommendations = [];
-  bool _loadingRecs = true;
-  bool _loadingMoreRecs = false;
-  int _recPage = 0;
-  // Track seen video IDs to prevent duplicates
-  final Set<String> _seenVideoIds = {};
 
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-    _loadRecommendations(reset: true);
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 300) {
-      _loadMoreRecommendations();
-    }
-  }
-
-  Future<void> _loadRecommendations({bool reset = false}) async {
-    if (reset) {
-      if (mounted) {
-        setState(() {
-          _loadingRecs = true;
-          _recPage = 0;
-          _seenVideoIds.clear();
-        });
-      }
-    }
-
-    final appState = context.read<AppState>();
-    final recs = await GeminiService.generateRecommendations(
-      dream: appState.dream?.text,
-      categories: appState.activeCourses.map((c) => c.category).toList(),
-      page: _recPage,
-    );
-
-    if (mounted) {
-      // Filter out duplicates by video_id
-      final filtered = <Map<String, String>>[];
-      for (final rec in recs) {
-        final videoId = rec['video_id'] ?? '';
-        if (videoId.isNotEmpty && !_seenVideoIds.contains(videoId)) {
-          _seenVideoIds.add(videoId);
-          filtered.add(rec);
-        }
-      }
-
-      setState(() {
-        if (reset) {
-          _recommendations = filtered;
-        } else {
-          _recommendations.addAll(filtered);
-        }
-        _loadingRecs = false;
-        _loadingMoreRecs = false;
-      });
-    }
-  }
-
-  Future<void> _loadMoreRecommendations() async {
-    if (_loadingMoreRecs) return;
-    if (mounted) {
-      setState(() {
-        _loadingMoreRecs = true;
-        _recPage++;
-      });
-    }
-    await _loadRecommendations(reset: false);
-  }
+  // Hoisted once — the exam catalog is `static const`, no reason to
+  // re-fetch it every build (the old code called the method twice per
+  // SliverGrid rebuild, once for childCount and once per item).
+  static final List<ExamCategory> _exams = ExamCategory.catalog();
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _generateTrending(BuildContext context, TrendingCourse course) async {
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    final dailyMinutes = await showDailyTimeDialog(context);
+    if (!mounted) return;
+    appState.generateCourseInBackgroundFromCategory(
+      course.promptHint,
+      dailyMinutes: dailyMinutes,
+    );
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('Generating "${course.title}"...',
+                style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13)),
+            ),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: AppColors.violet,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
@@ -114,10 +74,18 @@ class _HomeScreenState extends State<HomeScreen> {
         final user = appState.user;
         if (user == null) return const SizedBox();
 
+        // Hoist expensive getters once per build. These getters each
+        // allocate a new list (dedup + filter) — calling them inside
+        // itemBuilders multiplied that cost by N items before. See
+        // AppState.activeCourses / suggestedCourses / courses.
+        final activeCourses = appState.activeCourses;
+        final suggestedCourses = appState.suggestedCourses;
+        final activeRoadmap = appState.activeRoadmap;
+        final greeting = appState.greeting;
+
         return RefreshIndicator(
           onRefresh: () async {
             await appState.refresh();
-            await _loadRecommendations(reset: true);
           },
           color: AppColors.violet,
           child: CustomScrollView(
@@ -131,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${appState.greeting}, ${user.name.split(' ').first}',
+                      Text('$greeting, ${user.name.split(' ').first}',
                         style: Theme.of(context).textTheme.headlineMedium),
                       const SizedBox(height: 4),
                       Text('Your destination is waiting. Keep going.',
@@ -142,15 +110,17 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               // ─── Roadmap Card ───────────────────────────────────────
-              if (appState.activeRoadmap != null)
+              if (activeRoadmap != null)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: _RoadmapCard(
-                      roadmap: appState.activeRoadmap!,
-                      todayDay: appState.todayRoadmapDay,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => RoadmapScreen(roadmap: appState.activeRoadmap!)),
+                    child: RepaintBoundary(
+                      child: _RoadmapCard(
+                        roadmap: activeRoadmap,
+                        todayDay: appState.todayRoadmapDay,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => RoadmapScreen(roadmap: activeRoadmap)),
+                        ),
                       ),
                     ),
                   ),
@@ -201,23 +171,25 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final exam = ExamCategory.catalog()[index];
-                      return _ExamCard(
-                        exam: exam,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ExamDetailScreen(exam: exam),
+                      final exam = _exams[index];
+                      return RepaintBoundary(
+                        child: _ExamCard(
+                          exam: exam,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ExamDetailScreen(exam: exam),
+                            ),
                           ),
                         ),
                       );
                     },
-                    childCount: ExamCategory.catalog().length,
+                    childCount: _exams.length,
                   ),
                 ),
               ),
 
               // ─── Continue Learning ──────────────────────────────────
-              if (appState.activeCourses.isNotEmpty) ...[
+              if (activeCourses.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -235,12 +207,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       physics: const BouncingScrollPhysics(),
-                      itemCount: appState.activeCourses.length,
+                      itemCount: activeCourses.length,
                       itemBuilder: (context, index) {
-                        final course = appState.activeCourses[index];
-                        return ActiveCourseCard(
-                          course: course,
-                          onTap: () => _navigateToCourse(context, course),
+                        final course = activeCourses[index];
+                        return RepaintBoundary(
+                          child: ActiveCourseCard(
+                            course: course,
+                            onTap: () => _navigateToCourse(context, course),
+                          ),
                         );
                       },
                     ),
@@ -248,48 +222,37 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // ─── Today's Picks ──────────────────────────────────────
+              // ─── Trending Now ───────────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                   child: SectionHeader(
-                    title: "Today's Picks 🔥",
-                    actionText: 'Refresh',
-                    onAction: () async {
-                      setState(() { _loadingRecs = true; _seenVideoIds.clear(); });
-                      await _loadRecommendations(reset: true);
+                    title: 'Trending Now 🔥',
+                    actionText: 'See all',
+                    onAction: () => context.read<AppState>().setTabIndex(1),
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 190,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: TrendingData.courses.length,
+                    itemBuilder: (context, index) {
+                      final course = TrendingData.courses[index];
+                      return RepaintBoundary(
+                        child: _TrendingCourseCard(
+                          course: course,
+                          onTap: () => _generateTrending(context, course),
+                        ),
+                      );
                     },
                   ),
                 ),
               ),
-              if (_loadingRecs)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.violet)),
-                  ),
-                )
-              else
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 200,
-                    child: _recommendations.isEmpty
-                        ? Center(
-                            child: Text('Tap Refresh to load picks',
-                              style: GoogleFonts.dmSans(fontSize: 13, color: AppColors.textMuted)),
-                          )
-                        : ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            physics: const BouncingScrollPhysics(),
-                            itemCount: _recommendations.length,
-                            itemBuilder: (context, index) {
-                              final rec = _recommendations[index];
-                              return _RecommendationCard(rec: rec);
-                            },
-                          ),
-                  ),
-                ),
 
               // ─── Suggested for you ──────────────────────────────────
               SliverToBoxAdapter(
@@ -305,8 +268,8 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: isLandscape
-                    ? _buildLandscapeSuggestions(appState)
-                    : _buildPortraitSuggestions(appState),
+                    ? _buildLandscapeSuggestions(suggestedCourses)
+                    : _buildPortraitSuggestions(suggestedCourses),
               ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 100)),
@@ -317,22 +280,25 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPortraitSuggestions(AppState appState) {
+  Widget _buildPortraitSuggestions(List<Course> courses) {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          final courses = appState.suggestedCourses;
           if (index >= courses.length) return null;
           final course = courses[index];
-          return SuggestedCourseRow(course: course, onTap: () => _navigateToCourse(context, course));
+          return RepaintBoundary(
+            child: SuggestedCourseRow(
+              course: course,
+              onTap: () => _navigateToCourse(context, course),
+            ),
+          );
         },
-        childCount: appState.suggestedCourses.length,
+        childCount: courses.length,
       ),
     );
   }
 
-  Widget _buildLandscapeSuggestions(AppState appState) {
-    final courses = appState.suggestedCourses;
+  Widget _buildLandscapeSuggestions(List<Course> courses) {
     final rowCount = (courses.length / 2).ceil();
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -342,9 +308,27 @@ class _HomeScreenState extends State<HomeScreen> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (i1 < courses.length) Expanded(child: SuggestedCourseRow(course: courses[i1], onTap: () => _navigateToCourse(context, courses[i1]))),
+              if (i1 < courses.length)
+                Expanded(
+                  child: RepaintBoundary(
+                    child: SuggestedCourseRow(
+                      course: courses[i1],
+                      onTap: () => _navigateToCourse(context, courses[i1]),
+                    ),
+                  ),
+                ),
               const SizedBox(width: 12),
-              if (i2 < courses.length) Expanded(child: SuggestedCourseRow(course: courses[i2], onTap: () => _navigateToCourse(context, courses[i2]))) else const Expanded(child: SizedBox()),
+              if (i2 < courses.length)
+                Expanded(
+                  child: RepaintBoundary(
+                    child: SuggestedCourseRow(
+                      course: courses[i2],
+                      onTap: () => _navigateToCourse(context, courses[i2]),
+                    ),
+                  ),
+                )
+              else
+                const Expanded(child: SizedBox()),
             ],
           );
         },
@@ -358,117 +342,123 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ─── Recommendation Card ─────────────────────────────────────────────────────
+// ─── Trending Course Card (Seekho-style) ─────────────────────────────────────
 
-class _RecommendationCard extends StatelessWidget {
-  final Map<String, String> rec;
-  const _RecommendationCard({required this.rec});
+class _TrendingCourseCard extends StatelessWidget {
+  final TrendingCourse course;
+  final VoidCallback onTap;
+  const _TrendingCourseCard({required this.course, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final videoId = rec['video_id'] ?? '';
-    // Fix: show actual title, not $dream
-    final title = (rec['title'] ?? '').replaceAll('\$dream', rec['category'] ?? 'Video');
-    final channel = rec['channel'] ?? '';
-
-    return GestureDetector(
-      onTap: () {
-        if (videoId.isEmpty) return;
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => LessonPlayerScreen(
-              course: Course(
-                id: 'rec_$videoId',
-                title: rec['category'] ?? 'Recommendation',
-                description: 'A recommended video based on your interests.',
-                category: rec['category'] ?? '',
-                thumbnailUrl: 'https://img.youtube.com/vi/$videoId/0.jpg',
+    return Padding(
+      padding: const EdgeInsets.only(right: 14, top: 8, bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Ink(
+            width: 230,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [course.primary, course.secondary],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              module: const Module(id: 'mod_rec', title: 'Recommendations', lessonCount: 1),
-              lesson: Lesson(
-                id: 'les_rec_$videoId',
-                title: title.isNotEmpty ? title : 'Recommended Video',
-                duration: rec['duration'] ?? '',
-                youtubeVideoId: videoId,
-              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: course.primary.withValues(alpha: 0.30),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-          ),
-        );
-      },
-      child: Container(
-        width: 240,
-        margin: const EdgeInsets.only(right: 14, top: 8, bottom: 8),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-              child: Stack(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  CachedNetworkImage(
-                    imageUrl: 'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
-                    height: 110, width: 240, fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(
-                      height: 110, width: 240,
-                      color: AppColors.darkSurface2,
-                      child: const Icon(Icons.play_circle_outline, color: AppColors.textMuted, size: 32),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(course.icon, color: Colors.white, size: 22),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          course.badge,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  if ((rec['duration'] ?? '').isNotEmpty)
-                    Positioned(
-                      bottom: 6, right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.75), borderRadius: BorderRadius.circular(4)),
-                        child: Text(rec['duration']!, style: GoogleFonts.dmMono(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        course.title,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.2,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  if ((rec['category'] ?? '').isNotEmpty)
-                    Positioned(
-                      top: 6, left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(4)),
-                        child: Text(rec['category']!, style: GoogleFonts.dmSans(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Text(
+                        course.tagline,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.88),
+                          height: 1.3,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Icon(Icons.play_circle_fill_rounded,
+                              size: 14, color: Colors.white.withValues(alpha: 0.9)),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Tap to generate',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white.withValues(alpha: 0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Show real title, not $dream
-                    Expanded(
-                      child: Text(
-                        title.isNotEmpty ? title : 'Recommended Video',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12, fontWeight: FontWeight.w600, height: 1.3,
-                          color: isDark ? AppColors.textLight : AppColors.textDark,
-                        ),
-                        maxLines: 2, overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (channel.isNotEmpty)
-                      Text(
-                        channel,
-                        style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500),
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

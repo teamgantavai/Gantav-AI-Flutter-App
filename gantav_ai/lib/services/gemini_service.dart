@@ -132,13 +132,17 @@ class GeminiService {
     } catch (_) {}
   }
 
+  /// Returns AI-generated quiz questions, or an EMPTY list if all providers
+  /// failed. Empty list is the signal to callers — do NOT silently fall back
+  /// to mock questions here, because the caller needs to distinguish "AI
+  /// couldn't answer" (show retry) from "here's real AI content".
   static Future<List<QuizQuestion>> generateQuiz({
     required String lessonTitle,
     required String courseTitle,
     required String topic,
     int count = 5,
   }) async {
-    if (!ApiConfig.isConfigured) return QuizQuestion.mockQuestions();
+    if (!ApiConfig.isConfigured) return const [];
 
     final cacheKey = _quizCacheKey(lessonTitle, courseTitle, topic);
     final cached = await _readQuizCache(cacheKey);
@@ -147,8 +151,14 @@ class GeminiService {
       return cached;
     }
 
+    // Clip an overly long topic (can happen when category still holds the
+    // full dream prompt) — too-long prompts hurt JSON reliability.
+    final safeTopic =
+        topic.length > 80 ? topic.substring(0, 80) : topic;
+
     final prompt =
-        'Generate 5 MCQ quiz questions for lesson: "$lessonTitle" (Course: "$courseTitle", Topic: "$topic").\n'
+        'Generate $count MCQ quiz questions for lesson: "$lessonTitle" '
+        '(Course: "$courseTitle", Topic: "$safeTopic").\n'
         'Make questions relevant and educational. Return ONLY JSON array, no markdown:\n'
         '[{"id":"q_1","question":"...?","options":["A","B","C","D"],"correct_index":0,"explanation":"..."}]';
 
@@ -159,22 +169,35 @@ class GeminiService {
         maxTokens: 1500,
         temperature: 0.4,
       );
-      if (response == null) return QuizQuestion.mockQuestions();
+      if (response == null) return const [];
       final jsonStr = extractJson(response);
       final List<dynamic> data = jsonDecode(jsonStr);
-      final questions = data.map((j) => QuizQuestion.fromJson(j)).toList();
+      final questions = data
+          .map((j) {
+            try {
+              return QuizQuestion.fromJson(j as Map<String, dynamic>);
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<QuizQuestion>()
+          .toList();
       if (questions.isNotEmpty) {
         await _writeQuizCache(cacheKey, questions);
-        return questions;
       }
-      return QuizQuestion.mockQuestions();
+      return questions;
     } catch (e) {
       debugPrint('[AI] Quiz error: $e');
-      return QuizQuestion.mockQuestions();
+      return const [];
     }
   }
 
   // ── Doubt Resolution ─────────────────────────────────────────────────────
+
+  /// Sentinel prefixes that tell callers to render an error bubble + retry
+  /// chip instead of a normal AI reply. The doubt chat UI checks for these
+  /// prefixes so users can distinguish "AI failed" from "AI answered poorly".
+  static const String doubtErrorPrefix = '⚠️ ';
 
   static Future<String> askDoubt({
     required String question,
@@ -183,7 +206,8 @@ class GeminiService {
     List<ChatMessage> history = const [],
   }) async {
     if (!ApiConfig.isConfigured) {
-      return 'Please add at least one AI API key to your .env file.';
+      return '${doubtErrorPrefix}AI is not configured. '
+          'Please add at least one AI API key to your .env file.';
     }
 
     final historyText = history.takeLast(4).map((m) {
@@ -204,11 +228,13 @@ class GeminiService {
         temperature: 0.7,
       );
       if (response == null || _looksLikeProviderNotice(response)) {
-        return 'I couldn\'t fetch a response right now. Please try again in a moment.';
+        return '${doubtErrorPrefix}All AI providers are busy or rate-limited. '
+            'Try again in a minute.';
       }
       return response;
     } catch (e) {
-      return 'Connection error. Please check your internet and try again.';
+      return '${doubtErrorPrefix}Connection error — '
+          'check your internet and tap retry.';
     }
   }
 

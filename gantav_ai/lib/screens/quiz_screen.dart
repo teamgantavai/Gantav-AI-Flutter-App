@@ -39,12 +39,21 @@ class _QuizScreenState extends State<QuizScreen> {
   Future<void> _loadQuiz() async {
     setState(() => _isLoading = true);
 
+    // Prefer the (possibly concise) category, but if it looks like a raw
+    // generation prompt (too long, contains " with videos from "), fall back
+    // to the course title so the AI prompt stays focused.
+    String topic = widget.course.category;
+    if (topic.length > 60 ||
+        topic.toLowerCase().contains('with videos from')) {
+      topic = widget.course.title;
+    }
+
     final questions = await ApiService.fetchQuiz(
       widget.course.id,
       widget.lesson.id,
       lessonTitle: widget.lesson.title,
       courseTitle: widget.course.title,
-      topic: widget.course.category,
+      topic: topic,
     );
 
     if (!mounted) return;
@@ -112,7 +121,7 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                   ),
                   const Spacer(),
-                  if (!_isLoading && !_quizComplete)
+                  if (!_isLoading && !_quizComplete && _questions.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
@@ -134,7 +143,7 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
 
             // Progress indicator
-            if (!_isLoading && !_quizComplete)
+            if (!_isLoading && !_quizComplete && _questions.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: SimpleProgressBar(
@@ -147,9 +156,11 @@ class _QuizScreenState extends State<QuizScreen> {
             Expanded(
               child: _isLoading
                   ? _buildLoadingState(isDark)
-                  : _quizComplete
-                      ? _buildResultScreen(isDark, isWide)
-                      : _buildQuestionView(isDark, isWide),
+                  : _questions.isEmpty
+                      ? _buildErrorState(isDark)
+                      : _quizComplete
+                          ? _buildResultScreen(isDark, isWide)
+                          : _buildQuestionView(isDark, isWide),
             ),
           ],
         ),
@@ -193,6 +204,56 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(bool isDark) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(Icons.cloud_off_rounded,
+                  color: Colors.orange, size: 32),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Quiz not available right now',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'AI services are busy or offline. Check your connection and try again in a moment.',
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: _loadQuiz,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(
+                'Retry',
+                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.violet,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 12),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

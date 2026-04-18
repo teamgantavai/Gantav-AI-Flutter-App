@@ -51,10 +51,34 @@ class AppState extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   UserProfile? get user => _user;
   String? get profileImagePath => _profileImagePath;
+
+  // Memoized, deduped union of _courses + _generatedCourses.
+  // The getter used to allocate a fresh list every call via spread + where +
+  // toList — the home screen alone would hit it 4-6× per rebuild through
+  // activeCourses / suggestedCourses, multiplying the cost by N items.
+  // Cache invalidates on every notifyListeners() (see override below) so
+  // readers always see fresh data after a state change.
+  List<Course>? _coursesCache;
   List<Course> get courses {
-    final all = [..._courses, ..._generatedCourses];
+    final cached = _coursesCache;
+    if (cached != null) return cached;
     final seen = <String>{};
-    return all.where((c) => seen.add(c.id)).toList();
+    final out = <Course>[];
+    for (final c in _courses) {
+      if (seen.add(c.id)) out.add(c);
+    }
+    for (final c in _generatedCourses) {
+      if (seen.add(c.id)) out.add(c);
+    }
+    final result = List<Course>.unmodifiable(out);
+    _coursesCache = result;
+    return result;
+  }
+
+  @override
+  void notifyListeners() {
+    _coursesCache = null; // invalidate memoized views
+    super.notifyListeners();
   }
   
   /// Courses the user is actively learning.
@@ -587,12 +611,19 @@ class AppState extends ChangeNotifier {
   // ═══════════════════════════════════════════════════════════════════════
 
   Future<void> _generateCourse(String dream) async {
-    final course = await ApiService.suggestPath(dream);
+    final course = await ApiService.suggestPath(dream, language: _preferredLang);
     if (course != null) {
       _generatedCourses.add(course);
       await _firestoreService.saveActiveCourse(course);
       notifyListeners();
     }
+  }
+
+  /// The user's preferred content language in the format YouTube API expects
+  /// ('English' / 'Hindi'). Falls back to English.
+  String get _preferredLang {
+    final code = _preferences?.language;
+    return code == 'hi' ? 'Hindi' : 'English';
   }
 
   /// Build a personalized Roadmap for a freshly generated Course using the
@@ -618,7 +649,7 @@ class AppState extends ChangeNotifier {
 
   Future<Course?> generateCourseFromCategory(String prompt) async {
     try {
-      final course = await ApiService.suggestPath(prompt)
+      final course = await ApiService.suggestPath(prompt, language: _preferredLang)
           .timeout(const Duration(seconds: 45), onTimeout: () => null);
       if (course != null) {
         _generatedCourses.add(course);
@@ -663,7 +694,7 @@ class AppState extends ChangeNotifier {
 
       // 2. Use playlist-first suggestPath (tries YouTube playlist, then AI).
       //    This guarantees single-channel content when a good playlist exists.
-      final course = await ApiService.suggestPath(prompt)
+      final course = await ApiService.suggestPath(prompt, language: _preferredLang)
           .timeout(const Duration(seconds: 60), onTimeout: () => null);
       if (course != null) {
         await addGeneratedCourse(course);
@@ -704,7 +735,7 @@ class AppState extends ChangeNotifier {
         return;
       }
 
-      final course = await ApiService.suggestPath(promptHint)
+      final course = await ApiService.suggestPath(promptHint, language: _preferredLang)
           .timeout(const Duration(seconds: 60), onTimeout: () => null);
       if (course != null) {
         _generatedCourses.add(course);
@@ -758,7 +789,7 @@ class AppState extends ChangeNotifier {
       // Reduced from 3 to 2 for speed
       final topicIdx = (startIdx + i) % topics.length;
       batch.add(
-        ApiService.suggestPath(topics[topicIdx])
+        ApiService.suggestPath(topics[topicIdx], language: _preferredLang)
             .timeout(const Duration(seconds: 40), onTimeout: () => null),
       );
     }
@@ -1057,10 +1088,27 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> markLessonAsCompleted(String courseId, String moduleId, String lessonId) async {
-    final courseIdx = _generatedCourses.indexWhere((c) => c.id == courseId);
-    if (courseIdx == -1) return;
+    // Find the course in EITHER list. Previously this only checked
+    // _generatedCourses, so lessons inside curated / recommended courses
+    // (loaded into _courses from Firestore / mocks) never got their
+    // completion status persisted — progress bar stayed at 0 and the user
+    // could never unlock the Get Certificate CTA. Fix: look in both lists
+    // and update whichever contains the course.
+    List<Course> targetList;
+    int courseIdx = _generatedCourses.indexWhere((c) => c.id == courseId);
+    if (courseIdx != -1) {
+      targetList = _generatedCourses;
+    } else {
+      courseIdx = _courses.indexWhere((c) => c.id == courseId);
+      if (courseIdx == -1) {
+        debugPrint(
+            '[AppState] markLessonAsCompleted: course $courseId not in state');
+        return;
+      }
+      targetList = _courses;
+    }
 
-    final course = _generatedCourses[courseIdx];
+    final course = targetList[courseIdx];
     final updatedModules = course.modules.map((m) {
       if (m.id == moduleId) {
         final updatedLessons = m.lessons.map((l) {
@@ -1107,8 +1155,8 @@ class AppState extends ChangeNotifier {
     }).toList();
 
     final totalCompleted = finalModules.fold(0, (sum, m) => sum + m.completedCount);
-    
-    _generatedCourses[courseIdx] = Course(
+
+    final updated = Course(
       id: course.id,
       title: course.title,
       description: course.description,
@@ -1124,9 +1172,11 @@ class AppState extends ChangeNotifier {
       modules: finalModules,
       isVerified: course.isVerified,
     );
+    targetList[courseIdx] = updated;
 
-    // Save to Firestore
-    await _firestoreService.saveActiveCourse(_generatedCourses[courseIdx]);
+    // Persist locally + to Firestore so progress survives app restart
+    await _saveLocalCourses();
+    await _firestoreService.saveActiveCourse(updated);
     notifyListeners();
   }
 

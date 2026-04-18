@@ -99,7 +99,10 @@ class ApiService {
   }
 
 
-  static Future<Course?> suggestPath(String dream) async {
+  static Future<Course?> suggestPath(
+    String dream, {
+    String language = 'English',
+  }) async {
     try {
       // 1. Verified curated courses take priority
       final verifiedCourses = await AdminService.getVerifiedCourses(dream);
@@ -108,7 +111,10 @@ class ApiService {
       // 2. PLAYLIST-FIRST: try to find a single-channel YouTube playlist that
       // covers the whole topic. This gives consistent teaching style and
       // avoids the "mixed random videos from 9 channels" problem.
-      final playlist = await YouTubeApiService.findBestPlaylist(topic: dream);
+      final playlist = await YouTubeApiService.findBestPlaylist(
+        topic: dream,
+        language: language,
+      );
       if (playlist != null) {
         final videos =
             await YouTubeApiService.fetchPlaylistVideos(playlist.id);
@@ -118,8 +124,10 @@ class ApiService {
       }
 
       // 3. If no playlist works, fall back to AI-stitched individual videos.
-      final preFilteredVideos =
-          await YouTubeApiService.fetchHighQualityVideos(topic: dream);
+      final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(
+        topic: dream,
+        language: language,
+      );
       final course = await GeminiService.generateLearningPath(
         dream: dream,
         preFilteredVideos: preFilteredVideos,
@@ -195,13 +203,13 @@ class ApiService {
           : 'Complete $prettyDream Course',
       description:
           'A full course curated from a single channel (${playlist.channelTitle}) — ${videos.length} lessons in order.',
-      category: dream,
+      category: _cleanCategory(dream),
       thumbnailUrl: firstThumb,
       rating: 4.8,
       learnerCount: 128,
       totalLessons: totalLessons,
       estimatedTime: _estimateTotalTime(videos),
-      skills: [dream],
+      skills: _cleanSkills(dream),
       modules: modules,
     );
   }
@@ -275,17 +283,57 @@ class ApiService {
       id: 'fallback_${DateTime.now().millisecondsSinceEpoch}',
       title: 'Complete $prettyDream Course',
       description: 'A curated list of high quality tutorials for $prettyDream',
-      category: dream,
+      category: _cleanCategory(dream),
       thumbnailUrl: videos.isNotEmpty ? 'https://img.youtube.com/vi/${videos.first.id}/maxresdefault.jpg' : '',
       rating: 4.8,
       learnerCount: 154,
       totalLessons: vidIdx,
-      skills: [dream],
+      skills: _cleanSkills(dream),
       modules: modules,
     );
   }
 
-  /// GET quiz questions — now AI-generated via Gemini with mock fallback
+  /// Strip the generation metadata (language hint, channel hint) that gets
+  /// bolted onto the prompt by explore_screen._buildCoursePrompt, and return
+  /// a tight topic string suitable for display in category chips.
+  /// Input:  "Python Full Course in Urdu 2024 in English language with videos from ProgrammerType or similar channels"
+  /// Output: "Python Full Course in Urdu 2024"
+  static String _cleanPromptToTopic(String dream) {
+    var s = dream.trim();
+    // Remove the " with videos from X or similar channels" tail
+    s = s.replaceAll(
+      RegExp(r'\s*with videos from[^.]*?(or similar channels)?\.?\s*$',
+          caseSensitive: false),
+      '',
+    );
+    // Remove " in <Language> language" tail
+    s = s.replaceAll(
+      RegExp(r'\s*in [a-zA-Z]+ language\.?\s*$', caseSensitive: false),
+      '',
+    );
+    return s.trim();
+  }
+
+  static String _cleanCategory(String dream) {
+    final topic = _cleanPromptToTopic(dream);
+    if (topic.isEmpty) return 'Learning';
+    // Keep category readable — 3 words max
+    final words = topic.split(RegExp(r'\s+'));
+    if (words.length <= 3) return topic;
+    return words.take(3).join(' ');
+  }
+
+  static List<String> _cleanSkills(String dream) {
+    final topic = _cleanPromptToTopic(dream);
+    if (topic.isEmpty) return const ['Learning'];
+    return [topic];
+  }
+
+  /// GET quiz questions — AI-generated via Gemini. Returns an empty list when
+  /// AI providers are exhausted so the caller can show a retry UI instead of
+  /// silently swapping in hardcoded mock questions (which used to be the bug
+  /// — users thought the quiz "wasn't working" because every lesson showed
+  /// the same 5 mock questions).
   static Future<List<QuizQuestion>> fetchQuiz(
     String courseId,
     String lessonId, {
@@ -293,20 +341,17 @@ class ApiService {
     String courseTitle = '',
     String topic = '',
   }) async {
-    // Try AI-generated quiz first
+    // 1. AI path (primary)
     if (lessonTitle.isNotEmpty) {
       final aiQuestions = await GeminiService.generateQuiz(
         lessonTitle: lessonTitle,
         courseTitle: courseTitle,
         topic: topic,
       );
-      if (aiQuestions.isNotEmpty &&
-          aiQuestions.first.question != 'What is the output of print(type(42)) in Python?') {
-        return aiQuestions;
-      }
+      if (aiQuestions.isNotEmpty) return aiQuestions;
     }
 
-    // Fallback to server
+    // 2. Dev server fallback (very rare — localhost backend)
     try {
       final response = await http
           .get(Uri.parse(
@@ -316,9 +361,9 @@ class ApiService {
         final List<dynamic> data = jsonDecode(response.body);
         return data.map((json) => QuizQuestion.fromJson(json)).toList();
       }
-    } catch (_) {
-      // Fallback to mock
-    }
-    return QuizQuestion.mockQuestions();
+    } catch (_) {}
+
+    // 3. Caller-visible failure — empty list triggers retry UI
+    return const [];
   }
 }

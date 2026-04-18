@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../services/app_state.dart';
 import '../models/models.dart';
 import '../models/catalog_data.dart';
+import '../models/trending_data.dart';
 import '../widgets/widgets.dart';
 import 'course_detail_screen.dart';
 import '../widgets/daily_time_dialog.dart';
@@ -413,48 +414,122 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Widget _buildCategoryGrid(bool isDark) {
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+    // Seekho-style attractive gradient cards. We combine hand-curated
+    // trending topics (YouTuber / earn money / IELTS…) at the top for
+    // maximum conversion, then the full catalog categories below.
+    return CustomScrollView(
       physics: const BouncingScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.9,
-      ),
-      itemCount: CatalogData.categories.length,
-      itemBuilder: (context, index) {
-        final cat = CatalogData.categories[index];
-        return GestureDetector(
-          onTap: () => setState(() { _selectedCatalogCategory = cat; _showSubCategories = true; }),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: cat.color.withValues(alpha: 0.2)),
-            ),
+      slivers: [
+        // ─── Trending / Hot topics ──────────────────────────────
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
             child: Row(
               children: [
-                Container(
-                  width: 36, height: 36,
-                  decoration: BoxDecoration(color: cat.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-                  child: Icon(cat.icon, color: cat.color, size: 18),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(cat.name, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? AppColors.textLight : AppColors.textDark), maxLines: 2, overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 2),
-                      Text('${cat.subCategories.length} paths', style: GoogleFonts.dmSans(fontSize: 10, color: cat.color, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
+                const Icon(Icons.local_fire_department, size: 16, color: AppColors.gold),
+                const SizedBox(width: 6),
+                Text('Hot right now',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.textLight : AppColors.textDark)),
               ],
             ),
           ),
-        );
-      },
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.05,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final t = TrendingData.courses[index];
+                return _TrendingCategoryTile(
+                  title: t.title,
+                  tagline: t.tagline,
+                  icon: t.icon,
+                  primary: t.primary,
+                  secondary: t.secondary,
+                  badge: t.badge,
+                  onTap: () => _generateFromTrending(t),
+                );
+              },
+              childCount: TrendingData.courses.length,
+            ),
+          ),
+        ),
+
+        // ─── Browse all categories ──────────────────────────────
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.grid_view_rounded, size: 16, color: AppColors.violet),
+                const SizedBox(width: 6),
+                Text('Browse all paths',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.textLight : AppColors.textDark)),
+              ],
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.35,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final cat = CatalogData.categories[index];
+                return _CatalogCategoryTile(
+                  category: cat,
+                  onTap: () => setState(() {
+                    _selectedCatalogCategory = cat;
+                    _showSubCategories = true;
+                  }),
+                );
+              },
+              childCount: CatalogData.categories.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _generateFromTrending(TrendingCourse course) async {
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    final dailyMinutes = await showDailyTimeDialog(context);
+    if (!mounted) return;
+    appState.generateCourseInBackgroundFromCategory(course.promptHint,
+        dailyMinutes: dailyMinutes);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            const SizedBox(width: 12),
+            Expanded(child: Text('Generating "${course.title}"...', style: GoogleFonts.dmSans(color: Colors.white, fontSize: 13))),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: AppColors.violet,
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
@@ -950,6 +1025,191 @@ class _ExploreCourseCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Trending Category Tile (gradient, Seekho-style) ────────────────────────
+
+class _TrendingCategoryTile extends StatelessWidget {
+  final String title;
+  final String tagline;
+  final IconData icon;
+  final Color primary;
+  final Color secondary;
+  final String badge;
+  final VoidCallback onTap;
+
+  const _TrendingCategoryTile({
+    required this.title,
+    required this.tagline,
+    required this.icon,
+    required this.primary,
+    required this.secondary,
+    required this.badge,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [primary, secondary],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: primary.withValues(alpha: 0.28),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 20),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(badge,
+                          style: GoogleFonts.dmSans(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: 0.4)),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.2,
+                            letterSpacing: -0.2),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text(tagline,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.85),
+                            height: 1.3),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Catalog Category Tile ───────────────────────────────────────────────────
+
+class _CatalogCategoryTile extends StatelessWidget {
+  final CourseCategory category;
+  final VoidCallback onTap;
+  const _CatalogCategoryTile({required this.category, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                category.color.withValues(alpha: isDark ? 0.22 : 0.14),
+                category.color.withValues(alpha: isDark ? 0.08 : 0.04),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: category.color.withValues(alpha: 0.25)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: category.color.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(category.icon, color: category.color, size: 20),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(category.name,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? AppColors.textLight : AppColors.textDark,
+                            height: 1.2),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text('${category.subCategories.length} paths',
+                            style: GoogleFonts.dmSans(
+                                fontSize: 10,
+                                color: category.color,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_forward_rounded,
+                            size: 12, color: category.color),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

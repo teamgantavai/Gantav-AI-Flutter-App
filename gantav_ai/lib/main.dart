@@ -16,6 +16,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:gantav_ai/firebase_options.dart';
 import 'package:gantav_ai/widgets/connectivity_wrapper.dart';
+import 'package:gantav_ai/widgets/global_search_sheet.dart';
 import 'package:gantav_ai/services/api_config.dart';
 
 void main() async {
@@ -72,7 +73,9 @@ class _AppRouter extends StatelessWidget {
           return const RoadmapGenerationScreen();
         }
         if (appState.isAuthenticated) {
-          if (appState.isGeneratingCourse) return const _GeneratingScreen();
+          // Note: background course generation is shown as a persistent
+          // banner inside AppShell (see _GenerationBanner) instead of a
+          // fullscreen block, so the rest of the app stays usable.
           return const AppShell();
         }
         return const AuthScreen();
@@ -107,117 +110,6 @@ class _SplashScreen extends StatelessWidget {
             Text('Gantav AI',
               style: GoogleFonts.dmSans(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? AppColors.textLight : AppColors.textDark, letterSpacing: -1)),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GeneratingScreen extends StatefulWidget {
-  const _GeneratingScreen();
-  @override
-  State<_GeneratingScreen> createState() => _GeneratingScreenState();
-}
-
-class _GeneratingScreenState extends State<_GeneratingScreen> with TickerProviderStateMixin {
-  late AnimationController _pulseCtrl;
-  late AnimationController _progressCtrl;
-  late Animation<double> _progressAnim;
-  bool _showBackButton = false;
-
-  final List<String> _steps = [
-    'Analysing your dream...', 'Searching YouTube for the best content...',
-    'Curating top-rated videos...', 'Structuring your learning modules...',
-    'Building your personalised path...', 'Almost ready! ✨',
-  ];
-  int _stepIdx = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat(reverse: true);
-    _progressCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 8));
-    _progressAnim = Tween<double>(begin: 0, end: 0.92).animate(CurvedAnimation(parent: _progressCtrl, curve: Curves.easeInOut));
-    _progressCtrl.forward();
-    Future.delayed(const Duration(seconds: 15), () { if (mounted) setState(() => _showBackButton = true); });
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(milliseconds: 1100));
-      if (!mounted) return false;
-      setState(() => _stepIdx = (_stepIdx + 1) % _steps.length);
-      return true;
-    });
-  }
-
-  @override
-  void dispose() { _pulseCtrl.dispose(); _progressCtrl.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dream = context.watch<AppState>().dream?.text ?? '';
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedBuilder(
-                animation: _pulseCtrl,
-                builder: (_, __) => Transform.scale(
-                  scale: 1.0 + _pulseCtrl.value * 0.06,
-                  child: SizedBox(width: 80, height: 80, child: Image.asset('assets/images/logo.png')),
-                ),
-              ),
-              const SizedBox(height: 40),
-              Text('Building your path', style: GoogleFonts.dmSans(fontSize: 28, fontWeight: FontWeight.w800, color: isDark ? AppColors.textLight : AppColors.textDark, letterSpacing: -0.5)),
-              const SizedBox(height: 12),
-              if (dream.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(color: AppColors.gold.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(100), border: Border.all(color: AppColors.gold.withValues(alpha: 0.3))),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.flag_outlined, color: AppColors.gold, size: 16),
-                      const SizedBox(width: 8),
-                      Flexible(child: Text(dream, style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.gold), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 48),
-              AnimatedBuilder(
-                animation: _progressAnim,
-                builder: (_, __) => Column(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(100),
-                      child: LinearProgressIndicator(value: _progressAnim.value, minHeight: 6, backgroundColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2, valueColor: const AlwaysStoppedAnimation(AppColors.violet)),
-                    ),
-                    const SizedBox(height: 16),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 400),
-                      child: Text(_steps[_stepIdx], key: ValueKey(_stepIdx), style: GoogleFonts.dmSans(fontSize: 15, color: isDark ? AppColors.textLightSub : AppColors.textDarkSub)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              AnimatedOpacity(
-                opacity: _showBackButton ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 400),
-                child: _showBackButton
-                    ? TextButton.icon(
-                        onPressed: () => context.read<AppState>().cancelGeneration(),
-                        icon: const Icon(Icons.arrow_back, size: 16),
-                        label: Text('Taking too long? Go back', style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500)),
-                        style: TextButton.styleFrom(foregroundColor: AppColors.textMuted),
-                      )
-                    : const SizedBox(),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -304,6 +196,8 @@ class _AppShellState extends State<AppShell> {
                     children: _screens,
                   ),
                 ),
+                if (appState.isGeneratingCourse)
+                  _GenerationBanner(isDark: isDark, appState: appState),
               ],
             ),
           ),
@@ -401,9 +295,9 @@ class _GantavHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          // Search button
+          // Search button — opens inline YouTube-style suggestion sheet
           GestureDetector(
-            onTap: () => appState.setTabIndex(1),
+            onTap: () => showGlobalSearch(context),
             child: Container(
               width: 38, height: 38,
               decoration: BoxDecoration(
@@ -568,4 +462,91 @@ class _NavItem {
   final IconData icon;
   final String label;
   const _NavItem(this.activeIcon, this.icon, this.label);
+}
+
+// ─── Persistent background-generation banner ─────────────────────────────────
+// Shown above the bottom nav while a course is being generated in the
+// background. The rest of the app stays interactive — the user sees that
+// work is in flight rather than facing a full-screen block.
+
+class _GenerationBanner extends StatelessWidget {
+  final bool isDark;
+  final AppState appState;
+  const _GenerationBanner({required this.isDark, required this.appState});
+
+  @override
+  Widget build(BuildContext context) {
+    final dream = appState.dream?.text;
+    final subtitle = (dream != null && dream.isNotEmpty)
+        ? 'Building your course — "$dream"'
+        : 'Curating videos & structuring lessons…';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.violet.withValues(alpha: isDark ? 0.22 : 0.14),
+            AppColors.violet.withValues(alpha: isDark ? 0.10 : 0.06),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.violet.withValues(alpha: 0.32)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              valueColor: AlwaysStoppedAnimation(AppColors.violet),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Generating course…',
+                  style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.violet,
+                      letterSpacing: 0.2),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? AppColors.textLightSub : AppColors.textDarkSub,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: appState.cancelGeneration,
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: Icon(Icons.close_rounded,
+                  size: 18,
+                  color: isDark ? AppColors.textLightSub : AppColors.textDarkSub),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
