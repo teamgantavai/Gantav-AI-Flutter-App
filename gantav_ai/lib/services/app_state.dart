@@ -8,6 +8,8 @@ import '../services/firestore_service.dart';
 import '../services/onboarding_service.dart';
 import '../services/admin_service.dart';
 import '../services/course_roadmap_builder.dart';
+import '../models/trending_data.dart';
+import 'dart:math' as math;
 
 enum AuthStatus {
   unauthenticated,
@@ -717,22 +719,50 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ─── Trending angle rotator ───────────────────────────────────────────
+  // Cursor per-trending-id so repeated taps on the same card don't generate
+  // the same course. We track used indices and reshuffle once the full set
+  // has been served.
+  final Map<String, List<int>> _trendingAngleQueue = {};
+  final math.Random _trendingRng = math.Random();
+
+  /// Compose a fresh prompt for a trending card. Rotates through
+  /// [TrendingCourse.angles] so back-to-back taps produce different courses.
+  /// Falls back to the base [TrendingCourse.promptHint] if no angles exist.
+  String pickTrendingPrompt(TrendingCourse t) {
+    if (t.angles.isEmpty) return t.promptHint;
+    var queue = _trendingAngleQueue[t.id];
+    if (queue == null || queue.isEmpty) {
+      queue = List<int>.generate(t.angles.length, (i) => i)..shuffle(_trendingRng);
+      _trendingAngleQueue[t.id] = queue;
+    }
+    final idx = queue.removeAt(0);
+    final angle = t.angles[idx];
+    // Compose a distinct prompt: keep the spine (base hint) but pivot this
+    // session's course around the chosen angle. The angle goes first so
+    // downstream title generation latches onto the specific focus.
+    return '$angle. Context: ${t.promptHint}';
+  }
+
   /// Generate course in background from category subcategory tap
   /// Returns immediately, notifies via toast when done
   Future<void> generateCourseInBackgroundFromCategory(String promptHint,
-      {int? dailyMinutes}) async {
+      {int? dailyMinutes, bool allowCurated = true}) async {
     _isGeneratingCourse = true;
     notifyListeners();
 
     try {
-      // 1. Check for curated matches first
-      final curated = await AdminService.findMatchingVerifiedCourse(promptHint);
-      if (curated != null) {
-        await addGeneratedCourse(curated);
-        _isGeneratingCourse = false;
-        showNotification('Found a professional curated course for "$promptHint"!');
-        notifyListeners();
-        return;
+      // 1. Check for curated matches first (skipped when caller wants fresh
+      //    variety every time — e.g. trending-card rotation)
+      if (allowCurated) {
+        final curated = await AdminService.findMatchingVerifiedCourse(promptHint);
+        if (curated != null) {
+          await addGeneratedCourse(curated);
+          _isGeneratingCourse = false;
+          showNotification('Found a professional curated course for "$promptHint"!');
+          notifyListeners();
+          return;
+        }
       }
 
       final course = await ApiService.suggestPath(promptHint, language: _preferredLang)

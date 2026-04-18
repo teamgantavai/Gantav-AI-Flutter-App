@@ -39,8 +39,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final dailyMinutes = await showDailyTimeDialog(context);
     if (!mounted) return;
     appState.generateCourseInBackgroundFromCategory(
-      course.promptHint,
+      appState.pickTrendingPrompt(course),
       dailyMinutes: dailyMinutes,
+      allowCurated: false,
     );
     messenger.showSnackBar(
       SnackBar(

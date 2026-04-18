@@ -12,6 +12,7 @@ import '../services/auth_service.dart';
 import '../services/certificate_service.dart';
 import 'admin_panel_screen.dart';
 import 'certificate_screen.dart';
+import 'verify_certificate_screen.dart';
 import '../models/models.dart';
 import '../models/certificate.dart';
 
@@ -1102,6 +1103,20 @@ class _SettingsSheet extends StatelessWidget {
                     builder: (_) => const AdminPanelScreen()));
           },
         ),
+      _SettingAction(
+        icon: Icons.verified_outlined,
+        title: 'Verify\nCert',
+        color: AppColors.gold,
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const VerifyCertificateScreen(),
+            ),
+          );
+        },
+      ),
       _SettingAction(
         icon: Icons.notifications_outlined,
         title: 'Notifi\u00adcations',

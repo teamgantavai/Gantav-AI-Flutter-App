@@ -235,12 +235,20 @@ class _CertificateCard extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
-                          Icons.auto_awesome,
-                          color: Color(0xFFC9A74A),
-                          size: 20,
+                        ClipOval(
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            width: 32,
+                            height: 32,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.auto_awesome,
+                              color: Color(0xFFC9A74A),
+                              size: 20,
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         Text(
                           'GANTAV AI',
                           style: GoogleFonts.dmSans(
@@ -250,7 +258,7 @@ class _CertificateCard extends StatelessWidget {
                             color: const Color(0xFF2A2235),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         const Icon(
                           Icons.auto_awesome,
                           color: Color(0xFFC9A74A),
@@ -374,7 +382,8 @@ class _CertificateCard extends StatelessWidget {
                     ),
                     _FooterBlock(
                       label: 'CERTIFICATE ID',
-                      value: certificate.verificationCode,
+                      value: certificate.id,
+                      width: 180,
                     ),
                   ],
                 ),
@@ -390,38 +399,45 @@ class _CertificateCard extends StatelessWidget {
 class _FooterBlock extends StatelessWidget {
   final String label;
   final String value;
-  const _FooterBlock({required this.label, required this.value});
+  final double width;
+  const _FooterBlock({required this.label, required this.value, this.width = 100});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.dmSans(
-            fontSize: 8,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.5,
-            color: const Color(0xFF7E7890),
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+              color: const Color(0xFF7E7890),
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        Container(
-          width: 100,
-          height: 1,
-          color: const Color(0xFF2A2235),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          value,
-          style: GoogleFonts.dmMono(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
+          const SizedBox(height: 2),
+          Container(
+            width: width,
+            height: 1,
             color: const Color(0xFF2A2235),
           ),
-        ),
-      ],
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: GoogleFonts.dmMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF2A2235),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

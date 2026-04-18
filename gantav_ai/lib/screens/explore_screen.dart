@@ -514,8 +514,10 @@ class _ExploreScreenState extends State<ExploreScreen>
     final messenger = ScaffoldMessenger.of(context);
     final dailyMinutes = await showDailyTimeDialog(context);
     if (!mounted) return;
-    appState.generateCourseInBackgroundFromCategory(course.promptHint,
-        dailyMinutes: dailyMinutes);
+    appState.generateCourseInBackgroundFromCategory(
+        appState.pickTrendingPrompt(course),
+        dailyMinutes: dailyMinutes,
+        allowCurated: false);
     messenger.showSnackBar(
       SnackBar(
         content: Row(

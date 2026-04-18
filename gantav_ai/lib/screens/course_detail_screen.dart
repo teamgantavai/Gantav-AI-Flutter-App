@@ -51,6 +51,9 @@ class CourseDetailScreen extends StatelessWidget {
           _buildThumbnail(context, currentCourse),
           _buildCourseInfo(context, isDark, currentCourse),
           _buildModuleList(context, isDark, currentCourse),
+          SliverToBoxAdapter(
+            child: _buildCertifiedBadge(context, isDark, currentCourse),
+          ),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
@@ -149,6 +152,7 @@ class CourseDetailScreen extends StatelessWidget {
                             },
                           ),
                         ),
+                        _buildCertifiedBadge(context, isDark, currentCourse),
                         _buildBottomCTA(context, isDark, currentCourse),
                       ],
                     ),
@@ -580,6 +584,104 @@ class CourseDetailScreen extends StatelessWidget {
                 currentCourse.modules[index], index, currentCourse);
           },
           childCount: currentCourse.modules.length,
+        ),
+      ),
+    );
+  }
+
+  /// Promo-style badge shown at the bottom of the modules list whenever the
+  /// course is eligible for a Gantav AI certificate. Visible from the start
+  /// (not only on completion) so learners know a certificate awaits them.
+  Widget _buildCertifiedBadge(
+      BuildContext context, bool isDark, Course currentCourse) {
+    if (!CertificateService.isEligible(currentCourse.category)) {
+      return const SizedBox.shrink();
+    }
+    final isComplete = currentCourse.totalLessons > 0 &&
+        currentCourse.completedLessons >= currentCourse.totalLessons;
+    final subtitle = isComplete
+        ? 'All lessons complete — claim your certificate.'
+        : 'Finish all lessons to unlock your verified certificate.';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.gold.withValues(alpha: isDark ? 0.18 : 0.14),
+              AppColors.violet.withValues(alpha: isDark ? 0.20 : 0.12),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: AppColors.gold.withValues(alpha: 0.45),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.gold.withValues(alpha: 0.22),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.gold.withValues(alpha: 0.6),
+                ),
+              ),
+              child: const Icon(
+                Icons.workspace_premium_rounded,
+                color: AppColors.gold,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Gantav Certified',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isDark
+                              ? AppColors.goldLight
+                              : AppColors.goldDark,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.verified_rounded,
+                        size: 14,
+                        color: isDark
+                            ? AppColors.goldLight
+                            : AppColors.goldDark,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: isDark
+                          ? Colors.white70
+                          : AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -115,11 +115,17 @@ class _GlobalSearchSheetState extends State<_GlobalSearchSheet> {
 
       case _HitKind.trending:
       case _HitKind.subCategory:
-        final prompt = hit.trending?.promptHint ?? hit.sub?.promptHint ?? '';
+        final trending = hit.trending;
+        final prompt = trending != null
+            ? app.pickTrendingPrompt(trending)
+            : (hit.sub?.promptHint ?? '');
         if (prompt.isEmpty) return;
         final dailyMinutes = await showDailyTimeDialog(context);
-        app.generateCourseInBackgroundFromCategory(prompt,
-            dailyMinutes: dailyMinutes);
+        app.generateCourseInBackgroundFromCategory(
+          prompt,
+          dailyMinutes: dailyMinutes,
+          allowCurated: trending == null,
+        );
         messenger.showSnackBar(
           SnackBar(
             content: Row(

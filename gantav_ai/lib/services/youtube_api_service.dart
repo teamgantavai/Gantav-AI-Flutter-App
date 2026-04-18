@@ -9,6 +9,7 @@ class YouTubeVideoStats {
   final String title;
   final String channelTitle;
   final String durationText;
+  final int durationSeconds; // parsed duration; used to filter out Shorts
   final int viewCount;
   final int likeCount;
   final int commentCount;
@@ -20,6 +21,7 @@ class YouTubeVideoStats {
     required this.title,
     required this.channelTitle,
     required this.durationText,
+    this.durationSeconds = 0,
     required this.viewCount,
     required this.likeCount,
     required this.commentCount,
@@ -27,11 +29,17 @@ class YouTubeVideoStats {
     this.topComments = const [],
   });
 
+  /// A YouTube Short is <= 60 seconds. We treat anything shorter than
+  /// [minLongFormSeconds] as unsuitable for a tutorial course.
+  bool isShort({int minLongFormSeconds = 90}) =>
+      durationSeconds > 0 && durationSeconds < minLongFormSeconds;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
         'channelTitle': channelTitle,
         'durationText': durationText,
+        'durationSeconds': durationSeconds,
         'viewCount': viewCount,
         'likeCount': likeCount,
         'commentCount': commentCount,
@@ -45,6 +53,7 @@ class YouTubeVideoStats {
         title: json['title'],
         channelTitle: json['channelTitle'] ?? '',
         durationText: json['durationText'] ?? '',
+        durationSeconds: (json['durationSeconds'] as num?)?.toInt() ?? 0,
         viewCount: json['viewCount'],
         likeCount: json['likeCount'],
         commentCount: json['commentCount'],
@@ -116,24 +125,29 @@ class YouTubeApiService {
 
     // Build a language-aware search query
     final langQuery = language == 'Hindi' ? '$topic in Hindi tutorial' : '$topic tutorial';
-    final cacheKey = 'yt_v3_${langQuery.toLowerCase().replaceAll(' ', '_')}';
+    final cacheKey = 'yt_v4_${langQuery.toLowerCase().replaceAll(' ', '_')}';
 
     final cachedResult = await _getCachedVideos(cacheKey);
     if (cachedResult != null && cachedResult.isNotEmpty) return cachedResult;
 
-    // 1. Search for IDs with language filter
+    // 1. Search for IDs with language filter. `videoDuration=medium` forces
+    //    YouTube to exclude Shorts (<4min) at API level — critical so
+    //    trending cards don't build a "course" out of 30s meme clips.
     final videoIds = await _getVideoIdsFromSearch(
       langQuery,
       maxResults,
       relevanceLanguage: language == 'Hindi' ? 'hi' : 'en',
+      videoDuration: 'medium',
     );
     if (videoIds.isEmpty) return [];
 
     // 2. Get Stats — batch call is fast
     final videos = await _getVideoStats(videoIds);
 
-    // 3. Filter by quality (engagement > 1.0% and > 3000 views for wider net)
+    // 3. Filter by quality AND duration. Drop anything under 90s as a
+    //    belt-and-braces guard against Shorts slipping past the API filter.
     final List<YouTubeVideoStats> filtered = videos.where((v) {
+      if (v.isShort(minLongFormSeconds: 90)) return false;
       return v.viewCount > 3000 && v.engagementRatio > 1.0;
     }).toList();
 
@@ -152,6 +166,10 @@ class YouTubeApiService {
     String query,
     int maxResults, {
     String relevanceLanguage = 'en',
+    // 'any' | 'short' (<4min) | 'medium' (4–20min) | 'long' (>20min).
+    // Default 'medium' excludes Shorts; override when you specifically need
+    // long tutorials or everything.
+    String? videoDuration,
   }) async {
     try {
       final uri = Uri.parse(
@@ -161,6 +179,7 @@ class YouTubeApiService {
         '&q=${Uri.encodeComponent(query)}'
         '&type=video'
         '&relevanceLanguage=$relevanceLanguage'
+        '${videoDuration != null ? '&videoDuration=$videoDuration' : ''}'
         '&key=${ApiConfig.youtubeApiKey}',
       );
 
@@ -218,6 +237,7 @@ class YouTubeApiService {
             title: snippet['title'] ?? 'Unknown',
             channelTitle: snippet['channelTitle'] ?? '',
             durationText: _parseDuration(durationIso),
+            durationSeconds: _parseDurationSeconds(durationIso),
             viewCount: views.toInt(),
             likeCount: likes.toInt(),
             commentCount: comments.toInt(),
@@ -254,7 +274,7 @@ class YouTubeApiService {
         ? '$topic complete course playlist in Hindi'
         : '$topic complete course playlist';
     final cacheKey =
-        'yt_playlist_v1_${langQuery.toLowerCase().replaceAll(' ', '_')}';
+        'yt_playlist_v2_${langQuery.toLowerCase().replaceAll(' ', '_')}';
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -294,10 +314,10 @@ class YouTubeApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
-          'yt_playlist_v1_${langQuery.toLowerCase().replaceAll(' ', '_')}',
+          'yt_playlist_v2_${langQuery.toLowerCase().replaceAll(' ', '_')}',
           jsonEncode(best.toJson()));
       await prefs.setInt(
-          'yt_playlist_v1_${langQuery.toLowerCase().replaceAll(' ', '_')}_time',
+          'yt_playlist_v2_${langQuery.toLowerCase().replaceAll(' ', '_')}_time',
           DateTime.now().millisecondsSinceEpoch);
     } catch (_) {}
 
@@ -381,6 +401,13 @@ class YouTubeApiService {
             lowerTitle.contains('bootcamp')) {
           score += 10;
         }
+        // Hard penalty for Shorts-style playlists — "shorts", "#shorts",
+        // "reels", "edshorts" etc. should never win over a real tutorial list.
+        if (lowerTitle.contains('short') ||
+            lowerTitle.contains('#short') ||
+            lowerTitle.contains('reel')) {
+          score -= 50;
+        }
         score += videoCount.clamp(0, 30).toDouble() * 0.5;
 
         out.add(YouTubePlaylistCandidate(
@@ -409,7 +436,7 @@ class YouTubeApiService {
       {int maxVideos = 30}) async {
     if (!ApiConfig.hasYoutube || playlistId.isEmpty) return [];
 
-    final cacheKey = 'yt_playlist_items_v1_$playlistId';
+    final cacheKey = 'yt_playlist_items_v2_$playlistId';
     try {
       final prefs = await SharedPreferences.getInstance();
       final cached = prefs.getString(cacheKey);
@@ -460,11 +487,13 @@ class YouTubeApiService {
 
     // Stats fetch supports up to 50 ids per call; we capped maxVideos anyway.
     final stats = await _getVideoStats(ids);
-    // Preserve the playlist ordering (stats call may reorder)
+    // Preserve the playlist ordering (stats call may reorder) AND drop
+    // Shorts — some channels bundle 30s trailers into their course playlists.
     final byId = {for (final s in stats) s.id: s};
     final ordered = ids
         .map((id) => byId[id])
         .whereType<YouTubeVideoStats>()
+        .where((v) => !v.isShort(minLongFormSeconds: 90))
         .toList();
 
     try {
@@ -476,6 +505,19 @@ class YouTubeApiService {
     } catch (_) {}
 
     return ordered;
+  }
+
+  /// Convert ISO 8601 duration (`PT4M32S`, `PT1H5M`, `PT45S`) to seconds.
+  /// Returns 0 on parse failure so unknown durations are conservatively
+  /// treated as non-Shorts (we'd rather include a tutorial than drop one).
+  static int _parseDurationSeconds(String isoDuration) {
+    final regExp = RegExp(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?');
+    final match = regExp.firstMatch(isoDuration);
+    if (match == null) return 0;
+    final h = int.tryParse(match.group(1) ?? '') ?? 0;
+    final m = int.tryParse(match.group(2) ?? '') ?? 0;
+    final s = int.tryParse(match.group(3) ?? '') ?? 0;
+    return h * 3600 + m * 60 + s;
   }
 
   static String _parseDuration(String isoDuration) {

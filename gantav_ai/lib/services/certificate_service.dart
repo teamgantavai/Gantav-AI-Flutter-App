@@ -51,7 +51,7 @@ class CertificateService {
 
     final now = DateTime.now();
     final cert = Certificate(
-      id: 'cert_${now.millisecondsSinceEpoch}_${_randomSuffix()}',
+      id: _generateCertId(uid: uid, courseId: course.id, issuedAt: now),
       userId: uid,
       userName: user.name.trim().isEmpty ? 'Learner' : user.name,
       courseId: course.id,
@@ -160,11 +160,65 @@ class CertificateService {
     }
   }
 
+  /// Public verification: look up a certificate by its ID in Firestore.
+  ///
+  /// Returns `null` if no matching document is found or on read error.
+  /// Used by the `/verify-certificate` screen.
+  static Future<Certificate?> verifyById(String certId) async {
+    final normalized = certId.trim().toUpperCase();
+    if (normalized.isEmpty) return null;
+    try {
+      final doc = await _db.collection('certificates').doc(normalized).get();
+      if (doc.exists && doc.data() != null) {
+        return Certificate.fromJson(doc.data()!);
+      }
+    } catch (e) {
+      debugPrint('[CertificateService] verifyById error: $e');
+    }
+    // Fallback to local cache for offline self-verify.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(_localKey) ?? const <String>[];
+      for (final raw in list) {
+        try {
+          final cert = Certificate.fromJson(
+            jsonDecode(raw) as Map<String, dynamic>,
+          );
+          if (cert.id.toUpperCase() == normalized) return cert;
+        } catch (_) {}
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  static String _randomSuffix() {
-    final r = Random();
-    return List.generate(4, (_) => r.nextInt(36).toRadixString(36)).join();
+  /// Produce a stable, shareable certificate ID of the form
+  /// `GANTAV-{uid6}-{course8}-{yyyymm}-{checksum4}`.
+  ///
+  /// Collisions are extremely unlikely in practice because the checksum
+  /// folds the full uid + courseId + timestamp.
+  static String _generateCertId({
+    required String uid,
+    required String courseId,
+    required DateTime issuedAt,
+  }) {
+    String slug(String s, int n) {
+      final cleaned = s.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      if (cleaned.isEmpty) return 'X' * n;
+      if (cleaned.length >= n) return cleaned.substring(0, n);
+      return cleaned.padRight(n, 'X');
+    }
+
+    final uidShort = slug(uid, 6);
+    final courseShort = slug(courseId, 8);
+    final yyyymm =
+        '${issuedAt.year.toString().padLeft(4, '0')}${issuedAt.month.toString().padLeft(2, '0')}';
+    final seed = '$uid|$courseId|${issuedAt.millisecondsSinceEpoch}';
+    final hash = seed.hashCode.toUnsigned(32).toRadixString(36).toUpperCase();
+    final checksum = hash.padLeft(4, '0').substring(0, 4);
+
+    return 'GANTAV-$uidShort-$courseShort-$yyyymm-$checksum';
   }
 
   static String _generateVerificationCode(String uid, String courseId) {
