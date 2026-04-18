@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/models.dart';
+import '../models/exam_models.dart';
 import '../services/admin_service.dart';
+import '../services/pyq_service.dart';
 import '../services/youtube_api_service.dart';
 import '../theme/app_theme.dart';
 
@@ -31,7 +33,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadCourses();
   }
 
@@ -224,6 +226,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           tabs: const [
             Tab(text: 'Create'),
             Tab(text: 'Manage'),
+            Tab(text: 'PYQ Bank'),
           ],
         ),
       ),
@@ -232,6 +235,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         children: [
           _buildCreateIndexTab(isDark),
           _buildManageTab(isDark),
+          const _PyqImportTab(),
         ],
       ),
     );
@@ -590,4 +594,223 @@ class _CourseManageCardState extends State<_CourseManageCard> {
       ],
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PYQ Bank Import Tab
+//
+// Lists every (exam, subject) pair from the catalog. Each row shows a button
+// that reads the bundled `assets/pyq/{exam}_{subject}.json` asset, validates
+// it, and mirrors the questions to `pyq_bank/{exam}_{subject}` in Firestore
+// so other installs pick them up without a new APK build.
+
+class _PyqImportTab extends StatefulWidget {
+  const _PyqImportTab();
+
+  @override
+  State<_PyqImportTab> createState() => _PyqImportTabState();
+}
+
+class _PyqImportTabState extends State<_PyqImportTab> {
+  final Map<String, _ImportRowState> _rowState = {};
+
+  String _key(String examId, String subjectId) => '${examId}_$subjectId';
+
+  Future<void> _importOne(ExamCategory exam, ExamSubject subject) async {
+    final k = _key(exam.id, subject.id);
+    setState(() => _rowState[k] = _ImportRowState.loading());
+    final written = await PyqService.importAssetToFirestore(
+      exam: exam,
+      subject: subject,
+    );
+    if (!mounted) return;
+    setState(() {
+      _rowState[k] = written > 0
+          ? _ImportRowState.ok(written)
+          : written == 0
+              ? _ImportRowState.empty()
+              : _ImportRowState.err();
+    });
+  }
+
+  Future<void> _importAll() async {
+    for (final exam in ExamCategory.catalog()) {
+      for (final subject in exam.subjects) {
+        await _importOne(exam, subject);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final exams = ExamCategory.catalog();
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.violet.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.violet.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: AppColors.violet, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Reads bundled assets/pyq/{exam}_{subject}.json and mirrors them to Firestore pyq_bank/. Missing files are expected — import only what you have.',
+                    style: GoogleFonts.dmSans(fontSize: 12, color: isDark ? Colors.white70 : AppColors.textMuted),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _importAll,
+              icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+              label: const Text('Import all bundled banks'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.violet,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          ...exams.map((exam) => _examSection(exam, isDark)),
+        ],
+      ),
+    );
+  }
+
+  Widget _examSection(ExamCategory exam, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 8),
+          child: Row(
+            children: [
+              Icon(exam.icon, size: 18, color: AppColors.violet),
+              const SizedBox(width: 8),
+              Text(
+                '${exam.name} · ${exam.tagline}',
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ...exam.subjects.map((subject) {
+          final k = _key(exam.id, subject.id);
+          final st = _rowState[k];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : Colors.grey[100],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(subject.icon, size: 16, color: AppColors.textMuted),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subject.name,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        'assets/pyq/${exam.id}_${subject.id}.json',
+                        style: GoogleFonts.dmMono(
+                          fontSize: 10,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (st != null) _statusChip(st),
+                const SizedBox(width: 6),
+                TextButton(
+                  onPressed: st?.isLoading == true
+                      ? null
+                      : () => _importOne(exam, subject),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.violet,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  child: st?.isLoading == true
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.violet,
+                          ),
+                        )
+                      : const Text('Import'),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _statusChip(_ImportRowState st) {
+    if (st.isLoading) return const SizedBox.shrink();
+    final color = st.isError
+        ? AppColors.error
+        : st.wrote == 0
+            ? AppColors.textMuted
+            : AppColors.success;
+    final label = st.isError
+        ? 'Err'
+        : st.wrote == 0
+            ? 'No asset'
+            : '${st.wrote} Qs';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.dmMono(fontSize: 10, color: color, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+class _ImportRowState {
+  final bool isLoading;
+  final bool isError;
+  final int wrote;
+  const _ImportRowState._({required this.isLoading, required this.isError, required this.wrote});
+  factory _ImportRowState.loading() => const _ImportRowState._(isLoading: true, isError: false, wrote: 0);
+  factory _ImportRowState.ok(int n) => _ImportRowState._(isLoading: false, isError: false, wrote: n);
+  factory _ImportRowState.empty() => const _ImportRowState._(isLoading: false, isError: false, wrote: 0);
+  factory _ImportRowState.err() => const _ImportRowState._(isLoading: false, isError: true, wrote: 0);
 }

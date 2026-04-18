@@ -1,0 +1,18 @@
+{
+  "exam_id": "ssc",
+  "subject_id": "ssc_gk",
+  "source": "SSC General Awareness pattern 2019-2024",
+  "questions": [
+    {"id":"ssc_g_01","question":"The capital of Arunachal Pradesh is:","options":["Imphal","Itanagar","Kohima","Shillong"],"correct_index":1,"explanation":"Itanagar is Arunachal Pradesh's capital.","topic":"Indian Geography","difficulty":"easy","year":2020},
+    {"id":"ssc_g_02","question":"Who wrote the Indian National Anthem?","options":["Bankim Chandra","Rabindranath Tagore","Sarojini Naidu","Subhash Bose"],"correct_index":1,"explanation":"Tagore wrote 'Jana Gana Mana'.","topic":"History","difficulty":"easy","year":2021},
+    {"id":"ssc_g_03","question":"Which vitamin is produced in the body on exposure to sunlight?","options":["A","B12","C","D"],"correct_index":3,"explanation":"Vitamin D is synthesized in skin via UV.","topic":"Biology","difficulty":"easy","year":2022},
+    {"id":"ssc_g_04","question":"Which gas is called 'laughing gas'?","options":["CO2","N2O","NO2","SO2"],"correct_index":1,"explanation":"Nitrous oxide (N₂O).","topic":"Chemistry","difficulty":"easy","year":2019},
+    {"id":"ssc_g_05","question":"The Chief Election Commissioner of India is appointed by:","options":["PM","President","Parliament","Supreme Court"],"correct_index":1,"explanation":"Appointed by the President.","topic":"Polity","difficulty":"medium","year":2023},
+    {"id":"ssc_g_06","question":"ISRO's headquarters is in:","options":["New Delhi","Bengaluru","Mumbai","Hyderabad"],"correct_index":1,"explanation":"ISRO HQ: Bengaluru.","topic":"Science","difficulty":"easy","year":2021},
+    {"id":"ssc_g_07","question":"Article 370 of the Indian Constitution dealt with:","options":["J&K special status","Citizenship","Emergency","Money bills"],"correct_index":0,"explanation":"Repealed in 2019; gave J&K special autonomy.","topic":"Polity","difficulty":"medium","year":2022},
+    {"id":"ssc_g_08","question":"The 'Father of Green Revolution' in India is:","options":["Verghese Kurien","M.S. Swaminathan","Norman Borlaug","Vikram Sarabhai"],"correct_index":1,"explanation":"M.S. Swaminathan led India's Green Revolution.","topic":"History","difficulty":"medium","year":2020},
+    {"id":"ssc_g_09","question":"The longest river in India is:","options":["Yamuna","Brahmaputra","Ganga","Godavari"],"correct_index":2,"explanation":"Ganga ~2525 km is longest river fully in India.","topic":"Geography","difficulty":"easy","year":2019},
+    {"id":"ssc_g_10","question":"The currency of Japan is:","options":["Yuan","Yen","Won","Ringgit"],"correct_index":1,"explanation":"Japanese Yen (¥).","topic":"World GK","difficulty":"easy","year":2023},
+    {"id":"ssc_g_11","question":"The Nobel Prize in Physics 2023 was awarded for work on:","options":["Attosecond pulses","Quantum computing","Black holes","Graphene"],"correct_index":0,"explanation":"2023 Physics Nobel: attosecond-scale electron dynamics.","topic":"Current Affairs","difficulty":"hard","year":2024}
+  ]
+}

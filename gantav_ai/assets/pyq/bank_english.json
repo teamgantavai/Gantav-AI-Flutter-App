@@ -1,0 +1,18 @@
+{
+  "exam_id": "banking",
+  "subject_id": "bank_english",
+  "source": "IBPS/SBI English pattern",
+  "questions": [
+    {"id":"bnk_e_01","question":"Synonym of 'PROLIFIC':","options":["Barren","Productive","Scarce","Dormant"],"correct_index":1,"explanation":"Prolific = highly productive.","topic":"Synonyms","difficulty":"easy","year":2021},
+    {"id":"bnk_e_02","question":"Antonym of 'TRANSIENT':","options":["Permanent","Short","Brief","Fleeting"],"correct_index":0,"explanation":"Transient = temporary; opposite = permanent.","topic":"Antonyms","difficulty":"medium","year":2020},
+    {"id":"bnk_e_03","question":"Choose correct: Neither of the boys ____ present.","options":["are","were","was","have"],"correct_index":2,"explanation":"'Neither' is singular → was.","topic":"Grammar","difficulty":"medium","year":2022},
+    {"id":"bnk_e_04","question":"Identify error: (a) Each of the students (b) have submitted (c) their assignments (d) on time.","options":["a","b","c","d"],"correct_index":1,"explanation":"'Each' is singular → 'has submitted'.","topic":"Error Spotting","difficulty":"medium","year":2023},
+    {"id":"bnk_e_05","question":"Idiom 'at the drop of a hat' means:","options":["In confusion","Immediately, without hesitation","After long wait","In a festival"],"correct_index":1,"explanation":"Very promptly.","topic":"Idioms","difficulty":"medium","year":2021},
+    {"id":"bnk_e_06","question":"Fill: The cat jumped ____ the wall.","options":["at","over","into","from"],"correct_index":1,"explanation":"Jumped over = leaped across.","topic":"Prepositions","difficulty":"easy","year":2019},
+    {"id":"bnk_e_07","question":"One-word: A government run by religious leaders","options":["Democracy","Theocracy","Monarchy","Oligarchy"],"correct_index":1,"explanation":"Theocracy.","topic":"Vocabulary","difficulty":"medium","year":2020},
+    {"id":"bnk_e_08","question":"Passive of 'Someone has stolen my bike':","options":["My bike was stolen","My bike has been stolen","My bike is stolen","My bike had been stolen"],"correct_index":1,"explanation":"Present perfect passive.","topic":"Voice","difficulty":"medium","year":2022},
+    {"id":"bnk_e_09","question":"Spelling: Pick correct.","options":["Priviledge","Privilege","Privelege","Privilage"],"correct_index":1,"explanation":"Privilege.","topic":"Spelling","difficulty":"medium","year":2024},
+    {"id":"bnk_e_10","question":"Choose closest meaning of 'FRUGAL':","options":["Wasteful","Economical","Expensive","Greedy"],"correct_index":1,"explanation":"Frugal = economical, thrifty.","topic":"Synonyms","difficulty":"easy","year":2023},
+    {"id":"bnk_e_11","question":"Direct to Indirect: She said, 'I will come tomorrow.'","options":["She said she will come tomorrow","She said she would come the next day","She said she comes tomorrow","She said that she came next day"],"correct_index":1,"explanation":"Will→would, tomorrow→next day.","topic":"Narration","difficulty":"medium","year":2021}
+  ]
+}

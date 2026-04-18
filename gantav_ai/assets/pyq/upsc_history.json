@@ -1,0 +1,18 @@
+{
+  "exam_id": "upsc",
+  "subject_id": "upsc_history",
+  "source": "UPSC Prelims History pattern",
+  "questions": [
+    {"id":"upsc_h_01","question":"The Harappan civilization belongs to which age?","options":["Paleolithic","Neolithic","Bronze Age","Iron Age"],"correct_index":2,"explanation":"Harappa/Indus Valley: Bronze Age (~2600-1900 BCE).","topic":"Ancient History","difficulty":"easy","year":2020},
+    {"id":"upsc_h_02","question":"Who founded the Maurya Empire?","options":["Ashoka","Chandragupta Maurya","Bindusara","Bimbisara"],"correct_index":1,"explanation":"Chandragupta Maurya (~321 BCE).","topic":"Ancient History","difficulty":"easy","year":2019},
+    {"id":"upsc_h_03","question":"Battle of Plassey was fought in:","options":["1757","1764","1761","1857"],"correct_index":0,"explanation":"1757: Clive defeated Siraj-ud-Daulah.","topic":"Modern History","difficulty":"easy","year":2021},
+    {"id":"upsc_h_04","question":"Who started the Civil Disobedience Movement in 1930?","options":["Nehru","Tilak","Gandhi","Bose"],"correct_index":2,"explanation":"Gandhi's Dandi March, March 1930.","topic":"Freedom Struggle","difficulty":"easy","year":2022},
+    {"id":"upsc_h_05","question":"The Simon Commission visited India in:","options":["1919","1927","1928","1935"],"correct_index":2,"explanation":"Arrived 1928; faced 'Go Back Simon' protests.","topic":"Freedom Struggle","difficulty":"medium","year":2023},
+    {"id":"upsc_h_06","question":"Who was the first woman ruler of Delhi?","options":["Noor Jahan","Razia Sultana","Rani Durgavati","Chand Bibi"],"correct_index":1,"explanation":"Razia Sultana (1236-1240).","topic":"Medieval History","difficulty":"medium","year":2020},
+    {"id":"upsc_h_07","question":"The Gupta period is known as:","options":["Dark Age","Golden Age","Iron Age","Renaissance"],"correct_index":1,"explanation":"Golden Age of Indian culture and science.","topic":"Ancient History","difficulty":"easy","year":2019},
+    {"id":"upsc_h_08","question":"Who wrote 'Arthashastra'?","options":["Kalidasa","Panini","Kautilya","Vyasa"],"correct_index":2,"explanation":"Kautilya (Chanakya) authored Arthashastra.","topic":"Ancient Texts","difficulty":"easy","year":2021},
+    {"id":"upsc_h_09","question":"The Quit India Movement started in:","options":["1940","1942","1945","1947"],"correct_index":1,"explanation":"8 August 1942, Bombay session.","topic":"Freedom Struggle","difficulty":"easy","year":2024},
+    {"id":"upsc_h_10","question":"Subsidiary Alliance was introduced by:","options":["Cornwallis","Wellesley","Dalhousie","Hastings"],"correct_index":1,"explanation":"Lord Wellesley (1798).","topic":"Modern History","difficulty":"medium","year":2022},
+    {"id":"upsc_h_11","question":"The Indian National Congress was founded in:","options":["1857","1885","1905","1919"],"correct_index":1,"explanation":"1885 by A.O. Hume and others.","topic":"Freedom Struggle","difficulty":"easy","year":2020}
+  ]
+}

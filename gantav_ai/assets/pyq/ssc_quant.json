@@ -1,0 +1,18 @@
+{
+  "exam_id": "ssc",
+  "subject_id": "ssc_quant",
+  "source": "SSC CGL pattern 2019-2024",
+  "questions": [
+    {"id":"ssc_q_01","question":"The average of 5 numbers is 28. If one is excluded, the average becomes 25. The excluded number is:","options":["32","36","40","44"],"correct_index":2,"explanation":"Sum=140; remaining sum=100; excluded=40.","topic":"Averages","difficulty":"easy","year":2021},
+    {"id":"ssc_q_02","question":"A sum doubles itself in 8 years at simple interest. At what rate?","options":["10%","11.5%","12.5%","15%"],"correct_index":2,"explanation":"SI=P → 100=R×8 → R=12.5%.","topic":"Simple Interest","difficulty":"easy","year":2020},
+    {"id":"ssc_q_03","question":"If sin θ = 3/5, find cos θ.","options":["3/5","4/5","5/4","5/3"],"correct_index":1,"explanation":"cos θ = √(1-9/25) = 4/5.","topic":"Trigonometry","difficulty":"easy","year":2022},
+    {"id":"ssc_q_04","question":"A train 120m long passes a pole in 10 seconds. Its speed (km/h) is:","options":["36","43.2","48","50"],"correct_index":1,"explanation":"12 m/s × 3.6 = 43.2 km/h.","topic":"Time Speed Distance","difficulty":"medium","year":2023},
+    {"id":"ssc_q_05","question":"The compound interest on ₹10000 at 10% for 2 years is:","options":["₹2000","₹2100","₹2200","₹2500"],"correct_index":1,"explanation":"10000×(1.1)²−10000 = 2100.","topic":"Compound Interest","difficulty":"medium","year":2021},
+    {"id":"ssc_q_06","question":"A shopkeeper marks up 40% and gives 20% discount. Profit %:","options":["12%","15%","18%","20%"],"correct_index":0,"explanation":"1.4×0.8=1.12 → 12%.","topic":"Profit Loss","difficulty":"medium","year":2024},
+    {"id":"ssc_q_07","question":"The area of a circle is 154 cm². Its circumference is:","options":["22 cm","44 cm","66 cm","88 cm"],"correct_index":1,"explanation":"πr²=154→r=7; 2πr=44.","topic":"Mensuration","difficulty":"easy","year":2020},
+    {"id":"ssc_q_08","question":"If 2x + 3y = 12 and 4x − y = 10, find x.","options":["2","3","3.5","4"],"correct_index":1,"explanation":"y=4x−10; 2x+3(4x−10)=12 → 14x=42 → x=3.","topic":"Algebra","difficulty":"medium","year":2022},
+    {"id":"ssc_q_09","question":"The LCM of 12, 18, 24 is:","options":["36","48","72","144"],"correct_index":2,"explanation":"LCM(12,18,24)=72.","topic":"Number System","difficulty":"easy","year":2019},
+    {"id":"ssc_q_10","question":"Pipe A fills a tank in 6 hrs, B in 4 hrs. Together time:","options":["2 hrs","2.4 hrs","3 hrs","5 hrs"],"correct_index":1,"explanation":"Rate 1/6+1/4=5/12 → 12/5=2.4 hrs.","topic":"Time Work","difficulty":"medium","year":2023},
+    {"id":"ssc_q_11","question":"If x:y = 3:4 and y:z = 2:5, then x:z is:","options":["3:10","6:20","3:20","3:8"],"correct_index":0,"explanation":"x:y:z = 6:8:20 → x:z=3:10.","topic":"Ratio","difficulty":"medium","year":2021}
+  ]
+}

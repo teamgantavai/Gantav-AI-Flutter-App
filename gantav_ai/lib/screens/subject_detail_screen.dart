@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/exam_models.dart';
 import '../services/exam_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/mock_test_setup_sheet.dart';
 import 'mock_test_screen.dart';
 
 /// Detail screen for a single [ExamSubject]: shows subject info and a CTA to start a mock test.
@@ -46,7 +47,18 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> {
     }
   }
 
-  Future<void> _startMockTest() async {
+  Future<void> _startCustomMockTest() async {
+    final filters = await MockTestSetupSheet.show(
+      context,
+      exam: widget.exam,
+      subject: widget.subject,
+    );
+    if (filters == null) return;
+    if (!mounted) return;
+    await _startMockTest(filters: filters);
+  }
+
+  Future<void> _startMockTest({MockTestFilters? filters}) async {
     if (_generatingTest) return;
     setState(() => _generatingTest = true);
 
@@ -57,6 +69,7 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> {
       final test = await ExamService.generateMockTest(
         exam: widget.exam,
         subject: widget.subject,
+        filters: filters,
       );
 
       if (!mounted) return;
@@ -132,11 +145,32 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: _MockTestCta(
-                exam: widget.exam,
-                subject: widget.subject,
-                isGenerating: _generatingTest,
-                onStart: _startMockTest,
+              child: Column(
+                children: [
+                  _MockTestCta(
+                    exam: widget.exam,
+                    subject: widget.subject,
+                    isGenerating: _generatingTest,
+                    onStart: _startMockTest,
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _generatingTest ? null : _startCustomMockTest,
+                      icon: Icon(Icons.tune_rounded,
+                          size: 18, color: widget.exam.gradient.first),
+                      label: Text(
+                        'Customise (topic / year / difficulty)',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: widget.exam.gradient.first,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

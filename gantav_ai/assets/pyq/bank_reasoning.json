@@ -1,0 +1,18 @@
+{
+  "exam_id": "banking",
+  "subject_id": "bank_reasoning",
+  "source": "IBPS PO/SBI PO reasoning pattern",
+  "questions": [
+    {"id":"bnk_r_01","question":"In a certain code, TEACHER is written as VGCEJGT. How is STUDENT written?","options":["UVWFGPV","UVWFGQV","UWVFGPV","UVXFGPV"],"correct_index":0,"explanation":"Each letter shifted +2: S→U, T→V, U→W, D→F, E→G, N→P, T→V.","topic":"Coding","difficulty":"medium","year":2022},
+    {"id":"bnk_r_02","question":"Five friends sit in a row. B is to the left of A, C is to the right of A, D is between B and E. Who is at extreme left?","options":["A","B","D","E"],"correct_index":3,"explanation":"Order: E D B A C → E at extreme left.","topic":"Seating Arrangement","difficulty":"medium","year":2021},
+    {"id":"bnk_r_03","question":"If 'South' is called 'North', 'North' is called 'East', 'East' is 'West', in which direction does the sun rise?","options":["South","North","East","West"],"correct_index":1,"explanation":"Sun rises in East → renamed North.","topic":"Direction","difficulty":"medium","year":2023},
+    {"id":"bnk_r_04","question":"Find odd: 121, 144, 169, 196, 225, 250","options":["144","196","225","250"],"correct_index":3,"explanation":"Others are perfect squares; 250 is not.","topic":"Classification","difficulty":"easy","year":2020},
+    {"id":"bnk_r_05","question":"Statements: Some pens are pencils. All pencils are erasers. Conclusion: Some pens are erasers.","options":["Follows","Does not follow","Cannot determine","Partial"],"correct_index":0,"explanation":"Valid syllogism: some P ∩ pencils ⊂ erasers → some pens are erasers.","topic":"Syllogism","difficulty":"medium","year":2022},
+    {"id":"bnk_r_06","question":"A is mother of B. B is sister of C. C is father of D. How is A related to D?","options":["Grandmother","Grandfather","Mother","Aunt"],"correct_index":0,"explanation":"A is C's mother too → grandmother of D.","topic":"Blood Relations","difficulty":"medium","year":2021},
+    {"id":"bnk_r_07","question":"Next in series: AZ, BY, CX, DW, ?","options":["EV","FU","EU","FV"],"correct_index":0,"explanation":"Forward+Reverse pairs → EV.","topic":"Letter Series","difficulty":"easy","year":2019},
+    {"id":"bnk_r_08","question":"A cube is painted red and cut into 27 small cubes. How many have exactly two faces painted?","options":["8","12","6","1"],"correct_index":1,"explanation":"Edge cubes (excluding corners) = 12.","topic":"Cubes","difficulty":"hard","year":2023},
+    {"id":"bnk_r_09","question":"Input: 34 21 7 59 12. Step 1 after sorting ascending smallest to front: ?","options":["7 34 21 59 12","7 21 12 34 59","12 21 7 59 34","7 12 21 34 59"],"correct_index":0,"explanation":"Machine input: smallest moves to front each step. Step 1 → 7 first.","topic":"Input-Output","difficulty":"hard","year":2022},
+    {"id":"bnk_r_10","question":"If + means ×, × means −, − means ÷, ÷ means +, find: 12 + 3 × 2 ÷ 4","options":["30","36","38","34"],"correct_index":3,"explanation":"Substitute: 12×3 − 2 + 4 = 36 − 2 + 4 = 38.","topic":"Operators","difficulty":"hard","year":2024},
+    {"id":"bnk_r_11","question":"Ranking: In a class of 40, Ram is 12th from top. His rank from bottom is:","options":["27","28","29","30"],"correct_index":2,"explanation":"40−12+1 = 29.","topic":"Ranking","difficulty":"easy","year":2020}
+  ]
+}

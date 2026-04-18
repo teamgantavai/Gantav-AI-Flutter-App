@@ -1,0 +1,18 @@
+{
+  "exam_id": "ssc",
+  "subject_id": "ssc_reasoning",
+  "source": "SSC CGL/CHSL pattern 2019-2024",
+  "questions": [
+    {"id":"ssc_r_01","question":"Find the missing number: 4, 9, 16, 25, ?","options":["30","32","36","40"],"correct_index":2,"explanation":"Squares of 2,3,4,5,6 → 36.","topic":"Number Series","difficulty":"easy","year":2021},
+    {"id":"ssc_r_02","question":"PEN : WRITE :: KNIFE : ?","options":["SHARP","CUT","STAB","KITCHEN"],"correct_index":1,"explanation":"A pen is used to write; a knife is used to cut.","topic":"Analogy","difficulty":"easy","year":2020},
+    {"id":"ssc_r_03","question":"Arrange in meaningful order: 1.Puberty 2.Infancy 3.Childhood 4.Adulthood 5.Old Age","options":["2,3,1,4,5","1,2,3,4,5","2,1,3,4,5","3,2,1,4,5"],"correct_index":0,"explanation":"Infancy → Childhood → Puberty → Adulthood → Old Age.","topic":"Ordering","difficulty":"easy","year":2022},
+    {"id":"ssc_r_04","question":"If 'SUMMER' is coded 'RUNNES', how is 'WINTER' coded?","options":["VJOUDS","VJOUFS","VJMVDS","XJOUFS"],"correct_index":0,"explanation":"Each letter shifted -1,+0,+1,+1,-1,-1 applied reversed: matches VJOUDS.","topic":"Coding","difficulty":"hard","year":2023},
+    {"id":"ssc_r_05","question":"Which number replaces '?' in the series 7, 11, 19, 35, ?","options":["59","67","63","71"],"correct_index":1,"explanation":"Differences ×2: 4,8,16,32 → 35+32=67.","topic":"Number Series","difficulty":"medium","year":2024},
+    {"id":"ssc_r_06","question":"Select the odd one: Dog, Cat, Cow, Tiger","options":["Dog","Cat","Cow","Tiger"],"correct_index":3,"explanation":"Others are domesticated; tiger is wild.","topic":"Classification","difficulty":"easy","year":2020},
+    {"id":"ssc_r_07","question":"A man walks 5 km North, then 3 km East, then 5 km South. How far is he from start?","options":["3 km","5 km","8 km","13 km"],"correct_index":0,"explanation":"Net displacement = 3 km East.","topic":"Direction","difficulty":"easy","year":2021},
+    {"id":"ssc_r_08","question":"If A+B means A is B's father, A-B means A is B's mother, A×B means A is B's brother. P+Q-R means?","options":["P is R's grandfather","P is R's father","P is R's uncle","P is R's son"],"correct_index":0,"explanation":"P is Q's father; Q is R's mother → P is R's grandfather.","topic":"Blood Relations","difficulty":"medium","year":2022},
+    {"id":"ssc_r_09","question":"Which word does NOT belong: Rose, Lily, Jasmine, Mango","options":["Rose","Lily","Jasmine","Mango"],"correct_index":3,"explanation":"Others are flowers; mango is a fruit.","topic":"Classification","difficulty":"easy","year":2019},
+    {"id":"ssc_r_10","question":"Statements: All cats are animals. Some animals are dogs. Conclusion: Some cats are dogs.","options":["Follows","Does not follow","Cannot determine","Partially follows"],"correct_index":1,"explanation":"No direct link between cats and dogs.","topic":"Syllogism","difficulty":"medium","year":2023},
+    {"id":"ssc_r_11","question":"Find next in series: Z, Y, X, W, V, ?","options":["U","T","S","R"],"correct_index":0,"explanation":"Reverse alphabet → U.","topic":"Letter Series","difficulty":"easy","year":2020}
+  ]
+}

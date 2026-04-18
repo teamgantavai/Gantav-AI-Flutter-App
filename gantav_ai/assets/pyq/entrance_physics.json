@@ -1,0 +1,122 @@
+[
+  {
+    "id": "jee_phy_2023_001",
+    "question": "A ball is thrown vertically upward with an initial velocity of 20 m/s. The time taken to reach the maximum height (take g = 10 m/s²) is:",
+    "options": ["1 s", "2 s", "3 s", "4 s"],
+    "correct_index": 1,
+    "explanation": "At maximum height, v = 0. Using v = u − gt ⇒ 0 = 20 − 10t ⇒ t = 2 s.",
+    "topic": "Mechanics · Kinematics · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2023_002",
+    "question": "The dimensional formula for Planck's constant (h) is:",
+    "options": ["[M L² T⁻¹]", "[M L T⁻¹]", "[M L² T⁻²]", "[M L³ T⁻¹]"],
+    "correct_index": 0,
+    "explanation": "E = hν ⇒ h = E/ν. Dimensions of E = [M L² T⁻²], ν = [T⁻¹], so h = [M L² T⁻¹].",
+    "topic": "Units & Dimensions · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2022_003",
+    "question": "A body of mass 2 kg moves with a velocity of 3 m/s. Its kinetic energy is:",
+    "options": ["3 J", "6 J", "9 J", "18 J"],
+    "correct_index": 2,
+    "explanation": "KE = ½mv² = ½ × 2 × 3² = 9 J.",
+    "topic": "Work, Energy & Power · 2022",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2023_004",
+    "question": "In Young's double-slit experiment, if the distance between the slits is doubled, the fringe width will:",
+    "options": ["Double", "Halve", "Remain the same", "Become four times"],
+    "correct_index": 1,
+    "explanation": "Fringe width β = λD/d. If d doubles, β halves.",
+    "topic": "Wave Optics · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2022_005",
+    "question": "An ideal gas undergoes isothermal expansion. Which of the following is zero?",
+    "options": ["Work done", "Heat absorbed", "Change in internal energy", "Change in volume"],
+    "correct_index": 2,
+    "explanation": "For an ideal gas, internal energy depends only on temperature. In isothermal process, ΔT = 0 ⇒ ΔU = 0.",
+    "topic": "Thermodynamics · 2022",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2023_006",
+    "question": "The equivalent resistance between A and B of two resistors 6 Ω and 3 Ω connected in parallel is:",
+    "options": ["9 Ω", "2 Ω", "4.5 Ω", "1.5 Ω"],
+    "correct_index": 1,
+    "explanation": "1/R = 1/6 + 1/3 = 3/6 ⇒ R = 2 Ω.",
+    "topic": "Current Electricity · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2022_007",
+    "question": "A charged particle enters a uniform magnetic field perpendicular to its velocity. Its path will be:",
+    "options": ["Straight line", "Parabola", "Circle", "Ellipse"],
+    "correct_index": 2,
+    "explanation": "Magnetic force is always perpendicular to velocity, giving uniform circular motion.",
+    "topic": "Magnetism · 2022",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2023_008",
+    "question": "The escape velocity from Earth's surface is approximately:",
+    "options": ["7.9 km/s", "11.2 km/s", "15 km/s", "21 km/s"],
+    "correct_index": 1,
+    "explanation": "Escape velocity v = √(2gR) ≈ 11.2 km/s for Earth.",
+    "topic": "Gravitation · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2022_009",
+    "question": "The de Broglie wavelength of a particle is inversely proportional to its:",
+    "options": ["Mass", "Velocity", "Momentum", "Kinetic energy"],
+    "correct_index": 2,
+    "explanation": "λ = h/p, so λ ∝ 1/p (momentum).",
+    "topic": "Modern Physics · 2022",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2023_010",
+    "question": "A simple pendulum has a time period T on Earth. On the Moon (g_moon = g/6), its time period is:",
+    "options": ["T/√6", "T", "√6 · T", "6T"],
+    "correct_index": 2,
+    "explanation": "T = 2π√(L/g). T_moon/T_earth = √(g_earth/g_moon) = √6.",
+    "topic": "Oscillations · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2024_011",
+    "question": "The focal length of a convex lens in air is 20 cm. When immersed in water (n = 4/3), its focal length becomes (glass n = 3/2):",
+    "options": ["40 cm", "60 cm", "80 cm", "100 cm"],
+    "correct_index": 2,
+    "explanation": "Using lens-maker's formula in two media: f_water/f_air = (n_g−1)/(n_g/n_w − 1) = (0.5)/(1/8) = 4 ⇒ f_water = 80 cm.",
+    "topic": "Ray Optics · 2024",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_phy_2024_012",
+    "question": "Two capacitors of 2 μF and 4 μF are connected in series. The equivalent capacitance is:",
+    "options": ["6 μF", "3 μF", "4/3 μF", "2/3 μF"],
+    "correct_index": 2,
+    "explanation": "1/C = 1/2 + 1/4 = 3/4 ⇒ C = 4/3 μF.",
+    "topic": "Electrostatics · 2024",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  }
+]

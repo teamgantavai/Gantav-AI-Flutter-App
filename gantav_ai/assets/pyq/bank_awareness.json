@@ -1,0 +1,18 @@
+{
+  "exam_id": "banking",
+  "subject_id": "bank_awareness",
+  "source": "Banking Awareness IBPS/SBI pattern",
+  "questions": [
+    {"id":"bnk_a_01","question":"The full form of NEFT is:","options":["National Easy Fund Transfer","National Electronic Funds Transfer","Net Electronic Financial Transfer","None"],"correct_index":1,"explanation":"National Electronic Funds Transfer — RBI retail payment system.","topic":"Payments","difficulty":"easy","year":2020},
+    {"id":"bnk_a_02","question":"SLR stands for:","options":["Statutory Liquidity Ratio","Savings Liquidity Ratio","Standard Liquidity Reserve","Statutory Lending Rate"],"correct_index":0,"explanation":"% of NDTL banks must maintain in safe assets.","topic":"Monetary Policy","difficulty":"easy","year":2021},
+    {"id":"bnk_a_03","question":"Who regulates insurance sector in India?","options":["RBI","SEBI","IRDAI","PFRDA"],"correct_index":2,"explanation":"Insurance Regulatory and Development Authority of India.","topic":"Regulators","difficulty":"easy","year":2019},
+    {"id":"bnk_a_04","question":"PMJDY was launched in:","options":["2013","2014","2015","2016"],"correct_index":1,"explanation":"Pradhan Mantri Jan Dhan Yojana, 28 August 2014.","topic":"Schemes","difficulty":"medium","year":2022},
+    {"id":"bnk_a_05","question":"The Bank rate is the rate at which:","options":["Banks lend to each other","RBI lends long-term to banks","Public deposits earn","Govt borrows"],"correct_index":1,"explanation":"RBI's long-term lending rate to commercial banks.","topic":"Monetary Policy","difficulty":"medium","year":2023},
+    {"id":"bnk_a_06","question":"UPI was launched by:","options":["SBI","RBI","NPCI","Govt of India"],"correct_index":2,"explanation":"NPCI launched UPI in April 2016.","topic":"Digital Banking","difficulty":"easy","year":2021},
+    {"id":"bnk_a_07","question":"The first Public Sector Bank in India was:","options":["SBI","Canara Bank","Punjab National Bank","Bank of India"],"correct_index":2,"explanation":"PNB (1894) — first Indian-owned public bank.","topic":"Banking History","difficulty":"medium","year":2020},
+    {"id":"bnk_a_08","question":"KYC stands for:","options":["Know Your Company","Know Your Customer","Keep Your Currency","Know Your Case"],"correct_index":1,"explanation":"Know Your Customer — anti-money-laundering norm.","topic":"Banking Terms","difficulty":"easy","year":2019},
+    {"id":"bnk_a_09","question":"Which of the following is a non-banking financial company?","options":["SBI","HDFC","Bajaj Finance","ICICI Bank"],"correct_index":2,"explanation":"Bajaj Finance is an NBFC.","topic":"Financial Institutions","difficulty":"medium","year":2022},
+    {"id":"bnk_a_10","question":"The world's first digital currency launched by a central bank is:","options":["Digital Rupee (e₹)","eNaira","Sand Dollar","Digital Yuan"],"correct_index":2,"explanation":"Bahamas' Sand Dollar was the world's first CBDC (2020).","topic":"Digital Banking","difficulty":"hard","year":2024},
+    {"id":"bnk_a_11","question":"CRR is maintained with:","options":["Banks themselves","RBI","NABARD","SEBI"],"correct_index":1,"explanation":"Cash Reserve Ratio held with RBI.","topic":"Monetary Policy","difficulty":"easy","year":2023}
+  ]
+}

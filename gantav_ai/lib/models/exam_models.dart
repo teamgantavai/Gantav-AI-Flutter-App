@@ -179,6 +179,8 @@ class ExamQuestion {
   final String topic;
   final double marks;
   final double negativeMarks;
+  final String difficulty; // 'easy' | 'medium' | 'hard'
+  final int year; // 0 = unknown
 
   const ExamQuestion({
     required this.id,
@@ -189,6 +191,8 @@ class ExamQuestion {
     this.topic = '',
     this.marks = 1.0,
     this.negativeMarks = 0.25,
+    this.difficulty = 'medium',
+    this.year = 0,
   });
 
   factory ExamQuestion.fromJson(Map<String, dynamic> j) {
@@ -202,6 +206,8 @@ class ExamQuestion {
       topic: (j['topic'] ?? '').toString(),
       marks: ((j['marks'] ?? 1.0) as num).toDouble(),
       negativeMarks: ((j['negative_marks'] ?? j['negativeMarks'] ?? 0.25) as num).toDouble(),
+      difficulty: (j['difficulty'] ?? 'medium').toString().toLowerCase(),
+      year: (j['year'] is num) ? (j['year'] as num).toInt() : 0,
     );
   }
 
@@ -214,6 +220,8 @@ class ExamQuestion {
         'topic': topic,
         'marks': marks,
         'negative_marks': negativeMarks,
+        'difficulty': difficulty,
+        'year': year,
       };
 }
 

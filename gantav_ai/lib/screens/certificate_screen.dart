@@ -120,11 +120,22 @@ class _CertificateScreenState extends State<CertificateScreen> {
         children: [
           Expanded(
             child: Center(
-              child: SingleChildScrollView(
+              child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: RepaintBoundary(
-                  key: _certificateKey,
-                  child: _CertificateCard(certificate: widget.certificate),
+                // Render the certificate at a FIXED designed size (800×566)
+                // and let FittedBox scale it uniformly to the available area.
+                // This guarantees the layout is identical on every phone,
+                // every orientation, and every exported PNG.
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  child: RepaintBoundary(
+                    key: _certificateKey,
+                    child: SizedBox(
+                      width: 800,
+                      height: 566, // 800 / 1.414 (A4 landscape)
+                      child: _CertificateCard(certificate: widget.certificate),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -196,9 +207,9 @@ class _CertificateCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateStr = DateFormat('MMMM d, y').format(certificate.issuedAt);
 
-    return AspectRatio(
-      aspectRatio: 1.414, // A4 landscape
-      child: Container(
+    // No AspectRatio here — parent supplies a fixed 800×566 SizedBox and
+    // uses FittedBox to scale, so the card just fills its bounds.
+    return Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
@@ -319,16 +330,20 @@ class _CertificateCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      certificate.courseTitle,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF2A2235),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        certificate.courseTitle,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          height: 1.2,
+                          color: const Color(0xFF2A2235),
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -391,8 +406,7 @@ class _CertificateCard extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

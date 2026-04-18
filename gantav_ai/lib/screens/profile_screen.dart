@@ -1072,18 +1072,20 @@ class _SettingsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Horizontally-scrolling row of compact setting chips, Seekho-style.
-    // Sign out stays as a clearly separate destructive button at the bottom.
+    // Clean vertical settings list — iOS/Notion style. Responsive on any width
+    // and orientation (uses ListView inside a constrained sheet).
     final items = <_SettingAction>[
       _SettingAction(
         icon: Icons.edit_outlined,
-        title: 'Edit\nProfile',
+        title: 'Edit Profile',
+        subtitle: 'Name, username, photo',
         color: AppColors.violet,
         onTap: onEditProfile,
       ),
       _SettingAction(
         icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-        title: isDark ? 'Light\nMode' : 'Dark\nMode',
+        title: isDark ? 'Light Mode' : 'Dark Mode',
+        subtitle: isDark ? 'Switch to bright theme' : 'Easier on the eyes',
         color: AppColors.gold,
         onTap: () {
           appState.toggleTheme();
@@ -1093,7 +1095,8 @@ class _SettingsSheet extends StatelessWidget {
       if (AuthService.isAdmin)
         _SettingAction(
           icon: Icons.admin_panel_settings_outlined,
-          title: 'Admin\nPanel',
+          title: 'Admin Panel',
+          subtitle: 'Manage content & PYQs',
           color: AppColors.violet,
           onTap: () {
             Navigator.pop(context);
@@ -1105,7 +1108,8 @@ class _SettingsSheet extends StatelessWidget {
         ),
       _SettingAction(
         icon: Icons.verified_outlined,
-        title: 'Verify\nCert',
+        title: 'Verify Certificate',
+        subtitle: 'Check a certificate ID',
         color: AppColors.gold,
         onTap: () {
           Navigator.pop(context);
@@ -1119,111 +1123,128 @@ class _SettingsSheet extends StatelessWidget {
       ),
       _SettingAction(
         icon: Icons.notifications_outlined,
-        title: 'Notifi\u00adcations',
+        title: 'Notifications',
+        subtitle: 'Push & reminder preferences',
         color: AppColors.teal,
         onTap: () {},
       ),
       _SettingAction(
         icon: Icons.help_outline,
-        title: 'Help &\nSupport',
+        title: 'Help & Support',
+        subtitle: 'FAQs, contact us',
         color: AppColors.teal,
         onTap: () {},
       ),
       _SettingAction(
         icon: Icons.info_outline,
-        title: 'About\nApp',
+        title: 'About App',
+        subtitle: 'Version, terms, privacy',
         color: AppColors.textMuted,
         onTap: () {},
       ),
     ];
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 20, 0, 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-                width: 36,
+    final mq = MediaQuery.of(context);
+    // Cap the sheet height so it scrolls instead of overflowing on short screens
+    // or landscape orientation.
+    final maxSheetHeight = mq.size.height * 0.8;
+
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxSheetHeight),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                width: 40,
                 height: 4,
                 decoration: BoxDecoration(
                     color: AppColors.textMuted.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2))),
-          ),
-          const SizedBox(height: 18),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Text('Settings',
-                    style: Theme.of(context).textTheme.titleLarge),
-                const Spacer(),
-                Text('Swipe →',
-                    style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textMuted)),
-              ],
+                    borderRadius: BorderRadius.circular(2)),
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 100,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
+            const SizedBox(height: 16),
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              physics: const BouncingScrollPhysics(),
-              itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, index) =>
-                  _SettingActionTile(action: items[index], isDark: isDark),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await appState.signOut();
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: AppColors.error.withValues(alpha: 0.25)),
+              child: Row(
+                children: [
+                  Text(
+                    'Settings',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? AppColors.textLight : AppColors.textDark,
+                      letterSpacing: -0.4,
+                    ),
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.error.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                physics: const BouncingScrollPhysics(),
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 2),
+                itemBuilder: (context, index) =>
+                    _SettingsRow(action: items[index], isDark: isDark),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await appState.signOut();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.logout_rounded,
+                              size: 18, color: AppColors.error),
                         ),
-                        child: const Icon(Icons.logout_rounded,
-                            size: 18, color: AppColors.error),
-                      ),
-                      const SizedBox(width: 12),
-                      Text('Sign Out',
+                        const SizedBox(width: 12),
+                        Text(
+                          'Sign Out',
                           style: GoogleFonts.dmSans(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.error)),
-                    ],
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.error,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1232,6 +1253,7 @@ class _SettingsSheet extends StatelessWidget {
 class _SettingAction {
   final IconData icon;
   final String title;
+  final String subtitle;
   final Color color;
   final VoidCallback onTap;
   const _SettingAction({
@@ -1239,59 +1261,75 @@ class _SettingAction {
     required this.title,
     required this.color,
     required this.onTap,
+    this.subtitle = '',
   });
 }
 
-class _SettingActionTile extends StatelessWidget {
+class _SettingsRow extends StatelessWidget {
   final _SettingAction action;
   final bool isDark;
-  const _SettingActionTile({required this.action, required this.isDark});
+  const _SettingsRow({required this.action, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
+    final titleColor = isDark ? AppColors.textLight : AppColors.textDark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         onTap: action.onTap,
-        child: Ink(
-          width: 86,
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: action.color.withValues(alpha: 0.2)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: action.color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(action.icon, size: 20, color: action.color),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: action.color.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 6),
-                Flexible(
-                  child: Text(
-                    action.title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      height: 1.15,
-                      color: isDark ? AppColors.textLight : AppColors.textDark,
+                child: Icon(action.icon, size: 20, color: action.color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      action.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: titleColor,
+                      ),
                     ),
-                  ),
+                    if (action.subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        action.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: AppColors.textMuted.withValues(alpha: 0.7),
+              ),
+            ],
           ),
         ),
       ),

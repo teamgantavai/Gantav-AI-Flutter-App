@@ -281,6 +281,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
       ),
       builder: (context, player) {
         return GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: _togglePlayPause,
           onDoubleTapDown: _handleDoubleTap,
           onLongPressStart: _handleLongPressStart,

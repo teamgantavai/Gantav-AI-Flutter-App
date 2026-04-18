@@ -1,0 +1,18 @@
+{
+  "exam_id": "upsc",
+  "subject_id": "upsc_geography",
+  "source": "UPSC Prelims Geography pattern",
+  "questions": [
+    {"id":"upsc_g_01","question":"The Tropic of Cancer does NOT pass through which state?","options":["Gujarat","Madhya Pradesh","Odisha","West Bengal"],"correct_index":2,"explanation":"Tropic of Cancer passes through 8 states; Odisha is not one.","topic":"Indian Geography","difficulty":"medium","year":2021},
+    {"id":"upsc_g_02","question":"The highest peak in the Western Ghats is:","options":["Anamudi","Doddabetta","Mahendragiri","Kudremukh"],"correct_index":0,"explanation":"Anamudi (2695m) in Kerala.","topic":"Physical Geography","difficulty":"medium","year":2020},
+    {"id":"upsc_g_03","question":"The Deccan Plateau is composed mainly of:","options":["Sandstone","Basalt","Granite","Limestone"],"correct_index":1,"explanation":"Basaltic lava (Deccan Traps).","topic":"Geology","difficulty":"medium","year":2019},
+    {"id":"upsc_g_04","question":"Which is the largest freshwater lake in India?","options":["Dal","Wular","Chilika","Sambhar"],"correct_index":1,"explanation":"Wular Lake in J&K.","topic":"Indian Geography","difficulty":"medium","year":2022},
+    {"id":"upsc_g_05","question":"El Niño is associated with:","options":["Warming of eastern Pacific","Cooling of Atlantic","Indian monsoon onset","Arctic melting"],"correct_index":0,"explanation":"Warmer SST in equatorial eastern Pacific.","topic":"Climatology","difficulty":"medium","year":2023},
+    {"id":"upsc_g_06","question":"The Indian Standard Time is based on longitude:","options":["82.5°E","75°E","90°E","88.5°E"],"correct_index":0,"explanation":"82.5°E passes through Mirzapur.","topic":"Indian Geography","difficulty":"easy","year":2020},
+    {"id":"upsc_g_07","question":"Which soil is best for cotton cultivation?","options":["Alluvial","Red","Black","Laterite"],"correct_index":2,"explanation":"Black (regur) soil retains moisture — ideal for cotton.","topic":"Agriculture","difficulty":"easy","year":2021},
+    {"id":"upsc_g_08","question":"The Strait of Malacca lies between:","options":["India and Sri Lanka","Malaysia and Sumatra","Japan and Korea","Spain and Morocco"],"correct_index":1,"explanation":"Key shipping route between Malay Peninsula and Sumatra.","topic":"World Geography","difficulty":"medium","year":2022},
+    {"id":"upsc_g_09","question":"Which state has the longest coastline in India?","options":["Tamil Nadu","Maharashtra","Gujarat","Andhra Pradesh"],"correct_index":2,"explanation":"Gujarat ~1600 km.","topic":"Indian Geography","difficulty":"easy","year":2024},
+    {"id":"upsc_g_10","question":"The phenomenon of 'western disturbances' brings:","options":["Summer rain in South","Winter rain in North","Cyclones in East","Drought in West"],"correct_index":1,"explanation":"Extra-tropical storms from Mediterranean bring winter rain to N India.","topic":"Climatology","difficulty":"hard","year":2023},
+    {"id":"upsc_g_11","question":"The Sundarbans is located in the delta of:","options":["Mahanadi","Godavari","Ganga-Brahmaputra","Krishna"],"correct_index":2,"explanation":"World's largest mangrove in Ganga-Brahmaputra delta.","topic":"Indian Geography","difficulty":"easy","year":2019}
+  ]
+}

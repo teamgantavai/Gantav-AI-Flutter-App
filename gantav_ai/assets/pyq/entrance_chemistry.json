@@ -1,0 +1,102 @@
+[
+  {
+    "id": "jee_chem_2023_001",
+    "question": "The number of moles of H₂SO₄ required to completely neutralise 4 moles of NaOH is:",
+    "options": ["1", "2", "4", "8"],
+    "correct_index": 1,
+    "explanation": "H₂SO₄ + 2NaOH → Na₂SO₄ + 2H₂O. So 4 mol NaOH needs 2 mol H₂SO₄.",
+    "topic": "Stoichiometry · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2023_002",
+    "question": "Which of the following has the highest first ionisation energy?",
+    "options": ["Na", "Mg", "Al", "Si"],
+    "correct_index": 3,
+    "explanation": "Ionisation energy increases across a period: Na < Mg < Al < Si (with a small Al dip, but Si > all listed).",
+    "topic": "Periodic Properties · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2022_003",
+    "question": "The hybridisation of the central atom in SF₆ is:",
+    "options": ["sp³", "sp³d", "sp³d²", "sp³d³"],
+    "correct_index": 2,
+    "explanation": "S is bonded to 6 F atoms with no lone pairs ⇒ sp³d² (octahedral).",
+    "topic": "Chemical Bonding · 2022",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2023_004",
+    "question": "The number of σ and π bonds in CH₂=C=CH₂ (propadiene) respectively is:",
+    "options": ["6 σ, 2 π", "4 σ, 2 π", "5 σ, 1 π", "3 σ, 2 π"],
+    "correct_index": 0,
+    "explanation": "CH₂=C=CH₂ has 4 C–H σ bonds, 2 C–C σ bonds, and 2 π bonds in the cumulated double bonds.",
+    "topic": "Organic Basics · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2022_005",
+    "question": "Which of the following is the strongest Lewis acid?",
+    "options": ["BF₃", "BCl₃", "BBr₃", "BI₃"],
+    "correct_index": 3,
+    "explanation": "Back-bonding from halogen to boron decreases from F to I, so BI₃ has the weakest back-bonding and is the strongest Lewis acid.",
+    "topic": "p-Block Elements · 2022",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2023_006",
+    "question": "The pH of 0.01 M HCl solution is:",
+    "options": ["1", "2", "7", "12"],
+    "correct_index": 1,
+    "explanation": "HCl is strong acid, fully dissociated. [H⁺] = 0.01 ⇒ pH = −log(0.01) = 2.",
+    "topic": "Ionic Equilibrium · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2022_007",
+    "question": "Markovnikov's rule is applicable to the addition of HBr to:",
+    "options": ["Symmetrical alkenes", "Unsymmetrical alkenes", "Alkynes only", "Benzene"],
+    "correct_index": 1,
+    "explanation": "Markovnikov's rule predicts regiochemistry for HX addition to unsymmetrical alkenes — H goes to the C with more H.",
+    "topic": "Hydrocarbons · 2022",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2023_008",
+    "question": "The oxidation state of Mn in KMnO₄ is:",
+    "options": ["+2", "+4", "+6", "+7"],
+    "correct_index": 3,
+    "explanation": "K = +1, O₄ = −8. For neutral compound: 1 + x − 8 = 0 ⇒ x = +7.",
+    "topic": "Redox · 2023",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2022_009",
+    "question": "Which of the following shows the highest boiling point?",
+    "options": ["CH₃OH", "CH₃CH₃", "CH₃Cl", "CH₃OCH₃"],
+    "correct_index": 0,
+    "explanation": "CH₃OH forms intermolecular H-bonds, giving the highest boiling point among the four.",
+    "topic": "Alcohols & Ethers · 2022",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  },
+  {
+    "id": "jee_chem_2024_010",
+    "question": "The number of unpaired electrons in [Fe(H₂O)₆]²⁺ (high-spin) is:",
+    "options": ["0", "2", "4", "6"],
+    "correct_index": 2,
+    "explanation": "Fe²⁺ is d⁶. In high-spin octahedral field: t₂g⁴ eg² ⇒ 4 unpaired electrons.",
+    "topic": "Coordination Compounds · 2024",
+    "marks": 4.0,
+    "negative_marks": 1.0
+  }
+]

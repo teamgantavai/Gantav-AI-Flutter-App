@@ -1,0 +1,18 @@
+{
+  "exam_id": "upsc",
+  "subject_id": "upsc_current",
+  "source": "UPSC Current Affairs 2022-2025",
+  "questions": [
+    {"id":"upsc_c_01","question":"Chandrayaan-3 successfully soft-landed on the Moon in:","options":["July 2023","August 2023","September 2023","October 2023"],"correct_index":1,"explanation":"Vikram lander touched down 23 August 2023 near south pole.","topic":"Science & Tech","difficulty":"easy","year":2024},
+    {"id":"upsc_c_02","question":"India's G20 presidency culminated with the summit held in:","options":["Mumbai","Bengaluru","New Delhi","Hyderabad"],"correct_index":2,"explanation":"G20 Leaders' Summit, New Delhi, September 2023.","topic":"International Relations","difficulty":"easy","year":2024},
+    {"id":"upsc_c_03","question":"The Digital Personal Data Protection Act was enacted in India in:","options":["2022","2023","2024","2021"],"correct_index":1,"explanation":"DPDP Act received assent in August 2023.","topic":"Governance","difficulty":"medium","year":2024},
+    {"id":"upsc_c_04","question":"The 'PM Gati Shakti' scheme focuses on:","options":["Women empowerment","Multi-modal infrastructure connectivity","Agriculture","Health"],"correct_index":1,"explanation":"Integrated infrastructure master plan launched 2021.","topic":"Schemes","difficulty":"medium","year":2022},
+    {"id":"upsc_c_05","question":"The new criminal laws (Bharatiya Nyaya Sanhita etc.) came into effect from:","options":["1 January 2024","1 April 2024","1 July 2024","1 October 2024"],"correct_index":2,"explanation":"Effective 1 July 2024, replacing IPC/CrPC/Evidence Act.","topic":"Polity","difficulty":"medium","year":2024},
+    {"id":"upsc_c_06","question":"India became the ___ largest economy in the world in 2024:","options":["3rd","4th","5th","6th"],"correct_index":2,"explanation":"India is the 5th largest by nominal GDP (as of 2024).","topic":"Economy","difficulty":"easy","year":2024},
+    {"id":"upsc_c_07","question":"Mission LiFE launched by India stands for:","options":["Life for Earth","Lifestyle for Environment","Livelihood, Food and Economy","Low-carbon Industrial Future"],"correct_index":1,"explanation":"Launched at COP27 in Nov 2022.","topic":"Environment","difficulty":"medium","year":2023},
+    {"id":"upsc_c_08","question":"The Women's Reservation Bill passed in 2023 reserves what % of seats?","options":["25%","33%","40%","50%"],"correct_index":1,"explanation":"Nari Shakti Vandan Adhiniyam: 33% in Lok Sabha and state assemblies.","topic":"Polity","difficulty":"easy","year":2024},
+    {"id":"upsc_c_09","question":"Which country joined BRICS in January 2024?","options":["Iran","Saudi Arabia","UAE","All of the above"],"correct_index":3,"explanation":"Iran, UAE, Egypt, Ethiopia joined; Saudi Arabia invited.","topic":"International Relations","difficulty":"medium","year":2024},
+    {"id":"upsc_c_10","question":"India's first indigenous aircraft carrier is named:","options":["INS Vikramaditya","INS Vikrant","INS Arihant","INS Chakra"],"correct_index":1,"explanation":"INS Vikrant commissioned September 2022.","topic":"Defence","difficulty":"easy","year":2023},
+    {"id":"upsc_c_11","question":"The theme of India's G20 presidency was:","options":["One Earth One Family One Future","Vasudhaiva Kutumbakam","Sabka Saath Sabka Vikas","All of the above"],"correct_index":0,"explanation":"'One Earth, One Family, One Future' — from Vasudhaiva Kutumbakam.","topic":"International Relations","difficulty":"easy","year":2023}
+  ]
+}

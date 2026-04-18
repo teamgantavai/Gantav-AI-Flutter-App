@@ -11,6 +11,28 @@ enum AITask { recommendations, courseGeneration, chat, quiz }
 class ApiConfig {
   // ── Gemini ────────────────────────────────────────────────────────────────
   static String get geminiApiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
+
+  /// Optional secondary Gemini key used for "low-priority" tasks — doubt AI
+  /// chat and quiz generation — so the primary key's quota stays reserved
+  /// for course generation. Falls back to the primary key when unset.
+  static String get geminiApiKey2 => dotenv.env['GEMINI_API_KEY_2'] ?? '';
+  static bool get hasGeminiSecondary => geminiApiKey2.isNotEmpty;
+
+  /// Returns the most appropriate Gemini key for the given [task].
+  /// Doubt (chat) and quiz go to the secondary key when present; course
+  /// generation and everything else use the primary key.
+  static String geminiKeyForTask(AITask task) {
+    if (!hasGeminiSecondary) return geminiApiKey;
+    switch (task) {
+      case AITask.chat:
+      case AITask.quiz:
+        return geminiApiKey2;
+      case AITask.courseGeneration:
+      case AITask.recommendations:
+        return geminiApiKey;
+    }
+  }
+
   static const String geminiModel = 'gemini-2.0-flash';
   static const String geminiBaseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models';
@@ -110,6 +132,7 @@ class ApiConfig {
   static void printStatus() {
     debugPrint('┌─── API Configuration Status ───────────────────────');
     debugPrint('│ Gemini:       ${hasGemini ? "✓ configured" : "✗ no key"}');
+    debugPrint('│ Gemini (2nd): ${hasGeminiSecondary ? "✓ configured (doubt/quiz)" : "✗ no key"}');
     debugPrint('│ Groq:         ${hasGroq ? "✓ configured" : "✗ no key"}');
     debugPrint('│ OpenRouter:   ${hasOpenRouter ? "✓ configured" : "✗ no key"}');
     debugPrint('│ HuggingFace:  ${hasHuggingFace ? "✓ configured (free)" : "✗ no key"}');

@@ -1,0 +1,18 @@
+{
+  "exam_id": "upsc",
+  "subject_id": "upsc_polity",
+  "source": "UPSC Prelims pattern 2019-2024",
+  "questions": [
+    {"id":"upsc_p_01","question":"Which article of the Indian Constitution deals with the Right to Equality?","options":["Article 14","Article 19","Article 21","Article 32"],"correct_index":0,"explanation":"Articles 14-18 cover Right to Equality; 14 is the general clause.","topic":"Fundamental Rights","difficulty":"easy","year":2021},
+    {"id":"upsc_p_02","question":"The concept of 'Basic Structure' of the Constitution was established in:","options":["Golaknath case","Kesavananda Bharati case","Minerva Mills case","Maneka Gandhi case"],"correct_index":1,"explanation":"Kesavananda Bharati v. State of Kerala (1973).","topic":"Constitutional Cases","difficulty":"medium","year":2020},
+    {"id":"upsc_p_03","question":"Who is the ex-officio Chairman of the Rajya Sabha?","options":["President","Prime Minister","Vice President","Lok Sabha Speaker"],"correct_index":2,"explanation":"Vice President chairs the Rajya Sabha.","topic":"Parliament","difficulty":"easy","year":2019},
+    {"id":"upsc_p_04","question":"The Directive Principles of State Policy are borrowed from:","options":["USA","Ireland","UK","Canada"],"correct_index":1,"explanation":"DPSPs modeled on Irish Constitution.","topic":"Constitutional Borrowings","difficulty":"medium","year":2022},
+    {"id":"upsc_p_05","question":"Money Bills can be introduced only in:","options":["Rajya Sabha","Lok Sabha","Either House","Joint session"],"correct_index":1,"explanation":"Art. 110: Money Bills originate only in Lok Sabha.","topic":"Parliament","difficulty":"medium","year":2023},
+    {"id":"upsc_p_06","question":"The 73rd Constitutional Amendment deals with:","options":["Municipalities","Panchayati Raj","GST","Fundamental Duties"],"correct_index":1,"explanation":"1992 amendment gave constitutional status to Panchayati Raj.","topic":"Local Government","difficulty":"medium","year":2021},
+    {"id":"upsc_p_07","question":"Which of the following is NOT a Fundamental Duty?","options":["Respect national flag","Pay taxes","Protect environment","Promote harmony"],"correct_index":1,"explanation":"Paying taxes is a legal obligation, not a fundamental duty (Art 51A).","topic":"Fundamental Duties","difficulty":"medium","year":2020},
+    {"id":"upsc_p_08","question":"The Finance Commission is constituted every:","options":["2 years","3 years","5 years","10 years"],"correct_index":2,"explanation":"Art 280: every 5 years.","topic":"Federalism","difficulty":"easy","year":2022},
+    {"id":"upsc_p_09","question":"Who decides whether a bill is a Money Bill?","options":["President","PM","Speaker of Lok Sabha","Chairman of Rajya Sabha"],"correct_index":2,"explanation":"Art 110(3): Speaker's decision is final.","topic":"Parliament","difficulty":"medium","year":2024},
+    {"id":"upsc_p_10","question":"Which schedule of the Constitution deals with anti-defection law?","options":["Ninth","Tenth","Eleventh","Twelfth"],"correct_index":1,"explanation":"10th Schedule, added by 52nd Amendment.","topic":"Schedules","difficulty":"hard","year":2023},
+    {"id":"upsc_p_11","question":"The term 'Socialist' was added to the Preamble by:","options":["42nd Amendment","44th Amendment","52nd Amendment","73rd Amendment"],"correct_index":0,"explanation":"42nd Amendment, 1976.","topic":"Preamble","difficulty":"medium","year":2019}
+  ]
+}

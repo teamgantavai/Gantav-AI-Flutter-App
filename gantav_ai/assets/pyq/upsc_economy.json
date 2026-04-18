@@ -1,0 +1,18 @@
+{
+  "exam_id": "upsc",
+  "subject_id": "upsc_economy",
+  "source": "UPSC Prelims Economy pattern",
+  "questions": [
+    {"id":"upsc_e_01","question":"Repo rate is the rate at which:","options":["Banks lend to public","RBI lends to commercial banks","Banks lend to each other","Govt borrows abroad"],"correct_index":1,"explanation":"RBI lends overnight funds to banks against securities.","topic":"Monetary Policy","difficulty":"easy","year":2020},
+    {"id":"upsc_e_02","question":"GDP at factor cost = GDP at market price minus:","options":["Subsidies","Indirect taxes + Subsidies","Indirect taxes − Subsidies","Depreciation"],"correct_index":2,"explanation":"FC = MP − (Indirect taxes − Subsidies).","topic":"National Income","difficulty":"medium","year":2021},
+    {"id":"upsc_e_03","question":"The Goods and Services Tax (GST) was implemented on:","options":["1 April 2016","1 July 2017","1 January 2018","1 April 2019"],"correct_index":1,"explanation":"GST rolled out midnight 1 July 2017.","topic":"Taxation","difficulty":"easy","year":2019},
+    {"id":"upsc_e_04","question":"The 'Laffer Curve' shows the relationship between:","options":["Inflation and unemployment","Tax rate and tax revenue","GDP and population","Savings and investment"],"correct_index":1,"explanation":"Beyond a point, higher tax rates reduce revenue.","topic":"Public Finance","difficulty":"medium","year":2022},
+    {"id":"upsc_e_05","question":"Which index measures retail inflation in India?","options":["WPI","CPI","IIP","PMI"],"correct_index":1,"explanation":"Consumer Price Index — RBI's inflation target anchor.","topic":"Inflation","difficulty":"easy","year":2023},
+    {"id":"upsc_e_06","question":"NITI Aayog replaced which body?","options":["Planning Commission","Finance Commission","Disinvestment Commission","RBI"],"correct_index":0,"explanation":"NITI Aayog replaced the Planning Commission in 2015.","topic":"Institutions","difficulty":"easy","year":2020},
+    {"id":"upsc_e_07","question":"A 'fiscal deficit' is the difference between:","options":["Total expenditure − Total receipts (excl. borrowings)","Revenue exp − Revenue receipts","Capital exp − Capital receipts","Exports − Imports"],"correct_index":0,"explanation":"Fiscal deficit = financing need = total exp − (non-debt receipts).","topic":"Public Finance","difficulty":"medium","year":2021},
+    {"id":"upsc_e_08","question":"Which bank regulates microfinance institutions in India?","options":["SEBI","NABARD","RBI","IRDAI"],"correct_index":2,"explanation":"RBI is the primary regulator of NBFC-MFIs.","topic":"Banking","difficulty":"medium","year":2022},
+    {"id":"upsc_e_09","question":"The term 'Stagflation' refers to:","options":["Low growth + low inflation","High growth + high inflation","High inflation + stagnant growth","Deflation + unemployment"],"correct_index":2,"explanation":"Stagnation + inflation simultaneously.","topic":"Macroeconomics","difficulty":"medium","year":2024},
+    {"id":"upsc_e_10","question":"The Reserve Bank of India was nationalized in:","options":["1935","1947","1949","1969"],"correct_index":2,"explanation":"RBI nationalized on 1 January 1949.","topic":"Banking History","difficulty":"easy","year":2019},
+    {"id":"upsc_e_11","question":"A sharp rise in WPI without a matching rise in CPI usually indicates:","options":["Wage-push inflation","Input-cost inflation at wholesale level","Currency depreciation","Monetary expansion"],"correct_index":1,"explanation":"WPI tracks wholesale prices; divergence suggests supply-side input costs.","topic":"Inflation","difficulty":"hard","year":2023}
+  ]
+}

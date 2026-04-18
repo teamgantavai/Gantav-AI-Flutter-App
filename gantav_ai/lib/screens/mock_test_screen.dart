@@ -252,9 +252,15 @@ class _MockTestScreenState extends State<MockTestScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Question ${_currentIndex + 1} of ${widget.test.questions.length}',
-                        style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5),
+                      Row(
+                        children: [
+                          Text(
+                            'Question ${_currentIndex + 1} of ${widget.test.questions.length}',
+                            style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5),
+                          ),
+                          const SizedBox(width: 8),
+                          _SourceBadge(source: widget.test.source, topic: q.topic),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -588,6 +594,58 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 6),
         Text(label, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w500, color: AppColors.textMuted)),
       ],
+    );
+  }
+}
+
+/// Tiny pill that tells the learner *why* they should trust this question —
+/// "Real PYQ" when it came from the curated dataset, "Online PYQ" when it
+/// was sourced via grounded search, "AI pattern" for LLM-generated ones.
+class _SourceBadge extends StatelessWidget {
+  final String source;
+  final String topic;
+  const _SourceBadge({required this.source, required this.topic});
+
+  ({String label, Color color, IconData icon}) _style() {
+    switch (source) {
+      case 'pyq-dataset':
+        return (label: 'Real PYQ', color: AppColors.success, icon: Icons.verified_rounded);
+      case 'pyq-dataset+ai':
+        return (label: 'Real PYQ + AI', color: AppColors.teal, icon: Icons.verified_outlined);
+      case 'online-pyq':
+        return (label: 'Online PYQ', color: AppColors.violet, icon: Icons.travel_explore_rounded);
+      case 'offline-fallback':
+        return (label: 'Offline', color: AppColors.textMuted, icon: Icons.cloud_off_rounded);
+      default:
+        return (label: 'AI pattern', color: AppColors.gold, icon: Icons.auto_awesome_rounded);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _style();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: s.color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(s.icon, size: 10, color: s.color),
+          const SizedBox(width: 4),
+          Text(
+            topic.isNotEmpty ? '${s.label} · $topic' : s.label,
+            style: GoogleFonts.dmSans(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              color: s.color,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

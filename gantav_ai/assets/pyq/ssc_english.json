@@ -1,0 +1,18 @@
+{
+  "exam_id": "ssc",
+  "subject_id": "ssc_english",
+  "source": "SSC CGL English pattern 2019-2024",
+  "questions": [
+    {"id":"ssc_e_01","question":"Choose the synonym of 'BENEVOLENT':","options":["Cruel","Kind","Selfish","Greedy"],"correct_index":1,"explanation":"Benevolent = kind, generous.","topic":"Synonyms","difficulty":"easy","year":2021},
+    {"id":"ssc_e_02","question":"Antonym of 'ABUNDANT':","options":["Plentiful","Scarce","Rich","Ample"],"correct_index":1,"explanation":"Abundant = plenty; opposite = scarce.","topic":"Antonyms","difficulty":"easy","year":2020},
+    {"id":"ssc_e_03","question":"Fill in the blank: He ____ to the market every Sunday.","options":["go","goes","going","gone"],"correct_index":1,"explanation":"Third-person singular present tense takes 'goes'.","topic":"Grammar","difficulty":"easy","year":2022},
+    {"id":"ssc_e_04","question":"Identify the error: (a) She is (b) one of the most (c) intelligent girl (d) in the class.","options":["a","b","c","d"],"correct_index":2,"explanation":"'one of the most intelligent girls' — plural after 'one of'.","topic":"Error Spotting","difficulty":"medium","year":2023},
+    {"id":"ssc_e_05","question":"Idiom 'to bite the dust' means:","options":["To eat","To fail / die","To clean","To run"],"correct_index":1,"explanation":"To bite the dust = to be defeated or to die.","topic":"Idioms","difficulty":"medium","year":2021},
+    {"id":"ssc_e_06","question":"Choose the correct passive: 'He wrote a letter.'","options":["A letter was written by him","A letter is written by him","A letter has been written","Letter was wrote"],"correct_index":0,"explanation":"Simple past passive: was + past participle.","topic":"Voice","difficulty":"easy","year":2020},
+    {"id":"ssc_e_07","question":"Spelling: Choose the correctly spelled word.","options":["Accomodate","Accommodate","Acommodate","Acomodate"],"correct_index":1,"explanation":"Two 'c's and two 'm's in accommodate.","topic":"Spelling","difficulty":"medium","year":2024},
+    {"id":"ssc_e_08","question":"Direct → Indirect: He said, 'I am tired.'","options":["He said he is tired","He said he was tired","He said that he be tired","He says he was tired"],"correct_index":1,"explanation":"Reported speech shifts present → past.","topic":"Narration","difficulty":"medium","year":2022},
+    {"id":"ssc_e_09","question":"One-word substitute: A person who knows many languages","options":["Linguist","Polyglot","Philologist","Grammarian"],"correct_index":1,"explanation":"Polyglot = knows many languages.","topic":"Vocabulary","difficulty":"medium","year":2023},
+    {"id":"ssc_e_10","question":"Choose correct preposition: She is good ____ mathematics.","options":["in","at","on","with"],"correct_index":1,"explanation":"'Good at' is the standard collocation.","topic":"Prepositions","difficulty":"easy","year":2019},
+    {"id":"ssc_e_11","question":"Synonym of 'IMPEDIMENT':","options":["Obstacle","Help","Push","Advance"],"correct_index":0,"explanation":"Impediment = hindrance, obstacle.","topic":"Synonyms","difficulty":"medium","year":2021}
+  ]
+}

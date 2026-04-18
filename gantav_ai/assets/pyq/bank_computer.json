@@ -1,0 +1,18 @@
+{
+  "exam_id": "banking",
+  "subject_id": "bank_computer",
+  "source": "IBPS Clerk/PO Computer Knowledge",
+  "questions": [
+    {"id":"bnk_c_01","question":"The brain of the computer is:","options":["RAM","CPU","Motherboard","Hard Disk"],"correct_index":1,"explanation":"Central Processing Unit performs instructions.","topic":"Hardware","difficulty":"easy","year":2020},
+    {"id":"bnk_c_02","question":"1 KB is equal to:","options":["1000 bytes","1024 bytes","512 bytes","2048 bytes"],"correct_index":1,"explanation":"Kilobyte = 2^10 = 1024 bytes.","topic":"Memory","difficulty":"easy","year":2019},
+    {"id":"bnk_c_03","question":"Which of these is a volatile memory?","options":["HDD","SSD","RAM","ROM"],"correct_index":2,"explanation":"RAM loses data when power off.","topic":"Memory","difficulty":"easy","year":2021},
+    {"id":"bnk_c_04","question":"MS Word file extension is:","options":[".xls",".pdf",".docx",".pptx"],"correct_index":2,"explanation":".docx for Word documents.","topic":"MS Office","difficulty":"easy","year":2020},
+    {"id":"bnk_c_05","question":"A firewall is used for:","options":["Speeding internet","Network security","Data storage","Printing"],"correct_index":1,"explanation":"Blocks unauthorized network access.","topic":"Security","difficulty":"easy","year":2022},
+    {"id":"bnk_c_06","question":"URL stands for:","options":["Uniform Resource Locator","Universal Reference Link","Uniform Reference Locator","United Resource Link"],"correct_index":0,"explanation":"URL = Uniform Resource Locator.","topic":"Internet","difficulty":"easy","year":2019},
+    {"id":"bnk_c_07","question":"SQL is used for:","options":["Web design","Database queries","Graphics","OS"],"correct_index":1,"explanation":"Structured Query Language — database manipulation.","topic":"Databases","difficulty":"easy","year":2021},
+    {"id":"bnk_c_08","question":"Linux is a type of:","options":["Application","Operating System","Browser","Database"],"correct_index":1,"explanation":"Open-source OS kernel.","topic":"OS","difficulty":"easy","year":2023},
+    {"id":"bnk_c_09","question":"IP v4 address has how many bits?","options":["16","32","64","128"],"correct_index":1,"explanation":"32 bits, expressed as 4 octets.","topic":"Networking","difficulty":"medium","year":2022},
+    {"id":"bnk_c_10","question":"Cloud computing primarily provides:","options":["On-demand scalable resources","Local storage only","Video games","Hardware repair"],"correct_index":0,"explanation":"Utility-style computing delivered over the internet.","topic":"Cloud","difficulty":"medium","year":2024},
+    {"id":"bnk_c_11","question":"Shortcut Ctrl+Z does:","options":["Redo","Undo","Cut","Copy"],"correct_index":1,"explanation":"Undo last action.","topic":"Shortcuts","difficulty":"easy","year":2020}
+  ]
+}

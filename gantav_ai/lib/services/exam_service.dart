@@ -45,10 +45,11 @@ class ExamService {
     required ExamSubject subject,
     int questionCount = 25,
     int durationMinutes = 30,
+    MockTestFilters? filters,
   }) async {
     final bank = await _getOrBuildBank(exam: exam, subject: subject);
 
-    final picked = _pickSubset(bank.questions, questionCount);
+    final picked = _pickSubsetFiltered(bank.questions, questionCount, filters);
     final source = bank.source;
     final description = bank.description;
 
@@ -116,25 +117,64 @@ class ExamService {
     String description =
         'AI-generated, PYQ-style questions modelled on ${exam.name} (2024–2026) pattern.';
 
-    // Try real online PYQs via Gemini Google-Search grounding
-    if (ApiConfig.hasGemini) {
+    // Priority 1: bundled dataset + admin-uploaded Firestore bank.
+    // This is the trust anchor — real PYQs beat anything AI can produce.
+    try {
+      final dataset = await PyqService.loadDatasetQuestions(
+        exam: exam,
+        subject: subject,
+      );
+      if (dataset.isNotEmpty) {
+        questions.addAll(dataset);
+        if (dataset.length >= _bankTargetSize) {
+          source = 'pyq-dataset';
+          description =
+              'Real past year questions (${dataset.length} in bank) from curated ${exam.name} dataset — ${subject.name}.';
+          final bank = _QuestionBank(
+            questions: questions,
+            source: source,
+            description: description,
+            builtAt: DateTime.now(),
+          );
+          await _saveBank(exam, subject, bank);
+          return bank;
+        }
+        // Dataset is partial — keep going and top up with AI below.
+        source = 'pyq-dataset+ai';
+        description =
+            'Real PYQs (${dataset.length}) from ${exam.name} dataset, topped up with AI-generated pattern questions.';
+      }
+    } catch (e) {
+      debugPrint('[ExamService] dataset load failed: $e');
+    }
+
+    // Priority 2: real online PYQs via Gemini Google-Search grounding
+    if (questions.length < _bankTargetSize && ApiConfig.hasGemini) {
       try {
-        questions = await PyqService.fetchOnlinePyqs(
+        final online = await PyqService.fetchOnlinePyqs(
           exam: exam,
           subject: subject,
-          count: _bankTargetSize,
+          count: _bankTargetSize - questions.length,
         );
-        if (questions.isNotEmpty) {
-          source = 'online-pyq';
-          description =
-              'Real past year questions sourced from trusted ${exam.name} repositories (2024–2026).';
+        if (online.isNotEmpty) {
+          // Merge — keep dataset questions at the front, append online ones.
+          final seen = questions.map((q) => q.question.toLowerCase()).toSet();
+          for (final q in online) {
+            if (seen.add(q.question.toLowerCase())) questions.add(q);
+          }
+          if (source == 'ai-pyq-style') {
+            source = 'online-pyq';
+            description =
+                'Real past year questions sourced from trusted ${exam.name} repositories (2024–2026).';
+          }
         }
       } catch (e) {
         debugPrint('[ExamService] online PYQ fetch failed: $e');
       }
     }
 
-    // Fall back to AI-generated PYQ-style questions
+    // Priority 3: AI-generated PYQ-style questions to top up if we still
+    // don't have enough real ones.
     if (questions.length < 10 && ApiConfig.isConfigured) {
       try {
         final generated = await _aiGenerateQuestions(
@@ -273,6 +313,52 @@ class ExamService {
     }
     final copy = List<ExamQuestion>.from(bank)..shuffle(Random());
     return copy.take(count).toList();
+  }
+
+  /// Filtered variant. Applies topic / year / difficulty predicates before
+  /// random sampling. Falls back to the unfiltered pool when the filter is
+  /// too narrow (so the user never sees an empty mock test).
+  static List<ExamQuestion> _pickSubsetFiltered(
+    List<ExamQuestion> bank,
+    int count,
+    MockTestFilters? f,
+  ) {
+    if (f == null || !f.hasAny) return _pickSubset(bank, count);
+
+    final filtered = bank.where((q) {
+      // Topic filter (case-insensitive substring match on topic OR question)
+      if (f.topics.isNotEmpty) {
+        final hay = '${q.topic} ${q.question}'.toLowerCase();
+        final any = f.topics.any((t) => hay.contains(t.toLowerCase()));
+        if (!any) return false;
+      }
+      // Year range
+      if (q.year > 0) {
+        if (f.minYear != null && q.year < f.minYear!) return false;
+        if (f.maxYear != null && q.year > f.maxYear!) return false;
+      } else if (f.strictYear && (f.minYear != null || f.maxYear != null)) {
+        // When strict, drop questions without year metadata
+        return false;
+      }
+      // Difficulty
+      if (f.difficulty != null && f.difficulty!.isNotEmpty) {
+        if (q.difficulty.toLowerCase() != f.difficulty!.toLowerCase()) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    // If filter yields too few (< 5), top up with unfiltered to keep the test
+    // playable; the user still gets their filter preference prioritised.
+    if (filtered.length < 5) {
+      final extras = List<ExamQuestion>.from(bank)
+        ..shuffle(Random())
+        ..removeWhere((q) => filtered.contains(q));
+      filtered.addAll(extras.take(count - filtered.length));
+    }
+
+    return _pickSubset(filtered, count);
   }
 
   static Future<List<ExamQuestion>> _aiGenerateQuestions({
@@ -517,6 +603,30 @@ Return ONLY a valid JSON array (no markdown, no prose, no trailing commas):
       return [];
     }
   }
+}
+
+/// Optional filters for topic-wise / year-wise / difficulty-wise mock tests.
+/// Pass to [ExamService.generateMockTest] to narrow the question pool.
+class MockTestFilters {
+  final List<String> topics;
+  final int? minYear;
+  final int? maxYear;
+  final String? difficulty; // 'easy' | 'medium' | 'hard'
+  final bool strictYear; // if true, questions without year metadata are excluded
+
+  const MockTestFilters({
+    this.topics = const [],
+    this.minYear,
+    this.maxYear,
+    this.difficulty,
+    this.strictYear = false,
+  });
+
+  bool get hasAny =>
+      topics.isNotEmpty ||
+      minYear != null ||
+      maxYear != null ||
+      (difficulty != null && difficulty!.isNotEmpty);
 }
 
 class _QuestionBank {
