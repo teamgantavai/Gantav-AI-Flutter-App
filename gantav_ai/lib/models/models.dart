@@ -148,10 +148,39 @@ class Course {
         .replaceAll(r'${dream}', fallbackName)
         .replaceAll(r'$dream', fallbackName)
         .replaceAll('Complete  Course', 'Complete $fallbackName Course');
+
+    /// Trim verbose AI-generated titles so cards never show "Comp..." ellipsis.
+    /// Keeps whole-word boundaries — "Complete React Bootcamp 2025 Edition" →
+    /// "Complete React Bootcamp 2025" (45 chars max).
+    String compactTitle(String s) {
+      final clean = sanitize(s).replaceAll(RegExp(r'\s+'), ' ').trim();
+      const maxChars = 45;
+      if (clean.length <= maxChars) return clean;
+      final cut = clean.substring(0, maxChars);
+      final lastSpace = cut.lastIndexOf(' ');
+      final trimmed =
+          (lastSpace > 20 ? cut.substring(0, lastSpace) : cut).trim();
+      return trimmed.endsWith('…') ? trimmed : '$trimmed…';
+    }
+
+    /// Cap description so the About box on course detail doesn't explode —
+    /// AI sometimes returns a full paragraph, and trending prompts get
+    /// interpolated into fallback descriptions.
+    String compactDescription(String s) {
+      final clean = sanitize(s).replaceAll(RegExp(r'\s+'), ' ').trim();
+      const maxChars = 200;
+      if (clean.length <= maxChars) return clean;
+      final cut = clean.substring(0, maxChars);
+      final lastSpace = cut.lastIndexOf(' ');
+      final trimmed =
+          (lastSpace > 100 ? cut.substring(0, lastSpace) : cut).trim();
+      return trimmed.endsWith('…') ? trimmed : '$trimmed…';
+    }
+
     return Course(
       id: json['id'] ?? '',
-      title: sanitize(rawTitle),
-      description: sanitize(rawDesc),
+      title: compactTitle(rawTitle),
+      description: compactDescription(rawDesc),
       category: rawCategory,
       language: json['language'] ?? 'English',
       thumbnailUrl: json['thumbnail_url'] ?? '',

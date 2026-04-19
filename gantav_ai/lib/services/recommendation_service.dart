@@ -61,29 +61,48 @@ class RecommendationService {
     if (ApiConfig.hasYoutube) {
       try {
         final query = topics.take(2).join(' '); // Search using best topics
-        final url = Uri.parse(
-          'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=6&q=${Uri.encodeComponent(query)}&type=video&key=${ApiConfig.youtubeApiKey}'
-        );
-        final response = await http.get(url);
-        
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          final items = data['items'] as List<dynamic>? ?? [];
-          if (items.isNotEmpty) {
-            return items.map((item) {
-              final snippet = item['snippet'];
-              return RecommendationVideo(
-                title: snippet['title'] ?? 'YouTube Video',
-                channel: snippet['channelTitle'] ?? 'YouTube',
-                youtubeVideoId: item['id']['videoId'] ?? '',
-                duration: '10:00', // Duration requires an extra API call in v3, so mock for speed
-                category: topics.first,
-                reason: 'Based on your interest in ${topics.first}',
-              );
-            }).toList();
+        final recentCutoff = DateTime.now()
+            .subtract(const Duration(days: 548)) // ~18 months
+            .toUtc()
+            .toIso8601String();
+
+        // Try recent + HD first; if the narrow query returns zero (niche topic),
+        // drop recency and widen the net so recommendations never arrive empty.
+        Future<List<dynamic>> search({bool recent = true}) async {
+          final url = Uri.parse(
+            'https://www.googleapis.com/youtube/v3/search?'
+            'part=snippet&maxResults=6&type=video&order=relevance'
+            '&videoDuration=medium&videoDefinition=high'
+            '&q=${Uri.encodeComponent(query)}'
+            '${recent ? '&publishedAfter=$recentCutoff' : ''}'
+            '&key=${ApiConfig.youtubeApiKey}',
+          );
+          final response = await http.get(url);
+          if (response.statusCode != 200) {
+            debugPrint('YouTube API Error: ${response.statusCode} - ${response.body}');
+            return const [];
           }
-        } else {
-          debugPrint('YouTube API Error: ${response.statusCode} - ${response.body}');
+          final data = jsonDecode(response.body);
+          return (data['items'] as List<dynamic>? ?? []);
+        }
+
+        var items = await search(recent: true);
+        if (items.isEmpty) {
+          debugPrint('[Reco] No recent videos — falling back to older results');
+          items = await search(recent: false);
+        }
+        if (items.isNotEmpty) {
+          return items.map((item) {
+            final snippet = item['snippet'];
+            return RecommendationVideo(
+              title: snippet['title'] ?? 'YouTube Video',
+              channel: snippet['channelTitle'] ?? 'YouTube',
+              youtubeVideoId: item['id']['videoId'] ?? '',
+              duration: '10:00', // Duration requires an extra API call in v3, so mock for speed
+              category: topics.first,
+              reason: 'Based on your interest in ${topics.first}',
+            );
+          }).toList();
         }
       } catch (e) {
         debugPrint('YouTube API exception: $e');

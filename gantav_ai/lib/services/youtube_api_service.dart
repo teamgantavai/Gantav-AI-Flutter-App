@@ -125,20 +125,53 @@ class YouTubeApiService {
 
     // Build a language-aware search query
     final langQuery = language == 'Hindi' ? '$topic in Hindi tutorial' : '$topic tutorial';
-    final cacheKey = 'yt_v4_${langQuery.toLowerCase().replaceAll(' ', '_')}';
+    // v5 — bumped from v4 when recency + HD filters were introduced so stale
+    // pre-filter results get re-fetched instead of served from cache.
+    final cacheKey = 'yt_v5_${langQuery.toLowerCase().replaceAll(' ', '_')}';
 
     final cachedResult = await _getCachedVideos(cacheKey);
     if (cachedResult != null && cachedResult.isNotEmpty) return cachedResult;
 
-    // 1. Search for IDs with language filter. `videoDuration=medium` forces
-    //    YouTube to exclude Shorts (<4min) at API level — critical so
-    //    trending cards don't build a "course" out of 30s meme clips.
-    final videoIds = await _getVideoIdsFromSearch(
+    // 1. Search for IDs with language filter.
+    //    • `videoDuration=medium` excludes Shorts (<4min) at API level — critical
+    //       so trending cards don't build a "course" out of 30s meme clips.
+    //    • `publishedAfter` (~18 months) keeps results current. If that yields
+    //       nothing (niche topic / recent searches exhausted), we fall back to
+    //       the same query WITHOUT a date filter so the user still gets videos —
+    //       an old well-ranked tutorial beats an empty list.
+    final recentCutoff = DateTime.now().subtract(const Duration(days: 548)); // ~18 months
+    final relevanceLang = language == 'Hindi' ? 'hi' : 'en';
+
+    List<String> videoIds = await _getVideoIdsFromSearch(
       langQuery,
       maxResults,
-      relevanceLanguage: language == 'Hindi' ? 'hi' : 'en',
+      relevanceLanguage: relevanceLang,
       videoDuration: 'medium',
+      publishedAfter: recentCutoff,
+      videoDefinition: 'high',
     );
+
+    // Fallback 1: keep the HD filter but drop recency.
+    if (videoIds.isEmpty) {
+      debugPrint('[YouTube] No recent videos for "$langQuery" — falling back to older HD results');
+      videoIds = await _getVideoIdsFromSearch(
+        langQuery,
+        maxResults,
+        relevanceLanguage: relevanceLang,
+        videoDuration: 'medium',
+        videoDefinition: 'high',
+      );
+    }
+    // Fallback 2: last-resort — drop HD too (rare niche topics).
+    if (videoIds.isEmpty) {
+      debugPrint('[YouTube] No HD videos for "$langQuery" — widest fallback');
+      videoIds = await _getVideoIdsFromSearch(
+        langQuery,
+        maxResults,
+        relevanceLanguage: relevanceLang,
+        videoDuration: 'medium',
+      );
+    }
     if (videoIds.isEmpty) return [];
 
     // 2. Get Stats — batch call is fast
@@ -170,16 +203,30 @@ class YouTubeApiService {
     // Default 'medium' excludes Shorts; override when you specifically need
     // long tutorials or everything.
     String? videoDuration,
+    // RFC 3339 timestamp — only return videos published after this instant.
+    // Pass `DateTime.now().subtract(Duration(days: 548))` for ~18-month recency.
+    DateTime? publishedAfter,
+    // 'any' | 'high' | 'standard' — `high` prefers 720p+ uploads.
+    String? videoDefinition,
   }) async {
     try {
+      final publishedAfterParam = publishedAfter != null
+          // YouTube wants RFC 3339 — toUtc().toIso8601String() already emits it.
+          ? '&publishedAfter=${publishedAfter.toUtc().toIso8601String()}'
+          : '';
+      final definitionParam =
+          videoDefinition != null ? '&videoDefinition=$videoDefinition' : '';
       final uri = Uri.parse(
         '$_baseUrl/search?'
         'part=snippet'
         '&maxResults=$maxResults'
         '&q=${Uri.encodeComponent(query)}'
         '&type=video'
+        '&order=relevance'
         '&relevanceLanguage=$relevanceLanguage'
         '${videoDuration != null ? '&videoDuration=$videoDuration' : ''}'
+        '$definitionParam'
+        '$publishedAfterParam'
         '&key=${ApiConfig.youtubeApiKey}',
       );
 

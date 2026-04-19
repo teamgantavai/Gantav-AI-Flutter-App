@@ -8,6 +8,13 @@ class FirestoreService {
 
   String? get currentUserId => _auth.currentUser?.uid;
 
+  /// Hard ceiling on a single Firestore read. Without this, Firestore's
+  /// offline/retry behavior could hang `.get()` for many minutes on flaky
+  /// networks — that was the root cause of the "home screen takes 10 min to
+  /// load" bug. 8s is long enough for a cold cellular connection but short
+  /// enough that the caller can degrade to cached state promptly.
+  static const Duration _readTimeout = Duration(seconds: 8);
+
   // -- USER PROFILE --
 
   Future<void> saveUserProfile(UserProfile user) async {
@@ -17,9 +24,20 @@ class FirestoreService {
 
   Future<UserProfile?> getUserProfile() async {
     if (currentUserId == null) return null;
-    final doc = await _db.collection('users').doc(currentUserId).get();
-    if (doc.exists) {
-      return UserProfile.fromJson(doc.data()!);
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(currentUserId)
+          .get()
+          .timeout(_readTimeout);
+      if (doc.exists) {
+        return UserProfile.fromJson(doc.data()!);
+      }
+    } catch (e) {
+      // Timeout / offline / permission error — return null so the caller uses
+      // cached local state instead of blocking the UI.
+      // ignore: avoid_print
+      print('[Firestore] getUserProfile failed: $e');
     }
     return null;
   }
@@ -38,13 +56,19 @@ class FirestoreService {
 
   Future<List<Course>> getActiveCourses() async {
     if (currentUserId == null) return [];
-    final snapshot = await _db
-        .collection('users')
-        .doc(currentUserId)
-        .collection('courses')
-        .get();
-
-    return snapshot.docs.map((doc) => Course.fromJson(doc.data())).toList();
+    try {
+      final snapshot = await _db
+          .collection('users')
+          .doc(currentUserId)
+          .collection('courses')
+          .get()
+          .timeout(_readTimeout);
+      return snapshot.docs.map((doc) => Course.fromJson(doc.data())).toList();
+    } catch (e) {
+      // ignore: avoid_print
+      print('[Firestore] getActiveCourses failed: $e');
+      return [];
+    }
   }
 
   Future<void> completeLesson(String courseId, String lessonId) async {
@@ -73,7 +97,8 @@ class FirestoreService {
           .doc(currentUserId)
           .collection('settings')
           .doc('preferences')
-          .get();
+          .get()
+          .timeout(_readTimeout);
       if (doc.exists) {
         return UserPreferences.fromJson(doc.data()!);
       }
@@ -111,7 +136,8 @@ class FirestoreService {
           .doc(currentUserId)
           .collection('roadmaps')
           .orderBy('created_at', descending: true)
-          .get();
+          .get()
+          .timeout(_readTimeout);
 
       return snapshot.docs
           .map((doc) => Roadmap.fromJson(doc.data()))
@@ -129,7 +155,8 @@ class FirestoreService {
           .doc(currentUserId)
           .collection('roadmaps')
           .doc(roadmapId)
-          .get();
+          .get()
+          .timeout(_readTimeout);
       if (doc.exists) {
         return Roadmap.fromJson(doc.data()!);
       }
@@ -146,10 +173,16 @@ class FirestoreService {
 
   Future<List<String>> getStarredLessonIds() async {
     if (currentUserId == null) return [];
-    final doc = await _db.collection('users').doc(currentUserId).get();
-    if (doc.exists && doc.data()!.containsKey('starred_lesson_ids')) {
-      return List<String>.from(doc.data()!['starred_lesson_ids']);
-    }
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(currentUserId)
+          .get()
+          .timeout(_readTimeout);
+      if (doc.exists && doc.data()!.containsKey('starred_lesson_ids')) {
+        return List<String>.from(doc.data()!['starred_lesson_ids']);
+      }
+    } catch (_) {}
     return [];
   }
 }

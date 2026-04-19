@@ -42,7 +42,68 @@ class TrendingCourse {
 class TrendingData {
   /// Curated high-intent topics that map to real Indian student / young-adult
   /// aspirations. Keep this list short and conversion-optimised.
+  ///
+  /// The 3 "modern dev" cards up top (Vibe Coding, AI Agents, Build AI Apps)
+  /// intentionally lead the list so 2026-era learners see cutting-edge topics
+  /// before the older evergreens.
   static const List<TrendingCourse> courses = [
+    TrendingCourse(
+      id: 't_vibe_coding',
+      title: 'Vibe coding with AI',
+      tagline: 'Ship real apps with Claude Code, Cursor & v0 — no boilerplate',
+      promptHint:
+          'Complete 2026 course on vibe coding and AI-assisted development — using Claude Code, Cursor, Windsurf, v0.dev, and GitHub Copilot to build full apps by conversation, including prompt patterns, agentic workflows, and shipping production code as a solo dev',
+      angles: [
+        'Claude Code mastery — project setup, subagents, hooks, slash commands, MCP servers, shipping features end-to-end',
+        'Cursor + Windsurf workflow for solo founders — tab completion, composer, rules files, multi-file editing',
+        'v0 and Lovable for rapid UI — generating full Next.js apps from prompts, iterating visually, exporting clean code',
+        'Vibe coding mental model — breaking work into agent-sized tasks, writing CLAUDE.md / .cursorrules, verifying AI output',
+        'Shipping an AI-coded SaaS in a weekend — auth, database, deploy to Vercel/Supabase, payments, everything with AI',
+        'Agentic coding patterns in 2026 — when to let the AI drive vs step in, TDD with AI, reviewing agent PRs',
+      ],
+      icon: Icons.auto_fix_high_rounded,
+      primary: Color(0xFF8B5CF6),
+      secondary: Color(0xFF06B6D4),
+      badge: 'New',
+    ),
+    TrendingCourse(
+      id: 't_ai_agents',
+      title: 'Build AI agents & MCP',
+      tagline: 'LangGraph, agent loops, tool use & Model Context Protocol',
+      promptHint:
+          'Complete 2026 course on building AI agents and MCP servers — agent architectures (ReAct, plan-execute, multi-agent), tool calling, LangGraph, CrewAI, AutoGen, building Model Context Protocol (MCP) servers for Claude and other LLM hosts, memory, evals, and shipping agents to production',
+      angles: [
+        'MCP server from scratch — protocol basics, exposing tools/resources/prompts, connecting to Claude Code and Cursor',
+        'LangGraph deep-dive — state graphs, conditional edges, human-in-the-loop, checkpointing, streaming',
+        'Agent architectures compared — ReAct, plan-and-execute, multi-agent orchestration, choosing the right pattern',
+        'Tool use and function calling — designing tool schemas, error handling, retries, parallel tool calls',
+        'Agent memory and RAG — vector stores (Pinecone, Chroma, Qdrant), hybrid search, context engineering',
+        'Evals and observability for agents — LangSmith, trace inspection, regression tests, production monitoring',
+      ],
+      icon: Icons.hub_rounded,
+      primary: Color(0xFF14B8A6),
+      secondary: Color(0xFF6366F1),
+      badge: 'Hot',
+    ),
+    TrendingCourse(
+      id: 't_build_ai_app',
+      title: 'Build & ship an AI app',
+      tagline: 'LLM wrapper startups, RAG, evals & your first paying user',
+      promptHint:
+          'Complete 2026 course on building and shipping an AI-powered product — choosing the right LLM (Claude, GPT, Gemini, Llama), RAG pipelines, streaming UIs with Vercel AI SDK, prompt engineering in production, cost control, evals, and going from MVP to paying users',
+      angles: [
+        'AI SaaS MVP in a week — stack (Next.js + Vercel AI SDK + Supabase), streaming, auth, billing with Stripe',
+        'RAG pipelines that actually work — chunking strategies, embeddings, reranking, hybrid search, citations',
+        'Prompt engineering in production — versioning prompts, A/B testing, guardrails, structured outputs, JSON mode',
+        'LLM cost control and caching — prompt caching, model routing (cheap→expensive), token budgets, rate limits',
+        'Evals for AI products — LLM-as-judge, golden datasets, regression suites before every prompt change',
+        'Distribution for AI indie hackers — Product Hunt, Twitter/X, cold outbound, SEO with programmatic pages',
+      ],
+      icon: Icons.rocket_launch_rounded,
+      primary: Color(0xFFEC4899),
+      secondary: Color(0xFFF59E0B),
+      badge: 'Trending',
+    ),
     TrendingCourse(
       id: 't_youtuber',
       title: 'How to become a YouTuber',

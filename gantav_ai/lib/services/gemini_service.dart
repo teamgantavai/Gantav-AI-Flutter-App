@@ -294,27 +294,28 @@ class GeminiService {
         '  "skills": ["${moduleTopics[0]}", "${moduleTopics[1]}", "${moduleTopics[2]}"],\n'
         '  "modules": [\n'
         '    {"id":"mod_1","title":"${moduleTopics[0]}","lesson_count":3,"is_locked":false,"lessons":[\n'
-        '      {"id":"les_1","title":"Introduction to $courseName","youtube_video_id":"VIDEO_ID_1","duration":"15:00"},\n'
-        '      {"id":"les_2","title":"Core ${moduleTopics[0]} Concepts","youtube_video_id":"VIDEO_ID_2","duration":"18:00"},\n'
-        '      {"id":"les_3","title":"${moduleTopics[0]} in Practice","youtube_video_id":"VIDEO_ID_3","duration":"20:00"}\n'
+        '      {"id":"les_1","title":"Getting Started with ${moduleTopics[0]}","youtube_video_id":"VIDEO_ID_1","duration":"15:00"},\n'
+        '      {"id":"les_2","title":"Key ${moduleTopics[0]} Building Blocks","youtube_video_id":"VIDEO_ID_2","duration":"18:00"},\n'
+        '      {"id":"les_3","title":"${moduleTopics[0]} Hands-On Walkthrough","youtube_video_id":"VIDEO_ID_3","duration":"20:00"}\n'
         '    ]},\n'
         '    {"id":"mod_2","title":"${moduleTopics[1]}","lesson_count":3,"is_locked":true,"lessons":[\n'
-        '      {"id":"les_4","title":"${moduleTopics[1]} Fundamentals","youtube_video_id":"VIDEO_ID_4","duration":"22:00"},\n'
-        '      {"id":"les_5","title":"Advanced ${moduleTopics[1]}","youtube_video_id":"VIDEO_ID_5","duration":"25:00"},\n'
-        '      {"id":"les_6","title":"${moduleTopics[1]} Projects","youtube_video_id":"VIDEO_ID_6","duration":"19:00"}\n'
+        '      {"id":"les_4","title":"${moduleTopics[1]} in Action","youtube_video_id":"VIDEO_ID_4","duration":"22:00"},\n'
+        '      {"id":"les_5","title":"Patterns & Pitfalls in ${moduleTopics[1]}","youtube_video_id":"VIDEO_ID_5","duration":"25:00"},\n'
+        '      {"id":"les_6","title":"Mini-Project: ${moduleTopics[1]}","youtube_video_id":"VIDEO_ID_6","duration":"19:00"}\n'
         '    ]},\n'
         '    {"id":"mod_3","title":"${moduleTopics[2]}","lesson_count":3,"is_locked":true,"lessons":[\n'
-        '      {"id":"les_7","title":"${moduleTopics[2]} Deep Dive","youtube_video_id":"VIDEO_ID_7","duration":"23:00"},\n'
-        '      {"id":"les_8","title":"Real-world ${moduleTopics[2]}","youtube_video_id":"VIDEO_ID_8","duration":"27:00"},\n'
-        '      {"id":"les_9","title":"Final $courseName Project","youtube_video_id":"VIDEO_ID_9","duration":"35:00"}\n'
+        '      {"id":"les_7","title":"${moduleTopics[2]} Case Study","youtube_video_id":"VIDEO_ID_7","duration":"23:00"},\n'
+        '      {"id":"les_8","title":"Production-Grade ${moduleTopics[2]}","youtube_video_id":"VIDEO_ID_8","duration":"27:00"},\n'
+        '      {"id":"les_9","title":"Capstone: $courseName","youtube_video_id":"VIDEO_ID_9","duration":"35:00"}\n'
         '    ]}\n'
         '  ]\n'
         '}\n\n'
         'Rules:\n'
         '1. Replace VIDEO_ID_N with REAL YouTube video IDs from the list above.\n'
         '2. Match each video to its lesson topic.\n'
-        '3. Keep title EXACTLY as "$courseName".\n'
-        '4. Module 1: is_locked=false, Modules 2-3: is_locked=true.';
+        '3. Keep title EXACTLY as "$courseName" (max 6 words — be concise).\n'
+        '4. Module 1: is_locked=false, Modules 2-3: is_locked=true.\n'
+        '5. Module + lesson titles MUST vary — never use the same suffix twice (no repeated "Deep Dive", "Fundamentals" everywhere). Use specific topic-driven names.';
 
     try {
       final response = await _smartCall(
@@ -551,6 +552,7 @@ class GeminiService {
           prompt,
           maxTokens: maxTokens,
           temperature: temperature,
+          task: task,
         );
 
         if (result != null && !_looksLikeProviderNotice(result)) {
@@ -574,17 +576,26 @@ class GeminiService {
 
   /// Returns ordered list of providers for a given task.
   /// Different tasks use different primary providers for load balancing.
+  ///
+  /// ### Quota isolation for doubt (chat) + quiz
+  /// Chat and quiz are intentionally LOCKED to the Gemini provider only — they
+  /// route to the secondary Gemini key (see `ApiConfig.geminiKeyForTask`) so
+  /// they never touch the primary key's quota, and they MUST NOT fall through
+  /// to Groq / OpenRouter / HuggingFace. Previously chat fell back through
+  /// every provider, which exhausted Groq's free daily tier for users who
+  /// asked a lot of doubt-AI questions. The empty-list safety net below also
+  /// skips these tasks so a missing Gemini key fails cleanly instead of
+  /// quietly spilling onto shared provider quotas.
   static List<AIProvider> _getProvidersForTask(AITask task) {
     final available = <AIProvider>[];
 
     switch (task) {
       case AITask.chat:
-      // Chat: Groq (fastest) → HuggingFace → OpenRouter → Gemini
-        if (ApiConfig.hasGroq) available.add(AIProvider.groq);
-        if (_huggingFaceUsable) available.add(AIProvider.huggingFace);
-        if (ApiConfig.hasOpenRouter) available.add(AIProvider.openRouter);
+      case AITask.quiz:
+        // Gemini ONLY — uses geminiApiKey2 via ApiConfig.geminiKeyForTask.
+        // No cross-provider fallback by design.
         if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
-        break;
+        return available;
 
       case AITask.recommendations:
       // Recommendations: OpenRouter → Groq → HuggingFace → Gemini
@@ -595,7 +606,6 @@ class GeminiService {
         break;
 
       case AITask.courseGeneration:
-      case AITask.quiz:
       // JSON tasks: Gemini best → Groq → OpenRouter → HuggingFace
         if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
         if (ApiConfig.hasGroq) available.add(AIProvider.groq);
@@ -604,7 +614,7 @@ class GeminiService {
         break;
     }
 
-    // If none available, add all that exist
+    // If none available, add all that exist — but NEVER for chat/quiz.
     if (available.isEmpty) {
       if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
       if (ApiConfig.hasGroq) available.add(AIProvider.groq);
@@ -620,10 +630,11 @@ class GeminiService {
     String prompt, {
     int maxTokens = 1500,
     double temperature = 0.7,
+    AITask task = AITask.courseGeneration,
   }) async {
     try {
       return await _callProvider(provider, prompt,
-          maxTokens: maxTokens, temperature: temperature);
+          maxTokens: maxTokens, temperature: temperature, task: task);
     } catch (e) {
       final errorString = e.toString();
       if (errorString.contains('429') || errorString.contains('Rate limit')) {
@@ -647,11 +658,12 @@ class GeminiService {
     String prompt, {
     int maxTokens = 1500,
     double temperature = 0.7,
+    AITask task = AITask.courseGeneration,
   }) {
     switch (provider) {
       case AIProvider.gemini:
         return _callGemini(prompt,
-            maxTokens: maxTokens, temperature: temperature);
+            maxTokens: maxTokens, temperature: temperature, task: task);
       case AIProvider.groq:
         return _callGroq(prompt,
             maxTokens: maxTokens, temperature: temperature);
@@ -670,8 +682,11 @@ class GeminiService {
     String prompt, {
     int maxTokens = 1500,
     double temperature = 0.7,
+    AITask task = AITask.courseGeneration,
   }) async {
-    final key = ApiConfig.geminiApiKey;
+    // Route doubt (chat) and quiz to the secondary Gemini key when available,
+    // so the primary key's quota is conserved for course generation.
+    final key = ApiConfig.geminiKeyForTask(task);
     if (key.isEmpty) return null;
 
     final url = Uri.parse(

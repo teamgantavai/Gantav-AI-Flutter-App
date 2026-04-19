@@ -102,11 +102,16 @@ class ApiService {
   static Future<Course?> suggestPath(
     String dream, {
     String language = 'English',
+    bool allowCurated = true,
   }) async {
     try {
-      // 1. Verified curated courses take priority
-      final verifiedCourses = await AdminService.getVerifiedCourses(dream);
-      if (verifiedCourses.isNotEmpty) return verifiedCourses.first;
+      // 1. Verified curated courses — only when the caller opts in. Trending
+      // card taps disable this so the user never sees an unrelated cached
+      // course like "Python for ML" after tapping "Build AI agents".
+      if (allowCurated) {
+        final verifiedCourses = await AdminService.getVerifiedCourses(dream);
+        if (verifiedCourses.isNotEmpty) return verifiedCourses.first;
+      }
 
       // 2. PLAYLIST-FIRST: try to find a single-channel YouTube playlist that
       // covers the whole topic. This gives consistent teaching style and
@@ -139,12 +144,14 @@ class ApiService {
         return _buildFallbackCourse(dream, preFilteredVideos);
       }
 
-      // 5. Nothing else worked: use a verified course if any exist.
-      final allVerified = await AdminService.getAllVerifiedCourses();
-      if (allVerified.isNotEmpty) return allVerified.first;
+      // 5. Genuine failure — return null so the caller can show a clear
+      // "try again" toast. We deliberately do NOT fall back to a random
+      // verified course here; that produced the "tapped Trending AI Agents,
+      // got Python for ML" bug. Unrelated cached content is worse than no
+      // course at all.
     } catch (_) {}
 
-    return Course.mockCourses().first;
+    return null;
   }
 
   /// Build a Course from a single YouTube playlist. Videos are split into
@@ -188,21 +195,24 @@ class ApiService {
     final firstThumb =
         videos.isNotEmpty ? 'https://img.youtube.com/vi/${videos.first.id}/maxresdefault.jpg' : playlist.thumbnailUrl;
 
-    final prettyDream = dream.trim().isEmpty
+    final topic = _cleanPromptToTopic(dream);
+    final prettyDream = topic.isEmpty
         ? 'Learning'
-        : dream
-            .trim()
+        : topic
             .split(RegExp(r'\s+'))
             .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
             .join(' ');
 
+    final rawTitle = playlist.title.isNotEmpty
+        ? playlist.title
+        : 'Complete $prettyDream Course';
+    final rawDesc =
+        'Full ${prettyDream.isEmpty ? 'course' : prettyDream} course from ${playlist.channelTitle} — ${videos.length} lessons in order.';
+
     return Course(
       id: 'playlist_${playlist.id}',
-      title: playlist.title.isNotEmpty
-          ? playlist.title
-          : 'Complete $prettyDream Course',
-      description:
-          'A full course curated from a single channel (${playlist.channelTitle}) — ${videos.length} lessons in order.',
+      title: _compactTitle(rawTitle),
+      description: _compactDescription(rawDesc),
       category: _cleanCategory(dream),
       thumbnailUrl: firstThumb,
       rating: 4.8,
@@ -214,11 +224,24 @@ class ApiService {
     );
   }
 
+  // Cycled phase labels for the middle modules so a 5-module course doesn't
+  // read "Module 2 Deep Dive / Module 3 Deep Dive / Module 4 Deep Dive". The
+  // first + last modules always read Foundations / Mastery.
+  static const List<String> _middleModulePhases = [
+    'Core Concepts',
+    'Building Blocks',
+    'Hands-On Practice',
+    'Advanced Patterns',
+    'Real-World Projects',
+    'Case Studies',
+  ];
+
   static String _moduleTitleForIndex(int index, int total, String dream) {
     if (total == 1) return 'Full Course';
     if (index == 0) return 'Module 1 · Foundations';
     if (index == total - 1) return 'Module ${index + 1} · Mastery';
-    return 'Module ${index + 1} · Deep Dive';
+    final phase = _middleModulePhases[(index - 1) % _middleModulePhases.length];
+    return 'Module ${index + 1} · $phase';
   }
 
   static String _estimateTotalTime(List<YouTubeVideoStats> videos) {
@@ -263,7 +286,7 @@ class ApiService {
        if (lessons.isNotEmpty) {
          modules.add(Module(
            id: 'f_mod_$i',
-           title: 'Phase ${i+1}: $dream basics',
+           title: _moduleTitleForIndex(i, 3, dream),
            lessonCount: lessons.length,
            isLocked: i > 0,
            lessons: lessons,
@@ -271,18 +294,19 @@ class ApiService {
        }
     }
 
-    final prettyDream = dream.trim().isEmpty
+    final topic = _cleanPromptToTopic(dream);
+    final prettyDream = topic.isEmpty
         ? 'Learning'
-        : dream
-            .trim()
+        : topic
             .split(RegExp(r'\s+'))
             .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
             .join(' ');
 
     return Course(
       id: 'fallback_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Complete $prettyDream Course',
-      description: 'A curated list of high quality tutorials for $prettyDream',
+      title: _compactTitle('Complete $prettyDream Course'),
+      description: _compactDescription(
+          'A curated list of high-quality tutorials for $prettyDream'),
       category: _cleanCategory(dream),
       thumbnailUrl: videos.isNotEmpty ? 'https://img.youtube.com/vi/${videos.first.id}/maxresdefault.jpg' : '',
       rating: 4.8,
@@ -300,6 +324,11 @@ class ApiService {
   /// Output: "Python Full Course in Urdu 2024"
   static String _cleanPromptToTopic(String dream) {
     var s = dream.trim();
+    // Trending rotator prefixes the prompt with an "angle. Context: hint" —
+    // drop the Context tail so downstream title/category logic sees just the
+    // angle, not the 200-char combined blob.
+    final ctxIdx = s.toLowerCase().indexOf('. context:');
+    if (ctxIdx > 0) s = s.substring(0, ctxIdx).trim();
     // Remove the " with videos from X or similar channels" tail
     s = s.replaceAll(
       RegExp(r'\s*with videos from[^.]*?(or similar channels)?\.?\s*$',
@@ -312,6 +341,34 @@ class ApiService {
       '',
     );
     return s.trim();
+  }
+
+  /// Hard cap on a course title. Mirrors the compactTitle logic in
+  /// Course.fromJson so playlist- and fallback-built courses don't overflow
+  /// the card layout. 45 chars matches the FittedBox threshold on home.
+  static String _compactTitle(String raw) {
+    final clean = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    const maxChars = 45;
+    if (clean.length <= maxChars) return clean;
+    final cut = clean.substring(0, maxChars);
+    final lastSpace = cut.lastIndexOf(' ');
+    final trimmed =
+        (lastSpace > 20 ? cut.substring(0, lastSpace) : cut).trim();
+    return trimmed.endsWith('…') ? trimmed : '$trimmed…';
+  }
+
+  /// Cap description so the "About" box doesn't explode vertically on
+  /// trending-generated courses where the description template interpolates
+  /// the full prompt.
+  static String _compactDescription(String raw) {
+    final clean = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    const maxChars = 160;
+    if (clean.length <= maxChars) return clean;
+    final cut = clean.substring(0, maxChars);
+    final lastSpace = cut.lastIndexOf(' ');
+    final trimmed =
+        (lastSpace > 80 ? cut.substring(0, lastSpace) : cut).trim();
+    return trimmed.endsWith('…') ? trimmed : '$trimmed…';
   }
 
   static String _cleanCategory(String dream) {

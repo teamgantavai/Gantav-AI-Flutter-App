@@ -81,10 +81,16 @@ class AdminService {
     }
   }
 
-  /// Fetches all verified courses (for admin overview)
+  /// Fetches all verified courses (for admin overview).
+  /// Bounded to 8s so a flaky Firestore connection can't stall the home
+  /// screen's refresh() indefinitely — on timeout we return an empty list
+  /// and the cached/other data still renders.
   static Future<List<Course>> getAllVerifiedCourses() async {
     try {
-      final snapshot = await _db.collection('verified_courses').get();
+      final snapshot = await _db
+          .collection('verified_courses')
+          .get()
+          .timeout(const Duration(seconds: 8));
       return snapshot.docs.map((doc) => Course.fromJson(doc.data())).toList();
     } catch (e) {
       return [];

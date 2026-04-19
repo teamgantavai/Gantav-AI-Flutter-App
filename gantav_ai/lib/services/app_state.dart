@@ -765,7 +765,8 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      final course = await ApiService.suggestPath(promptHint, language: _preferredLang)
+      final course = await ApiService.suggestPath(promptHint,
+              language: _preferredLang, allowCurated: allowCurated)
           .timeout(const Duration(seconds: 60), onTimeout: () => null);
       if (course != null) {
         _generatedCourses.add(course);
@@ -1011,39 +1012,47 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     if (_authStatus == AuthStatus.authenticated) {
-      final firestoreProfile = await _firestoreService.getUserProfile();
-      if (firestoreProfile != null) {
-        _user = firestoreProfile;
-      }
+      // Fire every independent read in parallel — previously they were awaited
+      // sequentially, so total refresh time = sum of 6 round-trips. With each
+      // call already bounded to ~8s (see FirestoreService._readTimeout /
+      // AdminService.getAllVerifiedCourses / ApiService._timeout), the whole
+      // refresh is now max(8s, <slowest>) instead of up to 60s+. On flaky
+      // networks where one read stalls, the others still complete on time.
+      final results = await Future.wait<dynamic>([
+        _firestoreService.getUserProfile(),
+        _firestoreService.getActiveCourses(),
+        _firestoreService.getRoadmaps(),
+        _firestoreService.getUserPreferences(),
+        AdminService.getAllVerifiedCourses(),
+        ApiService.fetchPulse('user_001'),
+      ]);
 
-      final storedCourses = await _firestoreService.getActiveCourses();
+      final firestoreProfile = results[0] as UserProfile?;
+      final storedCourses = results[1] as List<Course>;
+      final firestoreRoadmaps = results[2] as List<Roadmap>;
+      final prefs = results[3] as UserPreferences?;
+      final verifiedCourses = results[4] as List<Course>;
+      final pulseResults = results[5] as List<PulseEvent>;
+
+      if (firestoreProfile != null) _user = firestoreProfile;
+
       if (storedCourses.isNotEmpty) {
         _generatedCourses.clear();
         _generatedCourses.addAll(storedCourses);
       }
 
-      final firestoreRoadmaps = await _firestoreService.getRoadmaps();
       if (firestoreRoadmaps.isNotEmpty) {
         _roadmaps = firestoreRoadmaps;
-        await _saveLocalRoadmaps();
+        // Persist roadmaps to local cache AFTER notifyListeners so the UI
+        // doesn't wait on SharedPreferences I/O. Fire-and-forget is safe —
+        // even if it fails, the in-memory state is already correct.
+        _saveLocalRoadmaps();
       }
 
-      final prefs = await _firestoreService.getUserPreferences();
-      if (prefs != null) {
-        _preferences = prefs;
-      }
+      if (prefs != null) _preferences = prefs;
 
-      // Fetch all Gantav Verified courses
-      final verifiedCourses = await AdminService.getAllVerifiedCourses();
-
-      // Fetch pulse for internal state but Bug #6 fix:
-      // We store them but DON'T show them on home screen anymore.
-      final pulseResults = await ApiService.fetchPulse('user_001');
       _pulseEvents = pulseResults;
-      
-      // Merge verified courses with user's generated/active courses
-      // Verified courses should stay at the top or be easily accessible in Explore
-      _courses = verifiedCourses; 
+      _courses = verifiedCourses;
     } else {
       final results = await Future.wait([
         ApiService.fetchUser('user_001'),

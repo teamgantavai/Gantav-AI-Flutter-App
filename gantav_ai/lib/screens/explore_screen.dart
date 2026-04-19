@@ -444,7 +444,11 @@ class _ExploreScreenState extends State<ExploreScreen>
               crossAxisCount: 2,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1.05,
+              // 0.95 (slightly taller than wide) gives the icon row + 2-line
+              // title + 2-line tagline enough breathing room on small phones.
+              // Was 1.05 — title/tagline were getting squeezed and overflowing
+              // the gradient on 320–360 width devices.
+              childAspectRatio: 0.95,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -1109,28 +1113,35 @@ class _TrendingCategoryTile extends StatelessWidget {
                     ),
                   ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: GoogleFonts.dmSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            height: 1.2,
-                            letterSpacing: -0.2),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 4),
-                    Text(tagline,
-                        style: GoogleFonts.dmSans(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white.withValues(alpha: 0.85),
-                            height: 1.3),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis),
-                  ],
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(title,
+                            style: GoogleFonts.dmSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                height: 1.2,
+                                letterSpacing: -0.2),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      const SizedBox(height: 4),
+                      Flexible(
+                        child: Text(tagline,
+                            style: GoogleFonts.dmSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white.withValues(alpha: 0.85),
+                                height: 1.3),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

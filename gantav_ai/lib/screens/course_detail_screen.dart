@@ -309,8 +309,13 @@ class CourseDetailScreen extends StatelessWidget {
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 8),
+        // Cap to 4 lines so an unusually verbose AI description doesn't push
+        // the Modules section halfway down the screen. Long descriptions get
+        // a clean ellipsis instead of blowing out the header padding.
         Text(
           currentCourse.description,
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.textMuted,
                 height: 1.5,

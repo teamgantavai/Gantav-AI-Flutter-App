@@ -7,9 +7,7 @@ import '../widgets/widgets.dart';
 import '../widgets/daily_time_dialog.dart';
 import 'course_detail_screen.dart';
 import 'roadmap_screen.dart';
-import 'exam_detail_screen.dart';
 import '../models/models.dart';
-import '../models/exam_models.dart';
 import '../models/trending_data.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -21,11 +19,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
-
-  // Hoisted once — the exam catalog is `static const`, no reason to
-  // re-fetch it every build (the old code called the method twice per
-  // SliverGrid rebuild, once for childCount and once per item).
-  static final List<ExamCategory> _exams = ExamCategory.catalog();
 
   @override
   void dispose() {
@@ -137,54 +130,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 12),
                       StatChip(icon: Icons.local_fire_department, label: 'Day streak', value: '${user.streakDays}', color: AppColors.teal),
                     ],
-                  ),
-                ),
-              ),
-
-              // ─── Exam Prep Grid ─────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                  child: SectionHeader(
-                    title: 'Exam Preparation',
-                    actionText: 'All exams',
-                    onAction: () {},
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                  child: Text(
-                    'Timed mock tests with AI-generated PYQ-style questions (2024–2026 pattern).',
-                    style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted, height: 1.4),
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                sliver: SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: isLandscape ? 4 : 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.95,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final exam = _exams[index];
-                      return RepaintBoundary(
-                        child: _ExamCard(
-                          exam: exam,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ExamDetailScreen(exam: exam),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                    childCount: _exams.length,
                   ),
                 ),
               ),
@@ -548,149 +493,3 @@ class _RoadmapCard extends StatelessWidget {
   }
 }
 
-// ─── Exam Card ───────────────────────────────────────────────────────────────
-
-class _ExamCard extends StatelessWidget {
-  final ExamCategory exam;
-  final VoidCallback onTap;
-  const _ExamCard({required this.exam, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: exam.gradient,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: exam.gradient.first.withValues(alpha: 0.28),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Top row: icon + difficulty badge
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(exam.icon, color: Colors.white, size: 18),
-                    ),
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          exam.difficulty,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                // Middle: name + tagline (flexes to avoid overflow)
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        exam.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 16,
-                          height: 1.1,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        exam.tagline,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Bottom stats row — each stat in Flexible so they shrink gracefully
-                Row(
-                  children: [
-                    Icon(Icons.menu_book_rounded, size: 11, color: Colors.white.withValues(alpha: 0.8)),
-                    const SizedBox(width: 3),
-                    Flexible(
-                      child: Text(
-                        '${exam.subjects.length} subjects',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.assignment_rounded, size: 11, color: Colors.white.withValues(alpha: 0.8)),
-                    const SizedBox(width: 3),
-                    Flexible(
-                      child: Text(
-                        '${exam.mockTestCount}+ tests',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
