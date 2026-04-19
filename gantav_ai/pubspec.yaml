@@ -35,6 +35,11 @@ dependencies:
   webview_flutter: ^4.13.1
   webview_flutter_android: ^4.10.1
   webview_flutter_wkwebview: ^3.23.0
+  # AdMob — banner / medium-rectangle ads placed sparingly (~1 per 6 cards)
+  # on Home + Explore. Native ads skipped for pre-launch because they need
+  # per-platform layout XML; BannerAd + AdSize.mediumRectangle gives a
+  # native-looking card without any native boilerplate.
+  google_mobile_ads: ^5.2.0
 
 dev_dependencies:
   flutter_test:

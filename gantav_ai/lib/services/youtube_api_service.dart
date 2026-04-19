@@ -309,6 +309,41 @@ class YouTubeApiService {
   /// course flows in one teaching style.
   ///
   /// Returns null if no suitable playlist found.
+  /// Returns up to [max] ranked playlist candidates for [topic]. Used by the
+  /// course generator to retry with the next-best playlist when the first one
+  /// turns out to have fewer than 3 usable videos (Shorts, private items,
+  /// deleted videos). [findBestPlaylist] is kept as a thin compatibility
+  /// wrapper.
+  static Future<List<YouTubePlaylistCandidate>> findTopPlaylists({
+    required String topic,
+    String language = 'English',
+    int minVideos = 3,
+    int maxVideos = 40,
+    int max = 3,
+  }) async {
+    if (!ApiConfig.hasYoutube) return const [];
+
+    final langQuery = language == 'Hindi'
+        ? '$topic complete course playlist in Hindi'
+        : '$topic complete course playlist';
+
+    final playlistIds = await _searchPlaylistIds(
+      langQuery,
+      relevanceLanguage: language == 'Hindi' ? 'hi' : 'en',
+    );
+    if (playlistIds.isEmpty) return const [];
+
+    final candidates = await _fetchPlaylistDetails(playlistIds);
+    if (candidates.isEmpty) return const [];
+
+    final filtered = candidates
+        .where((c) => c.videoCount >= minVideos && c.videoCount <= maxVideos)
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    return filtered.take(max).toList();
+  }
+
   static Future<YouTubePlaylistCandidate?> findBestPlaylist({
     required String topic,
     String language = 'English',

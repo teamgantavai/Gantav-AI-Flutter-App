@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../services/app_state.dart';
 import '../widgets/widgets.dart';
 import '../widgets/daily_time_dialog.dart';
+import '../widgets/inline_ad_card.dart';
 import 'course_detail_screen.dart';
 import 'roadmap_screen.dart';
 import '../models/models.dart';
@@ -337,11 +338,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildPortraitSuggestions(List<Course> courses) {
+    // Inject a Sponsored ad card every [_adEvery] real courses. Pattern:
+    //   [c][c][c][c][c][c][ad][c][c][c][c][c][c][ad] ...
+    // Low cadence = user sees mostly content, not ads.
+    const adEvery = 6;
+    final slotCount = courses.length + (courses.length ~/ adEvery);
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          if (index >= courses.length) return null;
-          final course = courses[index];
+          if (index >= slotCount) return null;
+          // Ad every (adEvery+1)-th slot — positions 6, 13, 20, ...
+          if ((index + 1) % (adEvery + 1) == 0) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: InlineAdCard(),
+            );
+          }
+          final courseIdx = index - (index ~/ (adEvery + 1));
+          if (courseIdx >= courses.length) return null;
+          final course = courses[courseIdx];
           return RepaintBoundary(
             child: SuggestedCourseRow(
               course: course,
@@ -349,7 +364,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           );
         },
-        childCount: courses.length,
+        childCount: slotCount,
       ),
     );
   }

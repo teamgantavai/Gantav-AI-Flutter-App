@@ -99,6 +99,17 @@ class ApiService {
   }
 
 
+  /// Minimum lessons required for a course to be considered "real". Less
+  /// than this and we reject it — users were complaining that Trending taps
+  /// produced a single-video "course" that looked broken. A proper learning
+  /// path needs at least 3 lessons to feel like a course.
+  static const int _minLessonsPerCourse = 3;
+
+  /// Total lesson count across all modules. Used as the accept/reject gate
+  /// for each generation path.
+  static int _countLessons(Course c) =>
+      c.modules.fold(0, (sum, m) => sum + m.lessons.length);
+
   static Future<Course?> suggestPath(
     String dream, {
     String language = 'English',
@@ -110,20 +121,28 @@ class ApiService {
       // course like "Python for ML" after tapping "Build AI agents".
       if (allowCurated) {
         final verifiedCourses = await AdminService.getVerifiedCourses(dream);
-        if (verifiedCourses.isNotEmpty) return verifiedCourses.first;
+        if (verifiedCourses.isNotEmpty &&
+            _countLessons(verifiedCourses.first) >= _minLessonsPerCourse) {
+          return verifiedCourses.first;
+        }
       }
 
       // 2. PLAYLIST-FIRST: try to find a single-channel YouTube playlist that
       // covers the whole topic. This gives consistent teaching style and
       // avoids the "mixed random videos from 9 channels" problem.
-      final playlist = await YouTubeApiService.findBestPlaylist(
+      //
+      // We try the top 3 candidate playlists in order so a single bad playlist
+      // (Shorts-only, private videos, fewer than 3 usable items) doesn't
+      // force a fallback to random individual videos.
+      final playlists = await YouTubeApiService.findTopPlaylists(
         topic: dream,
         language: language,
+        max: 3,
       );
-      if (playlist != null) {
+      for (final playlist in playlists) {
         final videos =
             await YouTubeApiService.fetchPlaylistVideos(playlist.id);
-        if (videos.length >= 3) {
+        if (videos.length >= _minLessonsPerCourse) {
           return _buildCourseFromPlaylist(dream, playlist, videos);
         }
       }
@@ -137,10 +156,14 @@ class ApiService {
         dream: dream,
         preFilteredVideos: preFilteredVideos,
       );
-      if (course != null) return course;
+      if (course != null && _countLessons(course) >= _minLessonsPerCourse) {
+        return course;
+      }
 
-      // 4. Last-resort fallback from raw video list.
-      if (preFilteredVideos.isNotEmpty) {
+      // 4. Last-resort fallback from raw video list — but only if we actually
+      // have enough videos to feel like a course. A 1-video "course" was the
+      // single biggest polish complaint pre-launch.
+      if (preFilteredVideos.length >= _minLessonsPerCourse) {
         return _buildFallbackCourse(dream, preFilteredVideos);
       }
 
@@ -268,12 +291,16 @@ class ApiService {
   static Course _buildFallbackCourse(String dream, List<YouTubeVideoStats> videos) {
     final modules = <Module>[];
     int vidIdx = 0;
-    
-    // Create 3 modules
-    for (int i = 0; i < 3; i++) {
+
+    // Module count scales with video count so 3 videos don't get spread
+    // across 3 single-lesson modules (reads like padding). Target ~3 videos
+    // per module, cap at 3 modules to keep the course short + skimmable.
+    final moduleCount = ((videos.length / 3).ceil()).clamp(1, 3);
+    final lessonsPerModule = (videos.length / moduleCount).ceil();
+
+    for (int i = 0; i < moduleCount; i++) {
        final lessons = <Lesson>[];
-       // 3 videos per module or whatever remains
-       for (int j = 0; j < 3 && vidIdx < videos.length; j++) {
+       for (int j = 0; j < lessonsPerModule && vidIdx < videos.length; j++) {
          final v = videos[vidIdx];
          lessons.add(Lesson(
            id: 'f_les_$vidIdx',
@@ -286,7 +313,7 @@ class ApiService {
        if (lessons.isNotEmpty) {
          modules.add(Module(
            id: 'f_mod_$i',
-           title: _moduleTitleForIndex(i, 3, dream),
+           title: _moduleTitleForIndex(i, moduleCount, dream),
            lessonCount: lessons.length,
            isLocked: i > 0,
            lessons: lessons,
