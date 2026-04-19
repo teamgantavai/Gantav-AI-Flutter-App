@@ -29,7 +29,8 @@ class LessonPlayerScreen extends StatefulWidget {
   State<LessonPlayerScreen> createState() => _LessonPlayerScreenState();
 }
 
-class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
+class _LessonPlayerScreenState extends State<LessonPlayerScreen>
+    with TickerProviderStateMixin {
   double _playbackSpeed = 1.0;
   bool _showAiChat = false;
 
@@ -48,12 +49,26 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   bool _isCompleted = false;
   int _likeCount = 0;
 
+  // 12D.1 — coin badge animation
+  late AnimationController _coinBadgeCtrl;
+  late Animation<double> _coinBadgeScale;
+  bool _showCoinBadge = false;
+
   final GlobalKey<AppYoutubePlayerState> _ytKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _loadInteractionState();
+
+    // 12D.1 — coin badge animation controller
+    _coinBadgeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _coinBadgeScale = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _coinBadgeCtrl, curve: Curves.elasticOut),
+    );
   }
 
   Future<void> _loadInteractionState() async {
@@ -127,8 +142,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   void _toggleStar() {
     setState(() => _isStarred = !_isStarred);
     _saveInteractionState();
-    // Sync with AppState so it persists to Firestore and appears in
-    // the Favorites/Starred list across the app.
     context.read<AppState>().toggleStarredLesson(widget.lesson.id);
     if (_isStarred) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -155,6 +168,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _chatController.dispose();
     _chatScrollController.dispose();
+    _coinBadgeCtrl.dispose();
     super.dispose();
   }
 
@@ -183,6 +197,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     }
   }
 
+  /// 12D.7 — setPlaybackRate now called directly on the player key's state
   Future<void> _setPlaybackSpeed(double speed) async {
     setState(() => _playbackSpeed = speed);
     _ytKey.currentState?.setPlaybackRate(speed);
@@ -347,6 +362,29 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          // 12D.1 — coin value chip in top bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('🪙', style: TextStyle(fontSize: 11)),
+                const SizedBox(width: 4),
+                Text('+${widget.lesson.coinValue}',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFFF59E0B),
+                  )),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
           IconButton(
             onPressed: () => _ytKey.currentState?.showSettingsSheet(),
             icon: Icon(Icons.settings_rounded,
@@ -363,6 +401,9 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
       width: double.infinity,
       child: AspectRatio(
         aspectRatio: 16 / 9,
+        // 12D.7 — AppYoutubePlayer key is set so _ytKey.currentState is
+        // always valid; the mobile implementation handles 10s double-tap
+        // seek and long-press 2× speed natively inside the player widget.
         child: AppYoutubePlayer(
           key: _ytKey,
           videoId: widget.lesson.youtubeVideoId,
@@ -371,17 +412,24 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
             if (!_isCompleted) {
               setState(() => _isCompleted = true);
               _saveInteractionState();
-              // Mark lesson complete in app state
               context.read<AppState>().markLessonAsCompleted(
                     widget.course.id,
                     widget.module.id,
                     widget.lesson.id,
                   );
 
+              // 12D.1 — show coin badge briefly after video ends
+              setState(() => _showCoinBadge = true);
+              _coinBadgeCtrl.forward(from: 0).then((_) {
+                Future.delayed(const Duration(seconds: 2), () {
+                  if (mounted) setState(() => _showCoinBadge = false);
+                });
+              });
+
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    '✅ Lesson complete! Take the quiz to continue.',
+                    '✅ +${widget.lesson.coinValue} coins! Take the quiz to continue.',
                     style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
                   ),
                   backgroundColor: AppColors.teal,
@@ -517,6 +565,34 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                 onTap: _toggleFocusMode,
                 isDark: isDark,
               ),
+              const Spacer(),
+              // 12D.1 — coin badge for completed lesson
+              if (_isCompleted)
+                ScaleTransition(
+                  scale: _coinBadgeScale,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('🪙', style: TextStyle(fontSize: 12)),
+                        const SizedBox(width: 4),
+                        Text('+${widget.lesson.coinValue} earned',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFF59E0B),
+                          )),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 10),
@@ -556,7 +632,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
     );
   }
 
-  /// Fixed up-next navigation — properly opens next lesson
   Widget _buildUpNext(bool isDark) {
     final currentIdx = widget.module.lessons.indexOf(widget.lesson);
     final remaining =
@@ -574,7 +649,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
         ...remaining.map((lesson) {
           return GestureDetector(
             onTap: () {
-              // FIX: use pushReplacement with proper fade transition
               Navigator.of(context).pushReplacement(
                 PageRouteBuilder(
                   pageBuilder: (_, __, ___) => LessonPlayerScreen(
@@ -634,10 +708,22 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        Text(
-                          lesson.duration,
-                          style: GoogleFonts.dmMono(
-                              fontSize: 11, color: AppColors.textMuted),
+                        Row(
+                          children: [
+                            Text(
+                              lesson.duration,
+                              style: GoogleFonts.dmMono(
+                                  fontSize: 11, color: AppColors.textMuted),
+                            ),
+                            const SizedBox(width: 6),
+                            // 12D.1 — show coin value on up-next lessons
+                            Text('🪙 ${lesson.coinValue}',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 10,
+                                color: const Color(0xFFF59E0B),
+                                fontWeight: FontWeight.w600,
+                              )),
+                          ],
                         ),
                       ],
                     ),
@@ -656,7 +742,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   Widget _buildAiChatPanel(bool isDark) {
     return Column(
       children: [
-        // Header
         Container(
           padding: const EdgeInsets.fromLTRB(4, 4, 14, 4),
           decoration: BoxDecoration(
@@ -944,7 +1029,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen> {
   }
 }
 
-// ─── YouTube-style Like/Dislike Pill ─────────────────────────────────────────
+// ─── Reusable sub-widgets ─────────────────────────────────────────────────────
 
 class _LikePill extends StatelessWidget {
   final bool isLiked;
@@ -980,8 +1065,7 @@ class _LikePill extends StatelessWidget {
           GestureDetector(
             onTap: onLike,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: isLiked
                     ? AppColors.violet.withValues(alpha: 0.15)
@@ -1053,8 +1137,6 @@ class _LikePill extends StatelessWidget {
   }
 }
 
-// ─── Action Pill ─────────────────────────────────────────────────────────────
-
 class _ActionPill extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -1115,8 +1197,6 @@ class _ActionPill extends StatelessWidget {
     );
   }
 }
-
-// ─── Supporting Widgets ──────────────────────────────────────────────────────
 
 class _TabButton extends StatelessWidget {
   final String label;
@@ -1226,8 +1306,7 @@ class _ChapterTile extends StatelessWidget {
           Text(chapter.timestamp,
               style: GoogleFonts.dmMono(
                   fontSize: 11,
-                  color:
-                      isActive ? AppColors.violet : AppColors.textMuted,
+                  color: isActive ? AppColors.violet : AppColors.textMuted,
                   fontWeight: FontWeight.w500)),
         ],
       ),

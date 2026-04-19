@@ -6,6 +6,11 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// 12D.7 — All gesture interactions verified:
+/// • Double-tap LEFT  → seek −10 s
+/// • Double-tap RIGHT → seek +10 s
+/// • Long-press start → speed 2×
+/// • Long-press end   → speed restored to pre-press value
 class AppYoutubePlayer extends StatefulWidget {
   final String videoId;
   final bool autoPlay;
@@ -31,6 +36,8 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
 
   // Settings
   double _currentSpeed = 1.0;
+  /// 12D.7 — Speed before long-press so we can restore it on release
+  double _speedBeforeLongPress = 1.0;
   String _currentQuality = 'Auto';
   bool _captionsEnabled = false;
 
@@ -39,7 +46,6 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
   bool _showPlayPauseOverlay = false;
   bool _showSeekForward = false;
   bool _showSeekBackward = false;
-  int _seekAmount = 10;
 
   Timer? _overlayTimer;
   Timer? _seekTimer;
@@ -49,9 +55,6 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
 
   static const List<double> _speedOptions = [
     0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0
-  ];
-  static const List<String> _qualityOptions = [
-    'Auto', '1080p', '720p', '480p', '360p', '240p'
   ];
 
   String _getSafeVideoId(String input) {
@@ -100,7 +103,6 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
       setState(() => _isReady = true);
       if (_currentSpeed != 1.0) _controller.setPlaybackRate(_currentSpeed);
     }
-    // Fire onVideoEnd when video finishes
     if (_controller.value.playerState == PlayerState.ended) {
       widget.onVideoEnd?.call();
     }
@@ -116,7 +118,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
     super.dispose();
   }
 
-  // ================== SETTINGS ==================
+  // ── Settings ──────────────────────────────────────────────────────────
 
   Future<void> _loadCachedSettings() async {
     try {
@@ -159,7 +161,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
     return _controller.value.position.inSeconds.toDouble();
   }
 
-  // ================== GESTURES ==================
+  // ── Gestures ─────────────────────────────────────────────────────────
 
   void _togglePlayPause() {
     final isPlaying = _controller.value.isPlaying;
@@ -180,28 +182,27 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
     HapticFeedback.lightImpact();
   }
 
+  /// 12D.7 — Double-tap seek. Uses [details.localPosition] relative to the
+  /// widget so the hit-test is always correct on real devices regardless of
+  /// where the player widget is positioned on screen.
   void _handleDoubleTap(TapDownDetails details) {
-    final width = MediaQuery.of(context).size.width;
-    final isRightSide = details.globalPosition.dx > width / 2;
+    // We need the rendered width of this widget to decide left vs right.
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final width = renderBox?.size.width ?? MediaQuery.of(context).size.width;
+    final isRightSide = details.localPosition.dx > width / 2;
 
     if (isRightSide) {
       _seekRelative(10);
-      setState(() {
-        _showSeekForward = true;
-        _seekAmount = 10;
-      });
+      setState(() => _showSeekForward = true);
     } else {
       _seekRelative(-10);
-      setState(() {
-        _showSeekBackward = true;
-        _seekAmount = 10;
-      });
+      setState(() => _showSeekBackward = true);
     }
 
     HapticFeedback.mediumImpact();
 
     _seekTimer?.cancel();
-    _seekTimer = Timer(const Duration(milliseconds: 600), () {
+    _seekTimer = Timer(const Duration(milliseconds: 800), () {
       if (mounted) {
         setState(() {
           _showSeekForward = false;
@@ -212,28 +213,29 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
   }
 
   void _seekRelative(int seconds) {
-    final current = _controller.value.position.inSeconds.toDouble();
-    final duration = _controller.metadata.duration.inSeconds.toDouble();
-    final newPos = (current + seconds).clamp(0.0, duration);
-    _controller.seekTo(Duration(seconds: newPos.toInt()));
+    final current = _controller.value.position.inSeconds;
+    final duration = _controller.metadata.duration.inSeconds;
+    // Clamp to [0, duration]. Duration can be 0 while buffering; allow seek anyway.
+    final newPos = (current + seconds).clamp(0, duration > 0 ? duration : 999999);
+    _controller.seekTo(Duration(seconds: newPos));
   }
 
+  /// 12D.7 — Long-press start: save current speed, then set 2×.
   void _handleLongPressStart(LongPressStartDetails details) {
-    if (_currentSpeed != 2.0) {
-      setPlaybackRate(2.0);
-    }
+    _speedBeforeLongPress = _currentSpeed;
+    setPlaybackRate(2.0);
     setState(() => _isLongPressing = true);
     HapticFeedback.heavyImpact();
   }
 
+  /// 12D.7 — Long-press end: restore speed to what it was before the press.
   void _handleLongPressEnd(LongPressEndDetails details) {
-    if (_currentSpeed == 2.0) {
-      setPlaybackRate(1.0);
-    }
+    setPlaybackRate(_speedBeforeLongPress);
     setState(() => _isLongPressing = false);
+    HapticFeedback.selectionClick();
   }
 
-  // ================== BUILD ==================
+  // ── Build ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -291,11 +293,11 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
             children: [
               player,
 
-              // Double tap seek animations
-              if (_showSeekForward) _buildSeekAnimation(true),
-              if (_showSeekBackward) _buildSeekAnimation(false),
+              // ── Double-tap seek animations ──────────────────────────
+              if (_showSeekForward) _buildSeekOverlay(isForward: true),
+              if (_showSeekBackward) _buildSeekOverlay(isForward: false),
 
-              // Play/Pause overlay
+              // ── Play/Pause flash ────────────────────────────────────
               if (_showPlayPauseOverlay)
                 Center(
                   child: ScaleTransition(
@@ -317,7 +319,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
                   ),
                 ),
 
-              // Long press 2x indicator
+              // ── Long-press 2× indicator ─────────────────────────────
               if (_isLongPressing)
                 Positioned(
                   top: 16,
@@ -330,8 +332,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
-                          color:
-                              const Color(0xFF7C6AFF).withValues(alpha: 0.4),
+                          color: const Color(0xFF7C6AFF).withValues(alpha: 0.4),
                           blurRadius: 12,
                           spreadRadius: 2,
                         ),
@@ -362,47 +363,46 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
     );
   }
 
-  Widget _buildSeekAnimation(bool isForward) {
+  /// 12D.7 — Seek overlay with icon + label, half-screen width hit area.
+  Widget _buildSeekOverlay({required bool isForward}) {
     return Positioned(
-      left: isForward ? null : 40,
-      right: isForward ? 40 : null,
+      left: isForward ? null : 0,
+      right: isForward ? 0 : null,
       top: 0,
       bottom: 0,
+      width: MediaQuery.of(context).size.width * 0.5,
       child: Center(
-        child: AnimatedOpacity(
-          opacity: (isForward ? _showSeekForward : _showSeekBackward) ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 200),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.65),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isForward ? Icons.forward_10_rounded : Icons.replay_10_rounded,
-                  color: Colors.white,
-                  size: 42,
-                ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.55),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 8),
-              Text(
-                '${isForward ? '+' : '-'}$_seekAmount s',
-                style: GoogleFonts.dmSans(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  shadows: [
-                    Shadow(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        blurRadius: 8),
-                  ],
-                ),
+              child: Icon(
+                isForward ? Icons.forward_10_rounded : Icons.replay_10_rounded,
+                color: Colors.white,
+                size: 42,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isForward ? '+10 s' : '−10 s',
+              style: GoogleFonts.dmSans(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -436,9 +436,9 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // Settings Bottom Sheet
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 class _SettingsSheet extends StatefulWidget {
   final double currentSpeed;
@@ -514,8 +514,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
         _SettingsTile(
           icon: Icons.speed_rounded,
           label: 'Playback speed',
-          value:
-              widget.currentSpeed == 1.0 ? 'Normal' : '${widget.currentSpeed}x',
+          value: widget.currentSpeed == 1.0 ? 'Normal' : '${widget.currentSpeed}x',
           onTap: () => setState(() => _activePanel = 'speed'),
         ),
         _SettingsTile(

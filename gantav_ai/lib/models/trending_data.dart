@@ -5,26 +5,27 @@ import 'package:flutter/material.dart';
 /// course: tapping it runs the same course generation pipeline as a
 /// subcategory, using the composed prompt as the topic.
 ///
-/// Titles are written in the voice that actually converts for Indian exam/
-/// career audiences — "How to become a YouTuber", "Earn money as a student"
-/// — instead of dry taxonomy labels.
+/// ### 12D.5 — Language toggle
+/// Each card now exposes a [defaultLang] ('en' or 'hi'). The UI renders a
+/// flag toggle so users can flip between English and Hindi content per card.
+/// The chosen lang is forwarded as the YouTube `relevanceLanguage` parameter.
 ///
 /// ### Variation on repeat taps
 /// [angles] lists distinct sub-focuses within the same category. The
 /// AppState rotates through these on every tap so the same card never
-/// generates the same course twice in a row — "Grow on Instagram" one tap,
-/// "Reels script writing" the next, "Monetisation as a small creator" the
-/// next, etc.
+/// generates the same course twice in a row.
 class TrendingCourse {
   final String id;
   final String title;
-  final String tagline; // one-line value prop shown on the card
-  final String promptHint; // base prompt — always used as the spine
+  final String tagline;       // one-line value prop shown on the card
+  final String promptHint;   // base prompt — always used as the spine
   final List<String> angles; // rotating sub-focuses for variation on retaps
   final IconData icon;
-  final Color primary; // gradient start
-  final Color secondary; // gradient end
-  final String badge; // e.g. "Trending", "Hot", "New"
+  final Color primary;       // gradient start
+  final Color secondary;     // gradient end
+  final String badge;        // e.g. "Trending", "Hot", "New"
+  /// 12D.5 — default content language for this card ('en' | 'hi')
+  final String defaultLang;
 
   const TrendingCourse({
     required this.id,
@@ -36,6 +37,7 @@ class TrendingCourse {
     required this.primary,
     required this.secondary,
     this.badge = 'Trending',
+    this.defaultLang = 'en',
   });
 }
 
@@ -122,6 +124,7 @@ class TrendingData {
       primary: Color(0xFFEF4444),
       secondary: Color(0xFFEC4899),
       badge: 'Hot',
+      defaultLang: 'hi',
     ),
     TrendingCourse(
       id: 't_earn_student',
@@ -141,6 +144,7 @@ class TrendingData {
       primary: Color(0xFF10B981),
       secondary: Color(0xFF059669),
       badge: 'Trending',
+      defaultLang: 'hi',
     ),
     TrendingCourse(
       id: 't_govt_id',
@@ -160,6 +164,7 @@ class TrendingData {
       primary: Color(0xFF6366F1),
       secondary: Color(0xFF8B5CF6),
       badge: 'Useful',
+      defaultLang: 'hi',
     ),
     TrendingCourse(
       id: 't_freelancing',
@@ -217,6 +222,7 @@ class TrendingData {
       primary: Color(0xFF14B8A6),
       secondary: Color(0xFF0EA5E9),
       badge: 'Trending',
+      defaultLang: 'hi',
     ),
     TrendingCourse(
       id: 't_ielts',

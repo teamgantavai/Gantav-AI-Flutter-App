@@ -13,6 +13,7 @@ import '../services/certificate_service.dart';
 import 'admin_panel_screen.dart';
 import 'certificate_screen.dart';
 import 'verify_certificate_screen.dart';
+import 'legal_screen.dart';
 import '../models/models.dart';
 import '../models/certificate.dart';
 
@@ -1136,9 +1137,41 @@ class _SettingsSheet extends StatelessWidget {
         onTap: () {},
       ),
       _SettingAction(
+        icon: Icons.gavel_outlined,
+        title: 'Terms & Conditions',
+        subtitle: 'How to use Gantav AI',
+        color: AppColors.violet,
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  const LegalScreen(document: LegalDocument.terms),
+            ),
+          );
+        },
+      ),
+      _SettingAction(
+        icon: Icons.privacy_tip_outlined,
+        title: 'Privacy Policy',
+        subtitle: 'What we collect and why',
+        color: AppColors.teal,
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  const LegalScreen(document: LegalDocument.privacy),
+            ),
+          );
+        },
+      ),
+      _SettingAction(
         icon: Icons.info_outline,
         title: 'About App',
-        subtitle: 'Version, terms, privacy',
+        subtitle: 'Version 1.0.0 · Gantav AI',
         color: AppColors.textMuted,
         onTap: () {},
       ),

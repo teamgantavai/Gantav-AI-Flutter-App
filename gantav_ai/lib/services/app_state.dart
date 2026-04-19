@@ -8,6 +8,7 @@ import '../services/firestore_service.dart';
 import '../services/onboarding_service.dart';
 import '../services/admin_service.dart';
 import '../services/course_roadmap_builder.dart';
+import '../services/gemini_service.dart';
 import '../models/trending_data.dart';
 import 'dart:math' as math;
 
@@ -17,6 +18,21 @@ enum AuthStatus {
   skipped,
   needsVerification,
   needsOnboarding
+}
+
+/// 12D.3 — Payload emitted when the user earns coins.
+/// The UI layer listens and triggers the coin-fly animation.
+class CoinEarnedEvent {
+  final int coins;
+  final String reason; // e.g. "Lesson completed"
+  CoinEarnedEvent({required this.coins, required this.reason});
+}
+
+/// 12D.2 — Payload emitted when a streak increments so the UI can
+/// trigger confetti / flame-pulse without polling.
+class StreakBumpEvent {
+  final int newStreak;
+  StreakBumpEvent(this.newStreak);
 }
 
 class AppState extends ChangeNotifier {
@@ -47,6 +63,39 @@ class AppState extends ChangeNotifier {
   bool _dreamCollectedInOnboarding = false;
   bool get dreamCollectedInOnboarding => _dreamCollectedInOnboarding;
 
+  /// 12D.3 — latest coin-earned event; UI watches and clears after animating
+  CoinEarnedEvent? _coinEarnedEvent;
+  CoinEarnedEvent? get coinEarnedEvent => _coinEarnedEvent;
+
+  /// 12D.2 — latest streak-bump event; UI watches and clears after animating
+  StreakBumpEvent? _streakBumpEvent;
+  StreakBumpEvent? get streakBumpEvent => _streakBumpEvent;
+
+  void clearCoinEarnedEvent() {
+    if (_coinEarnedEvent != null) {
+      _coinEarnedEvent = null;
+      notifyListeners();
+    }
+  }
+
+  void clearStreakBumpEvent() {
+    if (_streakBumpEvent != null) {
+      _streakBumpEvent = null;
+      notifyListeners();
+    }
+  }
+
+  /// 12D.5 — per-card language override map: cardId → 'en' | 'hi'
+  final Map<String, String> _trendingCardLang = {};
+
+  String trendingCardLang(TrendingCourse t) =>
+      _trendingCardLang[t.id] ?? t.defaultLang;
+
+  void setTrendingCardLang(TrendingCourse t, String lang) {
+    _trendingCardLang[t.id] = lang;
+    notifyListeners();
+  }
+
   final FirestoreService _firestoreService = FirestoreService();
 
   // Getters
@@ -54,12 +103,6 @@ class AppState extends ChangeNotifier {
   UserProfile? get user => _user;
   String? get profileImagePath => _profileImagePath;
 
-  // Memoized, deduped union of _courses + _generatedCourses.
-  // The getter used to allocate a fresh list every call via spread + where +
-  // toList — the home screen alone would hit it 4-6× per rebuild through
-  // activeCourses / suggestedCourses, multiplying the cost by N items.
-  // Cache invalidates on every notifyListeners() (see override below) so
-  // readers always see fresh data after a state change.
   List<Course>? _coursesCache;
   List<Course> get courses {
     final cached = _coursesCache;
@@ -79,14 +122,10 @@ class AppState extends ChangeNotifier {
 
   @override
   void notifyListeners() {
-    _coursesCache = null; // invalidate memoized views
+    _coursesCache = null;
     super.notifyListeners();
   }
-  
-  /// Courses the user is actively learning.
-  /// For authenticated users: include all generated/enrolled courses that are
-  /// not yet fully complete, even if no lessons have been completed yet.
-  /// For guests: fall back to legacy isInProgress filter on mock data.
+
   List<Course> get activeCourses {
     if (isAuthenticated && _generatedCourses.isNotEmpty) {
       final seen = <String>{};
@@ -97,7 +136,6 @@ class AppState extends ChangeNotifier {
             c.totalLessons == 0 || c.completedLessons < c.totalLessons;
         if (notFullyDone) result.add(c);
       }
-      // Also include any in-progress verified courses merged from _courses
       for (final c in _courses) {
         if (c.isInProgress && seen.add(c.id)) result.add(c);
       }
@@ -105,11 +143,8 @@ class AppState extends ChangeNotifier {
     }
     return courses.where((c) => c.isInProgress).toList();
   }
-      
+
   List<Course> get favoriteCourses {
-    // For now, let's assume courses with high rating or that user marked as starred are favorites
-    // Actually, let's add a proper favorite list if we have one.
-    // If not, we'll use a local filter for now.
     return courses.where((c) => (c.rating >= 4.9 && c.isVerified)).toList();
   }
 
@@ -202,6 +237,18 @@ class AppState extends ChangeNotifier {
       _isInitialLoading = false;
       notifyListeners();
     }
+
+    // Surface stale API-key warnings — if a provider's key returned 401 on
+    // a previous session, nudge the user to regenerate it. Fire-and-forget
+    // so startup never blocks on this.
+    GeminiService.loadAndReportDeadKeys().then((dead) {
+      if (dead.isEmpty) return;
+      final pretty = dead
+          .map((n) => n[0].toUpperCase() + n.substring(1))
+          .join(', ');
+      showNotification(
+          '⚠ $pretty API key looks invalid (401). Regenerate it and update your .env to restore full AI.');
+    }).catchError((_) {});
   }
 
   Future<void> _loadUserFromFirebase(dynamic firebaseUser) async {
@@ -221,6 +268,7 @@ class AppState extends ChangeNotifier {
         lessonsCompleted: 0,
         quizzesPassed: 0,
         weekActivity: List.filled(7, false),
+        coins: 0,
       );
     }
 
@@ -241,8 +289,7 @@ class AppState extends ChangeNotifier {
       _roadmaps = firestoreRoadmaps;
       await _saveLocalRoadmaps();
     }
-    
-    // Load starred from firestore if available
+
     final firestoreStarred = await _firestoreService.getStarredLessonIds();
     if (firestoreStarred.isNotEmpty) {
       _starredLessonIds.addAll(firestoreStarred);
@@ -271,26 +318,15 @@ class AppState extends ChangeNotifier {
     await _loadUserFromFirebase(result.user);
     await _saveAuthStatus();
 
-    if (result.isNewUser) {
-      if (_user != null) {
-        await _firestoreService.saveUserProfile(_user!);
-      }
-      if (_preferences == null && _dream == null) {
-        _authStatus = AuthStatus.needsOnboarding;
-        _needsOnboarding = true;
-      } else {
-        _authStatus = AuthStatus.authenticated;
-      }
-    } else {
-      if (_preferences == null &&
-          _dream == null &&
-          _generatedCourses.isEmpty) {
-        _authStatus = AuthStatus.needsOnboarding;
-        _needsOnboarding = true;
-      } else {
-        _authStatus = AuthStatus.authenticated;
-      }
+    if (result.isNewUser && _user != null) {
+      await _firestoreService.saveUserProfile(_user!);
     }
+    // Skip the forced roadmap-onboarding flow — users land on the main app
+    // after sign-in. Preferences get defaults (dailyStudyMinutes = 30) and the
+    // user can tune them from Profile later. Previously we forced everyone
+    // through a 3-step onboarding which killed retention.
+    _authStatus = AuthStatus.authenticated;
+    _needsOnboarding = false;
 
     _isLoading = false;
     notifyListeners();
@@ -326,20 +362,14 @@ class AppState extends ChangeNotifier {
     await _loadUserFromFirebase(result.user);
     await _saveAuthStatus();
 
-    if (_preferences == null &&
-        _dream == null &&
-        _generatedCourses.isEmpty) {
-      _authStatus = AuthStatus.needsOnboarding;
-      _needsOnboarding = true;
-    } else {
-      _authStatus = AuthStatus.authenticated;
-    }
+    // Forced onboarding removed (see Google sign-in path above). Users go
+    // straight to main app after verified sign-in.
+    _authStatus = AuthStatus.authenticated;
+    _needsOnboarding = false;
 
     _isLoading = false;
     notifyListeners();
-    if (_authStatus == AuthStatus.authenticated) {
-      await refresh();
-    }
+    await refresh();
     return true;
   }
 
@@ -375,6 +405,7 @@ class AppState extends ChangeNotifier {
       lessonsCompleted: 0,
       quizzesPassed: 0,
       weekActivity: List.filled(7, false),
+      coins: 0,
     );
 
     await _firestoreService.saveUserProfile(_user!);
@@ -389,14 +420,26 @@ class AppState extends ChangeNotifier {
       await user.reload();
       if (user.emailVerified) {
         await _loadUserFromFirebase(user);
-        _authStatus = AuthStatus.needsOnboarding;
-        _needsOnboarding = true;
+        // Straight into main app — no onboarding gate.
+        _authStatus = AuthStatus.authenticated;
+        _needsOnboarding = false;
         await _saveAuthStatus();
+        await refresh();
       } else {
         _authError = 'Email not yet verified. Please check your inbox.';
       }
       notifyListeners();
     }
+  }
+
+  /// Sends a Firebase password-reset email to [email]. Returns null on
+  /// success, or a user-facing error string on failure. Called from the
+  /// auth screen's "Forgot password?" link.
+  Future<String?> sendPasswordReset(String email) async {
+    final trimmed = email.trim();
+    final validationError = AuthService.validateEmail(trimmed);
+    if (validationError != null) return validationError;
+    return AuthService.sendPasswordResetEmail(trimmed);
   }
 
   Future<void> resendVerification() async {
@@ -426,6 +469,7 @@ class AppState extends ChangeNotifier {
       lessonsCompleted: 0,
       quizzesPassed: 0,
       weekActivity: List.filled(7, false),
+      coins: 0,
     );
 
     await _saveAuthStatus();
@@ -506,7 +550,6 @@ class AppState extends ChangeNotifier {
       roadmap.completedAt = DateTime.now();
     }
 
-    // Bug #7 fix: Update user score and streak when tasks are completed
     _updateUserProgressStats();
 
     notifyListeners();
@@ -536,7 +579,6 @@ class AppState extends ChangeNotifier {
     day.completedAt = day.isCompleted ? DateTime.now() : null;
     roadmap.completedAt = roadmap.isComplete ? DateTime.now() : null;
 
-    // Bug #7 fix: update score and streak on toggle
     _updateUserProgressStats();
 
     notifyListeners();
@@ -544,25 +586,21 @@ class AppState extends ChangeNotifier {
     _firestoreService.updateRoadmap(roadmap).catchError((_) {});
   }
 
-  /// Bug #7 fix: Recalculate and update gantav score + streak from roadmap data.
-  /// Called whenever a task is toggled so the home screen stat chips always show
-  /// the correct live value.
+  /// Updates gantav score, streak, week activity, and coins from roadmap data.
   void _updateUserProgressStats() {
     if (_user == null || _roadmaps.isEmpty) return;
 
-    // Count all completed tasks across all roadmaps
     int totalCompletedTasks = 0;
     int completedDays = 0;
+    final prevStreak = _user!.streakDays;
 
     for (final roadmap in _roadmaps) {
       totalCompletedTasks += roadmap.completedTasks;
       completedDays += roadmap.completedDays;
     }
 
-    // Gantav Score: 10 points per completed task
     final newScore = totalCompletedTasks * 10;
 
-    // Streak: count consecutive days from today backwards that have completed tasks
     int streak = 0;
     if (_roadmaps.isNotEmpty) {
       final roadmap = _roadmaps.first;
@@ -581,16 +619,19 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    // Update weekly activity (mark today as active if any task done today)
     final weekActivity = List<bool>.from(_user!.weekActivity);
-    final todayWeekday = DateTime.now().weekday - 1; // 0=Mon, 6=Sun
+    final todayWeekday = DateTime.now().weekday - 1;
     if (todayWeekday < 7) {
       final todayRoadmapDay = activeRoadmap?.todayDay;
       weekActivity[todayWeekday] =
           (todayRoadmapDay?.completedTaskCount ?? 0) > 0;
     }
 
-    // Create updated profile
+    // 12D.2 — fire streak bump event when streak increments
+    if (streak > prevStreak && streak > 0) {
+      _streakBumpEvent = StreakBumpEvent(streak);
+    }
+
     _user = UserProfile(
       id: _user!.id,
       name: _user!.name,
@@ -601,9 +642,9 @@ class AppState extends ChangeNotifier {
       lessonsCompleted: completedDays,
       quizzesPassed: _user!.quizzesPassed,
       weekActivity: weekActivity,
+      coins: _user!.coins,
     );
 
-    // Persist to Firestore async
     _firestoreService.saveUserProfile(_user!).catchError((_) {});
     _saveAuthStatus();
   }
@@ -621,15 +662,11 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// The user's preferred content language in the format YouTube API expects
-  /// ('English' / 'Hindi'). Falls back to English.
   String get _preferredLang {
     final code = _preferences?.language;
     return code == 'hi' ? 'Hindi' : 'English';
   }
 
-  /// Build a personalized Roadmap for a freshly generated Course using the
-  /// user's daily available minutes. Persists to local + Firestore.
   Future<Roadmap?> buildRoadmapForCourse(
       Course course, int dailyMinutes) async {
     try {
@@ -682,7 +719,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. First, check if a similar Curated/Verified course exists
       final curated = await AdminService.findMatchingVerifiedCourse(prompt);
       if (curated != null) {
         await addGeneratedCourse(curated);
@@ -694,8 +730,6 @@ class AppState extends ChangeNotifier {
         return;
       }
 
-      // 2. Use playlist-first suggestPath (tries YouTube playlist, then AI).
-      //    This guarantees single-channel content when a good playlist exists.
       final course = await ApiService.suggestPath(prompt, language: _preferredLang)
           .timeout(const Duration(seconds: 60), onTimeout: () => null);
       if (course != null) {
@@ -720,15 +754,11 @@ class AppState extends ChangeNotifier {
   }
 
   // ─── Trending angle rotator ───────────────────────────────────────────
-  // Cursor per-trending-id so repeated taps on the same card don't generate
-  // the same course. We track used indices and reshuffle once the full set
-  // has been served.
   final Map<String, List<int>> _trendingAngleQueue = {};
   final math.Random _trendingRng = math.Random();
 
-  /// Compose a fresh prompt for a trending card. Rotates through
-  /// [TrendingCourse.angles] so back-to-back taps produce different courses.
-  /// Falls back to the base [TrendingCourse.promptHint] if no angles exist.
+  /// 12D.5 — Compose a fresh prompt for a trending card, respecting the
+  /// per-card language override.
   String pickTrendingPrompt(TrendingCourse t) {
     if (t.angles.isEmpty) return t.promptHint;
     var queue = _trendingAngleQueue[t.id];
@@ -738,22 +768,22 @@ class AppState extends ChangeNotifier {
     }
     final idx = queue.removeAt(0);
     final angle = t.angles[idx];
-    // Compose a distinct prompt: keep the spine (base hint) but pivot this
-    // session's course around the chosen angle. The angle goes first so
-    // downstream title generation latches onto the specific focus.
     return '$angle. Context: ${t.promptHint}';
   }
 
-  /// Generate course in background from category subcategory tap
-  /// Returns immediately, notifies via toast when done
+  /// 12D.5 — Returns 'English' or 'Hindi' for the YouTube search language
+  /// for this trending card, respecting the user's per-card toggle.
+  String pickTrendingLang(TrendingCourse t) {
+    final code = trendingCardLang(t);
+    return code == 'hi' ? 'Hindi' : 'English';
+  }
+
   Future<void> generateCourseInBackgroundFromCategory(String promptHint,
-      {int? dailyMinutes, bool allowCurated = true}) async {
+      {int? dailyMinutes, bool allowCurated = true, String language = 'English'}) async {
     _isGeneratingCourse = true;
     notifyListeners();
 
     try {
-      // 1. Check for curated matches first (skipped when caller wants fresh
-      //    variety every time — e.g. trending-card rotation)
       if (allowCurated) {
         final curated = await AdminService.findMatchingVerifiedCourse(promptHint);
         if (curated != null) {
@@ -765,8 +795,10 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      final course = await ApiService.suggestPath(promptHint,
-              language: _preferredLang, allowCurated: allowCurated)
+      final course = await ApiService.suggestPath(
+              promptHint,
+              language: language.isNotEmpty ? language : _preferredLang,
+              allowCurated: allowCurated)
           .timeout(const Duration(seconds: 60), onTimeout: () => null);
       if (course != null) {
         _generatedCourses.add(course);
@@ -814,10 +846,9 @@ class AppState extends ChangeNotifier {
     ];
 
     final startIdx =
-        ((_courseBatchIndex - 1) * 2) % topics.length; // Reduced to 2 per batch
+        ((_courseBatchIndex - 1) * 2) % topics.length;
     final batch = <Future<Course?>>[];
     for (int i = 0; i < 2; i++) {
-      // Reduced from 3 to 2 for speed
       final topicIdx = (startIdx + i) % topics.length;
       batch.add(
         ApiService.suggestPath(topics[topicIdx], language: _preferredLang)
@@ -1012,12 +1043,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     if (_authStatus == AuthStatus.authenticated) {
-      // Fire every independent read in parallel — previously they were awaited
-      // sequentially, so total refresh time = sum of 6 round-trips. With each
-      // call already bounded to ~8s (see FirestoreService._readTimeout /
-      // AdminService.getAllVerifiedCourses / ApiService._timeout), the whole
-      // refresh is now max(8s, <slowest>) instead of up to 60s+. On flaky
-      // networks where one read stalls, the others still complete on time.
       final results = await Future.wait<dynamic>([
         _firestoreService.getUserProfile(),
         _firestoreService.getActiveCourses(),
@@ -1043,9 +1068,6 @@ class AppState extends ChangeNotifier {
 
       if (firestoreRoadmaps.isNotEmpty) {
         _roadmaps = firestoreRoadmaps;
-        // Persist roadmaps to local cache AFTER notifyListeners so the UI
-        // doesn't wait on SharedPreferences I/O. Fire-and-forget is safe —
-        // even if it fails, the in-memory state is already correct.
         _saveLocalRoadmaps();
       }
 
@@ -1090,8 +1112,6 @@ class AppState extends ChangeNotifier {
     return 'Good evening';
   }
 
-  // Bug #6 fix: pulse index retained internally for any future opt-in feature,
-  // but currentPulseEvent is not exposed to home screen anymore.
   int _pulseIndex = 0;
   PulseEvent? get currentPulseEvent {
     if (_pulseEvents.isEmpty) return null;
@@ -1126,13 +1146,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 12D.1 & 12D.3 — Mark lesson complete, award coins, fire CoinEarnedEvent.
   Future<void> markLessonAsCompleted(String courseId, String moduleId, String lessonId) async {
-    // Find the course in EITHER list. Previously this only checked
-    // _generatedCourses, so lessons inside curated / recommended courses
-    // (loaded into _courses from Firestore / mocks) never got their
-    // completion status persisted — progress bar stayed at 0 and the user
-    // could never unlock the Get Certificate CTA. Fix: look in both lists
-    // and update whichever contains the course.
     List<Course> targetList;
     int courseIdx = _generatedCourses.indexWhere((c) => c.id == courseId);
     if (courseIdx != -1) {
@@ -1148,6 +1163,19 @@ class AppState extends ChangeNotifier {
     }
 
     final course = targetList[courseIdx];
+
+    // 12D.1 — find the lesson to get its coinValue before rebuilding the tree
+    int coinsToAward = 10;
+    for (final m in course.modules) {
+      if (m.id == moduleId) {
+        for (final l in m.lessons) {
+          if (l.id == lessonId) {
+            coinsToAward = l.coinValue;
+          }
+        }
+      }
+    }
+
     final updatedModules = course.modules.map((m) {
       if (m.id == moduleId) {
         final updatedLessons = m.lessons.map((l) {
@@ -1178,7 +1206,6 @@ class AppState extends ChangeNotifier {
       return m;
     }).toList();
 
-    // Re-check locking for all modules sequentially
     bool previousCompleted = true;
     final finalModules = updatedModules.map((m) {
       final isLocked = !previousCompleted;
@@ -1188,7 +1215,7 @@ class AppState extends ChangeNotifier {
         title: m.title,
         lessonCount: m.lessonCount,
         completedCount: m.completedCount,
-        isLocked: isLocked, // Unlock if previous is done
+        isLocked: isLocked,
         lessons: m.lessons,
       );
     }).toList();
@@ -1213,7 +1240,47 @@ class AppState extends ChangeNotifier {
     );
     targetList[courseIdx] = updated;
 
-    // Persist locally + to Firestore so progress survives app restart
+    // 12D.1 & 12D.3 — award coins to user profile
+    if (_user != null) {
+      final prevStreak = _user!.streakDays;
+      _user = _user!.copyWith(coins: _user!.coins + coinsToAward);
+      _coinEarnedEvent = CoinEarnedEvent(
+        coins: coinsToAward,
+        reason: 'Lesson completed',
+      );
+
+      // Update weekly activity for today
+      final weekActivity = List<bool>.from(_user!.weekActivity);
+      final todayWeekday = DateTime.now().weekday - 1;
+      if (todayWeekday >= 0 && todayWeekday < 7) {
+        weekActivity[todayWeekday] = true;
+      }
+
+      // Simple streak bump: if today wasn't already marked, increment streak
+      int newStreak = _user!.streakDays;
+      if (todayWeekday >= 0 && todayWeekday < 7 && !_user!.weekActivity[todayWeekday]) {
+        newStreak = prevStreak + 1;
+        if (newStreak > prevStreak) {
+          _streakBumpEvent = StreakBumpEvent(newStreak); // 12D.2
+        }
+      }
+
+      _user = UserProfile(
+        id: _user!.id,
+        name: _user!.name,
+        handle: _user!.handle,
+        email: _user!.email,
+        gantavScore: _user!.gantavScore + 5,
+        streakDays: newStreak,
+        lessonsCompleted: _user!.lessonsCompleted + 1,
+        quizzesPassed: _user!.quizzesPassed,
+        weekActivity: weekActivity,
+        coins: _user!.coins,
+      );
+
+      _firestoreService.saveUserProfile(_user!).catchError((_) {});
+    }
+
     await _saveLocalCourses();
     await _firestoreService.saveActiveCourse(updated);
     notifyListeners();

@@ -13,6 +13,53 @@ class GeminiService {
   static bool _cooldownsLoaded = false;
   static const String _cooldownPrefsKey = 'ai_provider_cooldowns_v1';
 
+  /// Providers whose API keys returned 401/403 (invalid/expired). We track
+  /// these separately from rate-limit cooldowns so the UI can surface a
+  /// "regenerate your API key" warning instead of silently routing around.
+  /// Persisted across app restarts via [_deadKeysPrefsKey].
+  static final Set<AIProvider> _deadKeys = {};
+  static const String _deadKeysPrefsKey = 'ai_dead_keys_v1';
+
+  static Future<void> _markKeyDead(AIProvider provider) async {
+    if (_deadKeys.add(provider)) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList(
+          _deadKeysPrefsKey,
+          _deadKeys.map((p) => p.name).toList(),
+        );
+      } catch (_) {}
+    }
+  }
+
+  /// Clear a dead-key flag — call after a successful response so that a
+  /// rotated key is recognized without a full app restart.
+  static Future<void> _clearDeadKey(AIProvider provider) async {
+    if (_deadKeys.remove(provider)) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList(
+          _deadKeysPrefsKey,
+          _deadKeys.map((p) => p.name).toList(),
+        );
+      } catch (_) {}
+    }
+  }
+
+  /// Human-readable names of providers whose keys are dead. Read from the
+  /// in-memory set (populated by [_ensureCooldownsLoaded] on cold start).
+  /// Used by AppState to show a one-time warning toast at app launch.
+  static List<String> get deadKeyProviders =>
+      _deadKeys.map((p) => p.name).toList();
+
+  /// Public entry for AppState to load persisted cooldown + dead-key state
+  /// before the first UI paint, so the app can show a "regenerate your API
+  /// key" warning immediately instead of only after the first failed call.
+  static Future<List<String>> loadAndReportDeadKeys() async {
+    await _ensureCooldownsLoaded();
+    return deadKeyProviders;
+  }
+
   /// Load persisted cooldowns from SharedPreferences on first use.
   /// Without this, every cold start retries already-limited providers and
   /// burns daily quota even though we already know they're limited.
@@ -34,6 +81,14 @@ class GeminiService {
         if (expiry != null && expiry.isAfter(now)) {
           _rateLimitExpirations[provider] = expiry;
         }
+      }
+      final dead = prefs.getStringList(_deadKeysPrefsKey) ?? const [];
+      for (final name in dead) {
+        final provider = AIProvider.values.firstWhere(
+          (p) => p.name == name,
+          orElse: () => AIProvider.gemini,
+        );
+        _deadKeys.add(provider);
       }
     } catch (_) {}
   }
@@ -77,6 +132,9 @@ class GeminiService {
 
   static void _recordSuccess(AIProvider provider) {
     _consecutiveFailures.remove(provider);
+    // A success means the key is live — clear any stale dead-key flag so the
+    // user isn't nagged about a key they just rotated.
+    if (_deadKeys.contains(provider)) _clearDeadKey(provider);
   }
 
   // ── Quiz Generation ──────────────────────────────────────────────────────
@@ -205,9 +263,12 @@ class GeminiService {
     required String courseTitle,
     List<ChatMessage> history = const [],
   }) async {
-    if (!ApiConfig.isConfigured) {
-      return '${doubtErrorPrefix}AI is not configured. '
-          'Please add at least one AI API key to your .env file.';
+    // Chat is Gemini-only (secondary key) by design — see _getProvidersForTask.
+    // So error messages should reference Gemini specifically, not the generic
+    // "all providers" which confuses users when the only wired provider fails.
+    if (!ApiConfig.hasGemini) {
+      return '${doubtErrorPrefix}Doubt AI is not configured. '
+          'Add GEMINI_API_KEY (or GEMINI_API_KEY_2) to your .env file.';
     }
 
     final historyText = history.takeLast(4).map((m) {
@@ -228,8 +289,9 @@ class GeminiService {
         temperature: 0.7,
       );
       if (response == null || _looksLikeProviderNotice(response)) {
-        return '${doubtErrorPrefix}All AI providers are busy or rate-limited. '
-            'Try again in a minute.';
+        return '${doubtErrorPrefix}Doubt AI is rate-limited right now. '
+            'Try again in a minute — this uses a separate key from course '
+            'generation, so the rest of the app still works.';
       }
       return response;
     } catch (e) {
@@ -643,9 +705,11 @@ class GeminiService {
         _setRateLimited(provider, minutes: 4);
         rethrow;
       } else if (errorString.contains('401') ||
+          errorString.contains('403') ||
           errorString.contains('Unauthorized')) {
-        debugPrint('[AI] ✗ ${provider.name} auth failure (401) — check API key');
+        debugPrint('[AI] ✗ ${provider.name} auth failure (401/403) — key is dead, regenerate it');
         _setRateLimited(provider, minutes: 60);
+        _markKeyDead(provider);
         rethrow;
       } else {
         rethrow;

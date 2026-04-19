@@ -17,11 +17,97 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
+
+  // 12D.3 — coin-fly animation
+  late AnimationController _coinCtrl;
+  late Animation<double> _coinFlyAnim;
+  late Animation<double> _coinFadeAnim;
+  int _pendingCoins = 0;
+  bool _showCoinBurst = false;
+
+  // 12D.2 — streak confetti / flame-pulse
+  late AnimationController _streakCtrl;
+  late Animation<double> _streakPulse;
+  bool _showStreakBurst = false;
+  int _burstStreak = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Coin fly animation
+    _coinCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _coinFlyAnim = Tween<double>(begin: 0, end: -80).animate(
+      CurvedAnimation(parent: _coinCtrl, curve: Curves.easeOut),
+    );
+    _coinFadeAnim = Tween<double>(begin: 1, end: 0).animate(
+      CurvedAnimation(parent: _coinCtrl, curve: const Interval(0.5, 1.0)),
+    );
+
+    // Streak pulse animation
+    _streakCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _streakPulse = Tween<double>(begin: 1.0, end: 1.35).animate(
+      CurvedAnimation(parent: _streakCtrl, curve: Curves.elasticOut),
+    );
+
+    // Watch for events after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _listenToAppState();
+    });
+  }
+
+  void _listenToAppState() {
+    final appState = context.read<AppState>();
+    appState.addListener(_onAppStateChanged);
+  }
+
+  void _onAppStateChanged() {
+    if (!mounted) return;
+    final appState = context.read<AppState>();
+
+    // 12D.3 — coin burst
+    final coinEvent = appState.coinEarnedEvent;
+    if (coinEvent != null) {
+      setState(() {
+        _pendingCoins = coinEvent.coins;
+        _showCoinBurst = true;
+      });
+      appState.clearCoinEarnedEvent();
+      _coinCtrl.forward(from: 0).then((_) {
+        if (mounted) setState(() => _showCoinBurst = false);
+      });
+    }
+
+    // 12D.2 — streak burst
+    final streakEvent = appState.streakBumpEvent;
+    if (streakEvent != null) {
+      setState(() {
+        _burstStreak = streakEvent.newStreak;
+        _showStreakBurst = true;
+      });
+      appState.clearStreakBumpEvent();
+      _streakCtrl.forward(from: 0).then((_) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) setState(() => _showStreakBurst = false);
+        });
+      });
+    }
+  }
 
   @override
   void dispose() {
+    final appState = context.read<AppState>();
+    appState.removeListener(_onAppStateChanged);
+    _coinCtrl.dispose();
+    _streakCtrl.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -31,10 +117,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final dailyMinutes = await showDailyTimeDialog(context);
     if (!mounted) return;
+    final lang = appState.pickTrendingLang(course); // 12D.5
     appState.generateCourseInBackgroundFromCategory(
       appState.pickTrendingPrompt(course),
       dailyMinutes: dailyMinutes,
       allowCurated: false,
+      language: lang,
     );
     messenger.showSnackBar(
       SnackBar(
@@ -68,159 +156,181 @@ class _HomeScreenState extends State<HomeScreen> {
         final user = appState.user;
         if (user == null) return const SizedBox();
 
-        // Hoist expensive getters once per build. These getters each
-        // allocate a new list (dedup + filter) — calling them inside
-        // itemBuilders multiplied that cost by N items before. See
-        // AppState.activeCourses / suggestedCourses / courses.
         final activeCourses = appState.activeCourses;
         final suggestedCourses = appState.suggestedCourses;
         final activeRoadmap = appState.activeRoadmap;
         final greeting = appState.greeting;
 
-        return RefreshIndicator(
-          onRefresh: () async {
-            await appState.refresh();
-          },
-          color: AppColors.violet,
-          child: CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            slivers: [
-              // ─── Greeting ──────────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('$greeting, ${user.name.split(' ').first}',
-                        style: Theme.of(context).textTheme.headlineMedium),
-                      const SizedBox(height: 4),
-                      Text('Your destination is waiting. Keep going.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ─── Roadmap Card ───────────────────────────────────────
-              if (activeRoadmap != null)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: RepaintBoundary(
-                      child: _RoadmapCard(
-                        roadmap: activeRoadmap,
-                        todayDay: appState.todayRoadmapDay,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => RoadmapScreen(roadmap: activeRoadmap)),
-                        ),
+        return Stack(
+          children: [
+            RefreshIndicator(
+              onRefresh: () async => appState.refresh(),
+              color: AppColors.violet,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                slivers: [
+                  // ─── Greeting ───────────────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('$greeting, ${user.name.split(' ').first}',
+                            style: Theme.of(context).textTheme.headlineMedium),
+                          const SizedBox(height: 4),
+                          Text('Your destination is waiting. Keep going.',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted)),
+                        ],
                       ),
                     ),
                   ),
-                ),
 
-              // ─── Score + Streak Row ─────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                  child: Row(
-                    children: [
-                      StatChip(icon: Icons.stars_rounded, label: 'Gantav Score', value: '${user.gantavScore}', color: AppColors.gold),
-                      const SizedBox(width: 12),
-                      StatChip(icon: Icons.local_fire_department, label: 'Day streak', value: '${user.streakDays}', color: AppColors.teal),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ─── Continue Learning ──────────────────────────────────
-              if (activeCourses.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                    child: SectionHeader(
-                      title: 'Continue learning',
-                      actionText: 'See all',
-                      onAction: () {},
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: isLandscape ? 300 : 360,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: activeCourses.length,
-                      itemBuilder: (context, index) {
-                        final course = activeCourses[index];
-                        return RepaintBoundary(
-                          child: ActiveCourseCard(
-                            course: course,
-                            onTap: () => _navigateToCourse(context, course),
+                  // ─── Roadmap Card ───────────────────────────────────
+                  if (activeRoadmap != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: RepaintBoundary(
+                          child: _RoadmapCard(
+                            roadmap: activeRoadmap,
+                            todayDay: appState.todayRoadmapDay,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => RoadmapScreen(roadmap: activeRoadmap)),
+                            ),
                           ),
-                        );
-                      },
+                        ),
+                      ),
+                    ),
+
+                  // ─── Score + Streak Row ─────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      child: Row(
+                        children: [
+                          // 12D.3 — coin stat chip with animation target key
+                          _CoinStatChip(
+                            coins: user.coins,
+                            showBurst: _showCoinBurst,
+                            pendingCoins: _pendingCoins,
+                            flyAnim: _coinFlyAnim,
+                            fadeAnim: _coinFadeAnim,
+                          ),
+                          const SizedBox(width: 12),
+                          // 12D.2 — streak chip with pulse animation
+                          _StreakStatChip(
+                            streakDays: user.streakDays,
+                            pulseAnim: _streakPulse,
+                            showBurst: _showStreakBurst,
+                            burstStreak: _burstStreak,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
 
-              // ─── Trending Now ───────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: SectionHeader(
-                    title: 'Trending Now 🔥',
-                    actionText: 'See all',
-                    onAction: () => context.read<AppState>().setTabIndex(1),
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 190,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: TrendingData.courses.length,
-                    itemBuilder: (context, index) {
-                      final course = TrendingData.courses[index];
-                      return RepaintBoundary(
-                        child: _TrendingCourseCard(
-                          course: course,
-                          onTap: () => _generateTrending(context, course),
+                  // ─── Continue Learning ──────────────────────────────
+                  if (activeCourses.isNotEmpty) ...[
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                        child: SectionHeader(
+                          title: 'Continue learning',
+                          actionText: 'See all',
+                          onAction: () {},
                         ),
-                      );
-                    },
-                  ),
-                ),
-              ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: isLandscape ? 300 : 360,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: activeCourses.length,
+                          itemBuilder: (context, index) {
+                            final course = activeCourses[index];
+                            return RepaintBoundary(
+                              child: ActiveCourseCard(
+                                course: course,
+                                onTap: () => _navigateToCourse(context, course),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
 
-              // ─── Suggested for you ──────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: SectionHeader(
-                    title: 'Suggested for you',
-                    actionText: 'Explore',
-                    onAction: () => context.read<AppState>().setTabIndex(1),
+                  // ─── Trending Now ───────────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      child: SectionHeader(
+                        title: 'Trending Now 🔥',
+                        actionText: 'See all',
+                        onAction: () => context.read<AppState>().setTabIndex(1),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: isLandscape
-                    ? _buildLandscapeSuggestions(suggestedCourses)
-                    : _buildPortraitSuggestions(suggestedCourses),
-              ),
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      // 12D.4 — taller card for cleaner hierarchy with lang toggle
+                      height: 210,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: TrendingData.courses.length,
+                        itemBuilder: (context, index) {
+                          final course = TrendingData.courses[index];
+                          return RepaintBoundary(
+                            child: _TrendingCourseCard(
+                              course: course,
+                              currentLang: appState.trendingCardLang(course),
+                              onTap: () => _generateTrending(context, course),
+                              onLangToggle: (lang) =>
+                                  appState.setTrendingCardLang(course, lang),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
-          ),
+                  // ─── Suggested for you ──────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                      child: SectionHeader(
+                        title: 'Suggested for you',
+                        actionText: 'Explore',
+                        onAction: () => context.read<AppState>().setTabIndex(1),
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    sliver: isLandscape
+                        ? _buildLandscapeSuggestions(suggestedCourses)
+                        : _buildPortraitSuggestions(suggestedCourses),
+                  ),
+
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              ),
+            ),
+
+            // 12D.2 — streak burst overlay
+            if (_showStreakBurst)
+              _StreakBurstOverlay(
+                streak: _burstStreak,
+                pulseAnim: _streakPulse,
+              ),
+          ],
         );
       },
     );
@@ -288,12 +398,233 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ─── Trending Course Card (Seekho-style) ─────────────────────────────────────
+// ─── 12D.3 — Coin stat chip with animated burst ───────────────────────────────
+
+class _CoinStatChip extends StatelessWidget {
+  final int coins;
+  final bool showBurst;
+  final int pendingCoins;
+  final Animation<double> flyAnim;
+  final Animation<double> fadeAnim;
+
+  const _CoinStatChip({
+    required this.coins,
+    required this.showBurst,
+    required this.pendingCoins,
+    required this.flyAnim,
+    required this.fadeAnim,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Expanded(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.08 : 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              children: [
+                const Text('🪙', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('$coins',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 16, fontWeight: FontWeight.w700,
+                          color: const Color(0xFFF59E0B)),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text('Coins',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: isDark ? AppColors.textLightSub : AppColors.textDarkSub),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 12D.3 — flying coin label
+          if (showBurst)
+            Positioned(
+              top: 0,
+              left: 20,
+              child: AnimatedBuilder(
+                animation: flyAnim,
+                builder: (_, __) => Transform.translate(
+                  offset: Offset(0, flyAnim.value),
+                  child: Opacity(
+                    opacity: fadeAnim.value,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                            blurRadius: 12, spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Text('+$pendingCoins 🪙',
+                        style: GoogleFonts.dmSans(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        )),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── 12D.2 — Streak stat chip with pulse animation ────────────────────────────
+
+class _StreakStatChip extends StatelessWidget {
+  final int streakDays;
+  final Animation<double> pulseAnim;
+  final bool showBurst;
+  final int burstStreak;
+
+  const _StreakStatChip({
+    required this.streakDays,
+    required this.pulseAnim,
+    required this.showBurst,
+    required this.burstStreak,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Expanded(
+      child: AnimatedBuilder(
+        animation: pulseAnim,
+        builder: (_, child) => Transform.scale(
+          scale: showBurst ? pulseAnim.value : 1.0,
+          child: child,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.teal.withValues(alpha: isDark ? 0.08 : 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: showBurst
+                  ? AppColors.teal.withValues(alpha: 0.5)
+                  : AppColors.teal.withValues(alpha: 0.15),
+              width: showBurst ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.local_fire_department,
+                color: AppColors.teal, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$streakDays',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 16, fontWeight: FontWeight.w700,
+                        color: AppColors.teal),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text('Day streak',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 11,
+                        color: isDark ? AppColors.textLightSub : AppColors.textDarkSub),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 12D.2 — Streak burst overlay (centered) ─────────────────────────────────
+
+class _StreakBurstOverlay extends StatelessWidget {
+  final int streak;
+  final Animation<double> pulseAnim;
+  const _StreakBurstOverlay({required this.streak, required this.pulseAnim});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 120,
+      left: 0, right: 0,
+      child: Center(
+        child: AnimatedBuilder(
+          animation: pulseAnim,
+          builder: (_, __) => Transform.scale(
+            scale: pulseAnim.value,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.teal,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.teal.withValues(alpha: 0.45),
+                    blurRadius: 24,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🔥', style: TextStyle(fontSize: 22)),
+                  const SizedBox(width: 8),
+                  Text('$streak-day streak!',
+                    style: GoogleFonts.dmSans(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    )),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── 12D.4 & 12D.5 — Trending Course Card (polished + lang toggle) ────────────
 
 class _TrendingCourseCard extends StatelessWidget {
   final TrendingCourse course;
+  final String currentLang; // 'en' | 'hi'
   final VoidCallback onTap;
-  const _TrendingCourseCard({required this.course, required this.onTap});
+  final void Function(String lang) onLangToggle;
+
+  const _TrendingCourseCard({
+    required this.course,
+    required this.currentLang,
+    required this.onTap,
+    required this.onLangToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -325,79 +656,108 @@ class _TrendingCourseCard extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // 12D.4 — top row: icon + badge (consistent right-aligned badge)
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
-                        width: 40, height: 40,
+                        width: 38, height: 38,
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(11),
                         ),
-                        child: Icon(course.icon, color: Colors.white, size: 22),
+                        child: Icon(course.icon, color: Colors.white, size: 20),
                       ),
+                      const Spacer(),
+                      // 12D.5 — language toggle flag
+                      GestureDetector(
+                        onTap: () =>
+                            onLangToggle(currentLang == 'en' ? 'hi' : 'en'),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                currentLang == 'hi' ? '🇮🇳' : '🇬🇧',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                currentLang == 'hi' ? 'HI' : 'EN',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      // badge — fixed position after lang toggle
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.22),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Text(
-                          course.badge,
+                        child: Text(course.badge,
                           style: GoogleFonts.dmSans(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
                             letterSpacing: 0.4,
-                          ),
-                        ),
+                          )),
                       ),
                     ],
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  const Spacer(),
+                  // 12D.4 — title row — capped at 2 lines, clear hierarchy
+                  Text(
+                    course.title,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.2,
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    course.tagline,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.85),
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 10),
+                  // 12D.4 — CTA row at bottom — consistent placement
+                  Row(
                     children: [
+                      Icon(Icons.play_circle_fill_rounded,
+                        size: 14, color: Colors.white.withValues(alpha: 0.9)),
+                      const SizedBox(width: 5),
                       Text(
-                        course.title,
+                        'Tap to generate',
                         style: GoogleFonts.dmSans(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          letterSpacing: -0.2,
-                          height: 1.2,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.9),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        course.tagline,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.88),
-                          height: 1.3,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Icon(Icons.play_circle_fill_rounded,
-                              size: 14, color: Colors.white.withValues(alpha: 0.9)),
-                          const SizedBox(width: 5),
-                          Text(
-                            'Tap to generate',
-                            style: GoogleFonts.dmSans(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white.withValues(alpha: 0.9),
-                            ),
-                          ),
-                        ],
                       ),
                     ],
                   ),
@@ -492,4 +852,3 @@ class _RoadmapCard extends StatelessWidget {
     );
   }
 }
-

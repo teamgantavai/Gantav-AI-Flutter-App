@@ -13,6 +13,8 @@ class UserProfile {
   final int lessonsCompleted;
   final int quizzesPassed;
   final List<bool> weekActivity; // 7 days Mon-Sun
+  /// 12D.1 — total coins earned
+  final int coins;
 
   const UserProfile({
     required this.id,
@@ -24,6 +26,7 @@ class UserProfile {
     this.lessonsCompleted = 0,
     this.quizzesPassed = 0,
     this.weekActivity = const [false, false, false, false, false, false, false],
+    this.coins = 0,
   });
 
   String get initials {
@@ -38,17 +41,24 @@ class UserProfile {
     String? name,
     String? handle,
     String? email,
+    int? coins,
+    int? gantavScore,
+    int? streakDays,
+    int? lessonsCompleted,
+    int? quizzesPassed,
+    List<bool>? weekActivity,
   }) {
     return UserProfile(
       id: id,
       name: name ?? this.name,
       handle: handle ?? this.handle,
       email: email ?? this.email,
-      gantavScore: gantavScore,
-      streakDays: streakDays,
-      lessonsCompleted: lessonsCompleted,
-      quizzesPassed: quizzesPassed,
-      weekActivity: weekActivity,
+      gantavScore: gantavScore ?? this.gantavScore,
+      streakDays: streakDays ?? this.streakDays,
+      lessonsCompleted: lessonsCompleted ?? this.lessonsCompleted,
+      quizzesPassed: quizzesPassed ?? this.quizzesPassed,
+      weekActivity: weekActivity ?? this.weekActivity,
+      coins: coins ?? this.coins,
     );
   }
 
@@ -65,6 +75,7 @@ class UserProfile {
       weekActivity: json['week_activity'] != null
           ? List<bool>.from(json['week_activity'])
           : const [false, false, false, false, false, false, false],
+      coins: json['coins'] ?? 0,
     );
   }
 
@@ -80,6 +91,7 @@ class UserProfile {
       lessonsCompleted: 34,
       quizzesPassed: 28,
       weekActivity: [true, true, true, true, true, false, true],
+      coins: 340,
     );
   }
 
@@ -94,6 +106,7 @@ class UserProfile {
       'lessons_completed': lessonsCompleted,
       'quizzes_passed': quizzesPassed,
       'week_activity': weekActivity,
+      'coins': coins,
     };
   }
 }
@@ -149,9 +162,6 @@ class Course {
         .replaceAll(r'$dream', fallbackName)
         .replaceAll('Complete  Course', 'Complete $fallbackName Course');
 
-    /// Trim verbose AI-generated titles so cards never show "Comp..." ellipsis.
-    /// Keeps whole-word boundaries — "Complete React Bootcamp 2025 Edition" →
-    /// "Complete React Bootcamp 2025" (45 chars max).
     String compactTitle(String s) {
       final clean = sanitize(s).replaceAll(RegExp(r'\s+'), ' ').trim();
       const maxChars = 45;
@@ -163,9 +173,6 @@ class Course {
       return trimmed.endsWith('…') ? trimmed : '$trimmed…';
     }
 
-    /// Cap description so the About box on course detail doesn't explode —
-    /// AI sometimes returns a full paragraph, and trending prompts get
-    /// interpolated into fallback descriptions.
     String compactDescription(String s) {
       final clean = sanitize(s).replaceAll(RegExp(r'\s+'), ' ').trim();
       const maxChars = 200;
@@ -698,6 +705,23 @@ class Lesson {
     this.isCompleted = false,
     this.chapters = const [],
   });
+
+  /// 12D.1 — Coin value derived from video duration.
+  /// <10 min → 10 coins, 10–20 min → 20 coins, >20 min → 30 coins.
+  int get coinValue {
+    final parts = duration.split(':');
+    int totalMinutes = 0;
+    try {
+      if (parts.length == 3) {
+        totalMinutes = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+      } else if (parts.length == 2) {
+        totalMinutes = int.parse(parts[0]);
+      }
+    } catch (_) {}
+    if (totalMinutes >= 20) return 30;
+    if (totalMinutes >= 10) return 20;
+    return 10;
+  }
 
   factory Lesson.fromJson(Map<String, dynamic> json) {
     return Lesson(

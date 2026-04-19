@@ -117,6 +117,21 @@ class AuthService {
     }
   }
 
+  /// Send a Firebase password-reset email. Returns null on success, or a
+  /// user-facing error string on failure. Used by the "Forgot password?"
+  /// flow on the auth screen.
+  static Future<String?> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return _mapFirebaseError(e.code);
+    } catch (e) {
+      debugPrint('Password reset error: $e');
+      return 'Failed to send reset email. Please try again.';
+    }
+  }
+
   /// Send email verification
   static Future<AuthResult> sendEmailVerification() async {
     try {

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
 import '../services/auth_service.dart';
+import 'legal_screen.dart';
 
 /// Auth screen — handles onboarding flow:
 /// 1. Dream input (first screen, no sign-in required)
@@ -120,6 +122,29 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
          _loading = false;
          _error = null;
       });
+    }
+  }
+
+  Future<void> _handleForgotPassword() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
+      setState(() => _emailError = 'Enter your email first, then tap forgot password');
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    final appState = context.read<AppState>();
+    final error = await appState.sendPasswordReset(email);
+    if (!mounted) return;
+    setState(() { _loading = false; });
+    if (error == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Reset link sent to $email. Check your inbox (and spam).'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      setState(() => _error = error);
     }
   }
 
@@ -447,16 +472,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () {
-                    if (_emailCtrl.text.isEmpty) {
-                      setState(() => _emailError = 'Enter your email first');
-                      return;
-                    }
-                    // TODO: Implement forgot password
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Password reset link sent to your email'))
-                    );
-                  },
+                  onPressed: _loading ? null : _handleForgotPassword,
                   child: Text('Forgot password?',
                     style: GoogleFonts.dmSans(
                       fontSize: 13, color: AppColors.violet,
@@ -498,7 +514,16 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 14),
+
+            // T&C + Privacy disclaimer — Play Store mandatory on any screen
+            // that accepts a sign-up. Links open the in-app legal screens.
+            if (_isSignUp)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: _LegalDisclaimer(isDark: isDark),
+              ),
+            if (_isSignUp) const SizedBox(height: 12),
 
             // Toggle sign in / sign up
             Row(
@@ -605,6 +630,68 @@ class _FieldLabel extends StatelessWidget {
 }
 
 
+
+/// "By creating an account you agree to our Terms and Privacy Policy" line
+/// shown below the sign-up button. Tappable links open the in-app legal
+/// screens — Play Store requires that these be accessible before the user
+/// submits the form, not just after.
+class _LegalDisclaimer extends StatelessWidget {
+  final bool isDark;
+  const _LegalDisclaimer({required this.isDark});
+
+  void _open(BuildContext context, LegalDocument doc) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => LegalScreen(document: doc)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final baseStyle = GoogleFonts.dmSans(
+      fontSize: 12,
+      height: 1.5,
+      color: isDark ? AppColors.textLightSub : AppColors.textDarkSub,
+    );
+    final linkStyle = baseStyle.copyWith(
+      color: AppColors.violet,
+      fontWeight: FontWeight.w700,
+      decoration: TextDecoration.underline,
+      decorationColor: AppColors.violet,
+    );
+    return RichText(
+      textAlign: TextAlign.center,
+      text: TextSpan(
+        style: baseStyle,
+        children: [
+          const TextSpan(text: 'By creating an account you agree to our '),
+          TextSpan(
+            text: 'Terms',
+            style: linkStyle,
+            recognizer: _TapRecognizer(() => _open(context, LegalDocument.terms)),
+          ),
+          const TextSpan(text: ' and '),
+          TextSpan(
+            text: 'Privacy Policy',
+            style: linkStyle,
+            recognizer: _TapRecognizer(() => _open(context, LegalDocument.privacy)),
+          ),
+          const TextSpan(text: '.'),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tiny wrapper around [TapGestureRecognizer] so the RichText spans above
+/// stay compact. The recognizer leaks if we don't dispose it — but since
+/// this widget is rebuilt per-frame (no State), Flutter GC handles cleanup
+/// when the widget is removed from the tree.
+class _TapRecognizer extends TapGestureRecognizer {
+  _TapRecognizer(VoidCallback onTap) {
+    this.onTap = onTap;
+  }
+}
 
 class _GantavLogo extends StatelessWidget {
   final double size;
