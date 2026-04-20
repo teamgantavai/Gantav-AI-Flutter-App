@@ -55,7 +55,7 @@ class NotificationService {
         iOS: initializationSettingsIOS,
       );
 
-      await _notificationsPlugin.initialize(initializationSettings);
+      await _notificationsPlugin.initialize(settings: initializationSettings);
       
       // Schedule the 3 daily notifications
       await scheduleDailyNotifications();
@@ -85,11 +85,11 @@ class NotificationService {
     final randomQuote = _motivationalQuotes[Random().nextInt(_motivationalQuotes.length)];
     
     await _notificationsPlugin.zonedSchedule(
-      id,
-      title,
-      randomQuote,
-      _nextInstanceOfTime(hour, minute),
-      const NotificationDetails(
+      id: id,
+      title: title,
+      body: randomQuote,
+      scheduledDate: _nextInstanceOfTime(hour, minute),
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'daily_motivation_channel',
           'Daily Motivation',
@@ -100,8 +100,6 @@ class NotificationService {
         iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
     );
   }
