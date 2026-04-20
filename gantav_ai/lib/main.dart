@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:gantav_ai/theme/app_theme.dart';
@@ -11,6 +12,7 @@ import 'package:gantav_ai/screens/auth_screen.dart';
 import 'package:gantav_ai/screens/onboarding_screen.dart';
 import 'package:gantav_ai/screens/roadmap_generation_screen.dart';
 import 'package:gantav_ai/screens/course_detail_screen.dart';
+import 'package:gantav_ai/screens/splash_screen.dart';
 import 'package:gantav_ai/screens/roadmap_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -19,6 +21,8 @@ import 'package:gantav_ai/widgets/connectivity_wrapper.dart';
 import 'package:gantav_ai/widgets/global_search_sheet.dart';
 import 'package:gantav_ai/services/api_config.dart';
 import 'package:gantav_ai/services/ads_service.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +30,22 @@ void main() async {
   ApiConfig.printStatus();
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+    // Firebase Analytics — enabled on all platforms
+    final analytics = FirebaseAnalytics.instance;
+    await analytics.setAnalyticsCollectionEnabled(true);
+    debugPrint('[Firebase] Analytics initialized');
+
+    // Firebase Crashlytics — only on mobile (not supported on web)
+    if (!kIsWeb) {
+      FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+      // Pass all uncaught asynchronous errors to Crashlytics
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        return true;
+      };
+      debugPrint('[Firebase] Crashlytics initialized');
+    }
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }
@@ -67,8 +87,8 @@ class _AppRouter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AppState>(
       builder: (context, appState, _) {
-        if (appState.isInitialLoading && !appState.isAuthenticated) {
-          return const _SplashScreen();
+        if (appState.isInitialLoading) {
+          return const SplashScreen();
         }
         if (appState.authStatus == AuthStatus.needsOnboarding) {
           return const OnboardingScreen();
@@ -84,38 +104,6 @@ class _AppRouter extends StatelessWidget {
         }
         return const AuthScreen();
       },
-    );
-  }
-}
-
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 96, height: 96,
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : Colors.white,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [BoxShadow(color: AppColors.violet.withValues(alpha: isDark ? 0.3 : 0.1), blurRadius: 40, offset: const Offset(0, 12), spreadRadius: -10)],
-              ),
-              child: Image.asset('assets/images/logo.png'),
-            ),
-            const SizedBox(height: 32),
-            Text('Gantav AI',
-              style: GoogleFonts.dmSans(fontSize: 32, fontWeight: FontWeight.w900, color: isDark ? AppColors.textLight : AppColors.textDark, letterSpacing: -1)),
-          ],
-        ),
-      ),
     );
   }
 }

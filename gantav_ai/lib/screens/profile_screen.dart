@@ -929,10 +929,72 @@ class _GeneratedCoursesTab extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.only(right: 12),
-                  child: Icon(Icons.chevron_right,
-                      size: 18, color: AppColors.textMuted),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textMuted),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  color: isDark ? AppColors.darkSurface2 : AppColors.lightSurface,
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'save':
+                        appState.toggleSaveCourse(course.id);
+                        break;
+                      case 'share':
+                        SharePlus.instance.share(ShareParams(
+                          text: 'Check out "${course.title}" on Gantav AI! 🎯\nhttps://gantavai.com/course/${course.id}',
+                        ));
+                        break;
+                      case 'delete':
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            title: Text('Delete Course?', style: GoogleFonts.dmSans(fontWeight: FontWeight.w700)),
+                            content: Text('This will permanently remove "${course.title}" from your library.',
+                                style: GoogleFonts.dmSans(fontSize: 14, color: AppColors.textMuted)),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  appState.deleteCourse(course.id);
+                                },
+                                child: const Text('Delete', style: TextStyle(color: AppColors.error)),
+                              ),
+                            ],
+                          ),
+                        );
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'save',
+                      child: Row(children: [
+                        Icon(appState.isCourseSaved(course.id) ? Icons.bookmark : Icons.bookmark_border,
+                            size: 18, color: AppColors.violet),
+                        const SizedBox(width: 10),
+                        Text(appState.isCourseSaved(course.id) ? 'Unsave' : 'Save Course',
+                            style: GoogleFonts.dmSans(fontSize: 13)),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'share',
+                      child: Row(children: [
+                        const Icon(Icons.share_outlined, size: 18, color: AppColors.teal),
+                        const SizedBox(width: 10),
+                        Text('Share', style: GoogleFonts.dmSans(fontSize: 13)),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        const Icon(Icons.delete_outline, size: 18, color: AppColors.error),
+                        const SizedBox(width: 10),
+                        Text('Delete', style: GoogleFonts.dmSans(fontSize: 13, color: AppColors.error)),
+                      ]),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1501,6 +1563,7 @@ class _CourseListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.read<AppState>();
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => CourseDetailScreen(course: course))),
@@ -1519,8 +1582,20 @@ class _CourseListTile extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(course.thumbnailUrl,
-                  width: 80, height: 60, fit: BoxFit.cover),
+              child: Image.network(
+                course.thumbnailUrl,
+                width: 80,
+                height: 60,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 80,
+                  height: 60,
+                  color: AppColors.darkSurface2,
+                  child: const Center(
+                      child: Icon(Icons.play_circle_outline,
+                          color: AppColors.textMuted, size: 24)),
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1542,8 +1617,73 @@ class _CourseListTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right,
-                size: 18, color: AppColors.textMuted),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 18, color: AppColors.textMuted),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              color: isDark ? AppColors.darkSurface2 : AppColors.lightSurface,
+              onSelected: (value) {
+                switch (value) {
+                  case 'save':
+                    appState.toggleSaveCourse(course.id);
+                    break;
+                  case 'share':
+                    Share.share(
+                      'Check out "${course.title}" on Gantav AI! 🎯\nhttps://gantavai.com/course/${course.id}',
+                    );
+                    break;
+                  case 'delete':
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        title: Text('Delete Course?', style: GoogleFonts.dmSans(fontWeight: FontWeight.w700)),
+                        content: Text('This will permanently remove "${course.title}" from your library.',
+                            style: GoogleFonts.dmSans(fontSize: 14, color: AppColors.textMuted)),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              appState.deleteCourse(course.id);
+                            },
+                            child: const Text('Delete', style: TextStyle(color: AppColors.error)),
+                          ),
+                        ],
+                      ),
+                    );
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'save',
+                  child: Row(children: [
+                    Icon(appState.isCourseSaved(course.id) ? Icons.bookmark : Icons.bookmark_border,
+                        size: 18, color: AppColors.violet),
+                    const SizedBox(width: 10),
+                    Text(appState.isCourseSaved(course.id) ? 'Unsave' : 'Save Course',
+                        style: GoogleFonts.dmSans(fontSize: 13)),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'share',
+                  child: Row(children: [
+                    const Icon(Icons.share_outlined, size: 18, color: AppColors.teal),
+                    const SizedBox(width: 10),
+                    Text('Share', style: GoogleFonts.dmSans(fontSize: 13)),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(children: [
+                    const Icon(Icons.delete_outline, size: 18, color: AppColors.error),
+                    const SizedBox(width: 10),
+                    Text('Delete', style: GoogleFonts.dmSans(fontSize: 13, color: AppColors.error)),
+                  ]),
+                ),
+              ],
+            ),
           ],
         ),
       ),

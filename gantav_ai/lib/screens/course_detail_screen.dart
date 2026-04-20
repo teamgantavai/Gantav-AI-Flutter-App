@@ -6,6 +6,7 @@ import '../services/app_state.dart';
 import '../services/certificate_service.dart';
 import '../models/models.dart';
 import '../widgets/widgets.dart';
+import 'package:share_plus/share_plus.dart';
 import 'certificate_screen.dart';
 import 'lesson_player_screen.dart';
 
@@ -211,12 +212,20 @@ class CourseDetailScreen extends StatelessWidget {
           icon: const Icon(Icons.more_vert),
           onSelected: (value) async {
             if (value == 'save') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Course saved!')),
-              );
+              await appState.toggleSaveCourse(currentCourse.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(appState.isCourseSaved(currentCourse.id)
+                        ? 'Course saved to Favorites!'
+                        : 'Removed from Favorites'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             } else if (value == 'share') {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Share link copied to clipboard!')),
+              Share.share(
+                'Check out "${currentCourse.title}" on Gantav AI! 🎯\nLearn faster with personalized roadmaps.',
               );
             } else if (value == 'delete') {
               // Confirm delete
@@ -248,23 +257,31 @@ class CourseDetailScreen extends StatelessWidget {
             }
           },
           itemBuilder: (BuildContext context) => [
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'save',
               child: Row(
                 children: [
-                  Icon(Icons.bookmark_border, size: 20),
-                  SizedBox(width: 12),
-                  Text('Save Course'),
+                  Icon(
+                    appState.isCourseSaved(currentCourse.id)
+                        ? Icons.bookmark
+                        : Icons.bookmark_border,
+                    color: AppColors.violet,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(appState.isCourseSaved(currentCourse.id)
+                      ? 'Unsave'
+                      : 'Save Course'),
                 ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'share',
               child: Row(
                 children: [
-                  Icon(Icons.share_outlined, size: 20),
-                  SizedBox(width: 12),
-                  Text('Share Course'),
+                  const Icon(Icons.share_outlined, color: AppColors.teal, size: 18),
+                  const SizedBox(width: 12),
+                  const Text('Share'),
                 ],
               ),
             ),
@@ -272,9 +289,9 @@ class CourseDetailScreen extends StatelessWidget {
               value: 'delete',
               child: Row(
                 children: [
-                  Icon(Icons.delete_outline, size: 20, color: AppColors.error),
-                  SizedBox(width: 12),
-                  Text('Delete', style: TextStyle(color: AppColors.error)),
+                  Icon(Icons.delete_outline, color: AppColors.error, size: 18),
+                  const SizedBox(width: 12),
+                  Text('Delete Course'),
                 ],
               ),
             ),
@@ -958,7 +975,7 @@ class CourseDetailScreen extends StatelessWidget {
     _openModule(context, module, currentCourse);
   }
 
-  static String _formatCount(int count) {
+  String _formatCount(int count) {
     if (count >= 1000) {
       return '${(count / 1000).toStringAsFixed(1)}k';
     }

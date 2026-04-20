@@ -425,6 +425,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _navigateToCourse(BuildContext context, dynamic course) {
+    // Default suggestion courses are just placeholders — tapping them should
+    // take the user to the Explore tab where they can generate a real course.
+    if (course is Course && course.id.startsWith('default_')) {
+      context.read<AppState>().setTabIndex(1);
+      return;
+    }
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => CourseDetailScreen(course: course)));
   }
 }

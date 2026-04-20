@@ -54,7 +54,7 @@ class FirestoreService {
         .set(course.toJson());
   }
 
-  Future<void> deleteActiveCourse(String courseId) async {
+  Future<void> deleteCourse(String courseId) async {
     if (currentUserId == null) return;
     try {
       await _db
@@ -196,6 +196,28 @@ class FirestoreService {
           .timeout(_readTimeout);
       if (doc.exists && doc.data()!.containsKey('starred_lesson_ids')) {
         return List<String>.from(doc.data()!['starred_lesson_ids']);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<void> saveSavedCourseIds(List<String> ids) async {
+    if (currentUserId == null) return;
+    await _db.collection('users').doc(currentUserId).set({
+      'saved_course_ids': ids,
+    }, SetOptions(merge: true));
+  }
+
+  Future<List<String>> getSavedCourseIds() async {
+    if (currentUserId == null) return [];
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(currentUserId)
+          .get()
+          .timeout(_readTimeout);
+      if (doc.exists && doc.data()!.containsKey('saved_course_ids')) {
+        return List<String>.from(doc.data()!['saved_course_ids']);
       }
     } catch (_) {}
     return [];

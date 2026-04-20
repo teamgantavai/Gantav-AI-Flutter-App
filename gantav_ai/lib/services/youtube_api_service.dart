@@ -215,7 +215,7 @@ class YouTubeApiService {
       langQuery,
       maxResults,
       relevanceLanguage: relevanceLang,
-      videoDuration: 'medium',
+      videoDuration: 'any', // Include long tutorials (>20m) too
       publishedAfter: recentCutoff,
       videoDefinition: 'high',
     );
@@ -227,7 +227,7 @@ class YouTubeApiService {
         langQuery,
         maxResults,
         relevanceLanguage: relevanceLang,
-        videoDuration: 'medium',
+        videoDuration: 'any',
         videoDefinition: 'high',
       );
     }
@@ -238,7 +238,7 @@ class YouTubeApiService {
         langQuery,
         maxResults,
         relevanceLanguage: relevanceLang,
-        videoDuration: 'medium',
+        videoDuration: 'any',
       );
     }
     if (videoIds.isEmpty) return [];
@@ -250,7 +250,8 @@ class YouTubeApiService {
     //    belt-and-braces guard against Shorts slipping past the API filter.
     final List<YouTubeVideoStats> filtered = videos.where((v) {
       if (v.isShort(minLongFormSeconds: 90)) return false;
-      return v.viewCount > 3000 && v.engagementRatio > 1.0;
+      // Relaxed filter: high engagement OR decent view count
+      return v.viewCount > 1000 || v.engagementRatio > 0.8;
     }).toList();
 
     filtered.sort((a, b) => b.engagementRatio.compareTo(a.engagementRatio));

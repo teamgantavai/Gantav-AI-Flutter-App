@@ -549,26 +549,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               ],
             ),
 
-            const SizedBox(height: 12),
-
-            // Skip for now
-            Center(
-              child: GestureDetector(
-                onTap: () async {
-                  final appState = context.read<AppState>();
-                  await appState.skipAuth();
-                },
-                child: Text(
-                  'Skip for now →',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13, color: AppColors.textMuted,
-                    decoration: TextDecoration.underline,
-                    decorationColor: AppColors.textMuted,
-                  ),
-                ),
-              ),
-            ),
-
             const SizedBox(height: 40),
           ],
         ),

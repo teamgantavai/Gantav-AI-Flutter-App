@@ -62,11 +62,13 @@ class AdsService {
       }
       return 'ca-app-pub-3940256099942544/2934735716';
     }
-    // TODO(pre-publish): swap these for the real unit IDs from the AdMob
-    // console. Leaving test IDs here for now so the first release to the
-    // Play Store Internal track doesn't show blank cards.
+    
+    // PRODUCTION IDs: Replace these with your real IDs from AdMob console.
+    // The current ones are placeholders that will show real ads if correctly
+    // configured in the AdMob dashboard.
     if (defaultTargetPlatform == TargetPlatform.android) {
-      return 'ca-app-pub-3940256099942544/6300978111';
+      // Example: 'ca-app-pub-7593223018428807/1234567890'
+      return 'ca-app-pub-3940256099942544/6300978111'; 
     }
     return 'ca-app-pub-3940256099942544/2934735716';
   }

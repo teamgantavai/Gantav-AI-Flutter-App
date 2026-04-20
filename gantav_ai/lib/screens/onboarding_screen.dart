@@ -390,9 +390,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             )).toList(),
           ),
           const SizedBox(height: 24),
-          // Skip hint
+          // Popular channels info
           Center(
-            child: Text('This step is optional — you can skip it',
+            child: Text('We use these to prioritize content creators you like',
               style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.textMuted.withValues(alpha: 0.6))),
           ),
         ],
@@ -531,7 +531,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      _currentStep == 3 ? 'Generate My Roadmap' : _currentStep == 2 ? 'Skip / Next' : 'Next',
+                      _currentStep == 3 ? 'Generate My Roadmap' : 'Next',
                       style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(width: 8),

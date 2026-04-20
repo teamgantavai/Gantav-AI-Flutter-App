@@ -10,6 +10,8 @@ Future<int?> showDailyTimeDialog(BuildContext context) async {
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
+    isDismissible: false, // Force explicit choice
+    enableDrag: false,
     builder: (_) => const _DailyTimeSheet(),
   );
 }
@@ -31,73 +33,82 @@ class _DailyTimeSheetState extends State<_DailyTimeSheet> {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1B1B27) : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(100),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(100),
+                    ),
                   ),
-                ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(null),
+                    icon: Icon(Icons.close, color: AppColors.textMuted, size: 20),
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
               Text(
                 'How much time per day?',
                 style: GoogleFonts.dmSans(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
                   color: isDark ? Colors.white : AppColors.textDark,
+                  letterSpacing: -0.5,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                'Your roadmap will be sized to fit this. You can change it later.',
+                'Your roadmap will be sized to fit this daily commitment.',
                 style: GoogleFonts.dmSans(
-                  fontSize: 13,
+                  fontSize: 14,
                   color: isDark ? Colors.white60 : AppColors.textMuted,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Wrap(
-                spacing: 10,
-                runSpacing: 10,
+                spacing: 12,
+                runSpacing: 12,
                 children: _presets.map((m) {
                   final isSel = m == _selected;
                   return GestureDetector(
                     onTap: () => setState(() => _selected = m),
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 12),
+                          horizontal: 20, vertical: 14),
                       decoration: BoxDecoration(
                         color: isSel
                             ? AppColors.violet
                             : (isDark
-                                ? Colors.white.withValues(alpha: 0.06)
+                                ? Colors.white.withValues(alpha: 0.05)
                                 : Colors.black.withValues(alpha: 0.04)),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isSel
                               ? AppColors.violet
-                              : Colors.transparent,
+                              : (isDark ? Colors.white10 : Colors.transparent),
                           width: 1.5,
                         ),
                       ),
                       child: Text(
                         '$m min',
                         style: GoogleFonts.dmSans(
-                          fontSize: 14,
-                          fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                          fontSize: 15,
+                          fontWeight: isSel ? FontWeight.w700 : FontWeight.w600,
                           color: isSel
                               ? Colors.white
                               : (isDark ? Colors.white : AppColors.textDark),
@@ -107,34 +118,26 @@ class _DailyTimeSheetState extends State<_DailyTimeSheet> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
+                height: 56,
                 child: ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(_selected),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.violet,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
                   child: Text(
                     'Build my roadmap',
                     style: GoogleFonts.dmSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(0),
-                child: Text(
-                  'Skip — just create the course',
-                  style: GoogleFonts.dmSans(
-                    color: isDark ? Colors.white54 : AppColors.textMuted,
                   ),
                 ),
               ),
@@ -145,3 +148,4 @@ class _DailyTimeSheetState extends State<_DailyTimeSheet> {
     );
   }
 }
+

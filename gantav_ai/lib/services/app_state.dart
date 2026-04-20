@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -11,6 +13,8 @@ import '../services/course_roadmap_builder.dart';
 import '../services/gemini_service.dart';
 import '../models/trending_data.dart';
 import 'dart:math' as math;
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 enum AuthStatus {
   unauthenticated,
@@ -36,6 +40,7 @@ class StreakBumpEvent {
 }
 
 class AppState extends ChangeNotifier {
+  final _analytics = FirebaseAnalytics.instance;
   ThemeMode _themeMode = ThemeMode.dark;
   UserProfile? _user;
   String? _profileImagePath;
@@ -63,6 +68,7 @@ class AppState extends ChangeNotifier {
   bool _needsOnboarding = false;
   bool _isGeneratingRoadmap = false;
   final Set<String> _starredLessonIds = {};
+  final Set<String> _savedCourseIds = {};
 
   // ── Quiz Score Tracking ──────────────────────────────────────────────
   /// Maps courseId → best quiz score (0.0 to 1.0). Persisted locally.
@@ -201,11 +207,61 @@ class AppState extends ChangeNotifier {
   }
 
   List<Course> get favoriteCourses {
-    return courses.where((c) => (c.rating >= 4.9 && c.isVerified)).toList();
+    return courses.where((c) => _savedCourseIds.contains(c.id)).toList();
   }
 
-  List<Course> get suggestedCourses =>
-      courses.where((c) => !c.isInProgress).toList();
+  bool isCourseSaved(String courseId) => _savedCourseIds.contains(courseId);
+
+  Future<void> toggleSaveCourse(String courseId) async {
+    if (_savedCourseIds.contains(courseId)) {
+      _savedCourseIds.remove(courseId);
+    } else {
+      _savedCourseIds.add(courseId);
+    }
+    await _saveLocalSavedCourses();
+    await _firestoreService.saveSavedCourseIds(_savedCourseIds.toList());
+    notifyListeners();
+  }
+
+  /// Default suggestion data for first-time users who have no courses yet.
+  static final List<Course> _defaultSuggestions = [
+    Course(
+      id: 'default_1', title: 'Python for Beginners', description: 'Start coding with Python',
+      category: 'Programming', thumbnailUrl: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=500&q=80', rating: 4.8, learnerCount: 12400,
+      totalLessons: 9, skills: ['Variables', 'Functions', 'OOP'], modules: [],
+    ),
+    Course(
+      id: 'default_2', title: 'Web Development Bootcamp', description: 'HTML, CSS, JS',
+      category: 'Web Development', thumbnailUrl: 'https://images.unsplash.com/photo-1547658719-da2b51169166?w=500&q=80', rating: 4.7, learnerCount: 9800,
+      totalLessons: 12, skills: ['HTML', 'CSS', 'JavaScript'], modules: [],
+    ),
+    Course(
+      id: 'default_3', title: 'Flutter App Development', description: 'Build cross-platform apps',
+      category: 'Mobile Development', thumbnailUrl: 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=500&q=80', rating: 4.9, learnerCount: 7600,
+      totalLessons: 9, skills: ['Dart', 'Widgets', 'State'], modules: [],
+    ),
+    Course(
+      id: 'default_4', title: 'Machine Learning Basics', description: 'Learn ML fundamentals',
+      category: 'AI & ML', thumbnailUrl: 'https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=500&q=80', rating: 4.8, learnerCount: 11200,
+      totalLessons: 9, skills: ['NumPy', 'Pandas', 'Scikit-learn'], modules: [],
+    ),
+    Course(
+      id: 'default_5', title: 'Data Science with Python', description: 'Analyze and visualize data',
+      category: 'Data Science', thumbnailUrl: 'https://images.unsplash.com/photo-1551288049-bbbda536ad4a?w=500&q=80', rating: 4.7, learnerCount: 8500,
+      totalLessons: 9, skills: ['Pandas', 'Matplotlib', 'Stats'], modules: [],
+    ),
+    Course(
+      id: 'default_6', title: 'React & Node.js Fullstack', description: 'Full-stack JavaScript',
+      category: 'Web Development', thumbnailUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=500&q=80', rating: 4.8, learnerCount: 10300,
+      totalLessons: 12, skills: ['React', 'Node.js', 'MongoDB'], modules: [],
+    ),
+  ];
+
+  List<Course> get suggestedCourses {
+    final real = courses.where((c) => !c.isInProgress).toList();
+    if (real.isEmpty) return _defaultSuggestions;
+    return real;
+  }
   List<PulseEvent> get pulseEvents => _pulseEvents;
   bool get isLoading => _isLoading;
   bool get isInitialLoading => _isInitialLoading;
@@ -271,6 +327,9 @@ class AppState extends ChangeNotifier {
     _isInitialLoading = true;
     notifyListeners();
 
+    // Start a timer to ensure splash screen shows for at least 2 seconds
+    final splashFuture = Future.delayed(const Duration(milliseconds: 2200));
+
     await _loadThemePreference();
     await _loadAuthStatus();
     await _loadDream();
@@ -278,6 +337,7 @@ class AppState extends ChangeNotifier {
     await _loadLocalPreferences();
     await _loadLocalRoadmaps();
     await _loadStarredLessons();
+    await _loadSavedCourses();
     await _loadQuizScores();
     await _loadFlipData();
 
@@ -292,9 +352,13 @@ class AppState extends ChangeNotifier {
       await refresh();
     } else {
       _isLoading = false;
-      _isInitialLoading = false;
-      notifyListeners();
     }
+
+    // Wait for the splash timer to complete before hiding the splash screen
+    await splashFuture;
+    
+    _isInitialLoading = false;
+    notifyListeners();
 
     // Surface stale API-key warnings — if a provider's key returned 401 on
     // a previous session, nudge the user to regenerate it. Fire-and-forget
@@ -352,6 +416,12 @@ class AppState extends ChangeNotifier {
     if (firestoreStarred.isNotEmpty) {
       _starredLessonIds.addAll(firestoreStarred);
       await _saveLocalStarredLessons();
+    }
+
+    final firestoreSaved = await _firestoreService.getSavedCourseIds();
+    if (firestoreSaved.isNotEmpty) {
+      _savedCourseIds.addAll(firestoreSaved);
+      await _saveLocalSavedCourses();
     }
   }
 
@@ -897,6 +967,13 @@ class AppState extends ChangeNotifier {
         final minutes = dailyMinutes ?? _preferences?.dailyStudyMinutes ?? 30;
         await buildRoadmapForCourse(course, minutes);
         await _incrementDailyGenerations();
+        
+        _analytics.logEvent(name: 'course_generated', parameters: {
+          'topic': promptHint,
+          'category': course.category,
+          'lesson_count': course.totalLessons,
+        });
+        
         showNotification('Success: Your course "${course.title}" is ready!');
       } else {
         showNotification(
@@ -909,6 +986,22 @@ class AppState extends ChangeNotifier {
       _isGeneratingCourse = false;
       notifyListeners();
     }
+  }
+
+  /// Remove a course from the user's library. Frees up a slot for new
+  /// generations.
+  Future<void> deleteCourse(String courseId) async {
+    _generatedCourses.removeWhere((c) => c.id == courseId);
+    _courses.removeWhere((c) => c.id == courseId);
+    _savedCourseIds.remove(courseId);
+    
+    await _saveLocalCourses();
+    await _saveLocalSavedCourses();
+    await _firestoreService.deleteCourse(courseId);
+    
+    _analytics.logEvent(name: 'course_deleted', parameters: {'course_id': courseId});
+    
+    notifyListeners();
   }
 
   Future<void> generateNextCourseBatch() async {
@@ -1097,27 +1190,6 @@ class AppState extends ChangeNotifier {
         data.forEach((k, v) => _quizScores[k] = (v as num).toDouble());
       }
     } catch (_) {}
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // COURSE DELETE
-  // ═══════════════════════════════════════════════════════════════════════
-
-  /// Delete a generated course, freeing up a slot toward the 5-course limit.
-  Future<void> deleteCourse(String courseId) async {
-    _generatedCourses.removeWhere((c) => c.id == courseId);
-    _quizScores.remove(courseId);
-    _flipCounts.remove(courseId);
-    _flipExcludedChannels.remove(courseId);
-    await _saveLocalCourses();
-    await _saveQuizScores();
-    await _saveFlipData();
-    _firestoreService.deleteActiveCourse(courseId).catchError((_) {});
-    // If the deleted course was the dream course, clear the dream
-    if (_dream?.generatedCourseId == courseId) {
-      await clearDream();
-    }
-    notifyListeners();
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1333,13 +1405,35 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateProfileImage(String path) async {
-    _profileImagePath = path;
-    notifyListeners();
+  Future<void> updateProfileImage(String path) async {
     try {
+      final File sourceFile = File(path);
+      if (!await sourceFile.exists()) return;
+
+      final directory = await getApplicationDocumentsDirectory();
+      final String fileName = 'profile_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final String localPath = '${directory.path}/$fileName';
+
+      // Remove old image if it exists to save space
+      if (_profileImagePath != null) {
+        final oldFile = File(_profileImagePath!);
+        if (await oldFile.exists()) {
+          await oldFile.delete();
+        }
+      }
+
+      await sourceFile.copy(localPath);
+      _profileImagePath = localPath;
+      notifyListeners();
+
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('profile_image_path', path);
-    } catch (_) {}
+      await prefs.setString('profile_image_path', localPath);
+    } catch (e) {
+      debugPrint('Error saving profile image locally: $e');
+      // Fallback: just use the original path if copy fails
+      _profileImagePath = path;
+      notifyListeners();
+    }
   }
 
   void updateUserProfile({required String name, required String handle}) {
@@ -1554,4 +1648,17 @@ class AppState extends ChangeNotifier {
   }
 
   bool isLessonStarred(String lessonId) => _starredLessonIds.contains(lessonId);
+
+  // ── Saved Courses ─────────────────────────────────────────────────────
+
+  Future<void> _loadSavedCourses() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('saved_courses') ?? [];
+    _savedCourseIds.addAll(list);
+  }
+
+  Future<void> _saveLocalSavedCourses() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('saved_courses', _savedCourseIds.toList());
+  }
 }
