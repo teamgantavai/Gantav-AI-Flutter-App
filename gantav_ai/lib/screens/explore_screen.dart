@@ -78,9 +78,10 @@ class _ExploreScreenState extends State<ExploreScreen>
   Future<void> _generateCourseFromSubCategory(SubCategory sub) async {
     final appState = context.read<AppState>();
     final dailyMinutes = await showDailyTimeDialog(context);
+    if (dailyMinutes == null) return;
     if (!mounted) return;
     appState.generateCourseInBackgroundFromCategory(sub.promptHint,
-        dailyMinutes: dailyMinutes);
+        dailyMinutes: dailyMinutes == 0 ? null : dailyMinutes);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -116,10 +117,11 @@ class _ExploreScreenState extends State<ExploreScreen>
           final prompt = _buildCoursePrompt(courseName, language, channel);
           if (!context.mounted) return;
           final dailyMinutes = await showDailyTimeDialog(context);
+          if (dailyMinutes == null) return;
           if (!context.mounted) return;
           context.read<AppState>().generateCourseInBackgroundFromCategory(
               prompt,
-              dailyMinutes: dailyMinutes);
+              dailyMinutes: dailyMinutes == 0 ? null : dailyMinutes);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
@@ -414,6 +416,10 @@ class _ExploreScreenState extends State<ExploreScreen>
   }
 
   Widget _buildCategoryGrid(bool isDark) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final isWide = screenWidth > 900;
+
     // Seekho-style attractive gradient cards. We combine hand-curated
     // trending topics (YouTuber / earn money / IELTS…) at the top for
     // maximum conversion, then the full catalog categories below.
@@ -440,8 +446,8 @@ class _ExploreScreenState extends State<ExploreScreen>
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: isWide ? 4 : (isLandscape ? 3 : 2),
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
               // 0.95 (slightly taller than wide) gives the icon row + 2-line
@@ -488,11 +494,11 @@ class _ExploreScreenState extends State<ExploreScreen>
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
           sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: isWide ? 4 : (isLandscape ? 3 : 2),
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1.35,
+              childAspectRatio: isWide ? 1.5 : (isLandscape ? 1.4 : 1.35),
             ),
             delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -517,10 +523,11 @@ class _ExploreScreenState extends State<ExploreScreen>
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
     final dailyMinutes = await showDailyTimeDialog(context);
+    if (dailyMinutes == null) return;
     if (!mounted) return;
     appState.generateCourseInBackgroundFromCategory(
         appState.pickTrendingPrompt(course),
-        dailyMinutes: dailyMinutes,
+        dailyMinutes: dailyMinutes == 0 ? null : dailyMinutes,
         allowCurated: false);
     messenger.showSnackBar(
       SnackBar(
@@ -728,6 +735,7 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
     final viewInsets = MediaQuery.of(context).viewInsets;
+    final appState = Provider.of<AppState>(context);
 
     return Container(
       decoration: BoxDecoration(
@@ -806,7 +814,13 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Text('Quick picks:', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.3)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Quick picks:', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.3)),
+                        Text('✨ ${appState.dailyGenerationsLeft} generations left today', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet, letterSpacing: 0.3)),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6, runSpacing: 6,

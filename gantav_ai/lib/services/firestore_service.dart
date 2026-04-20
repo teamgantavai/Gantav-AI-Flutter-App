@@ -54,6 +54,21 @@ class FirestoreService {
         .set(course.toJson());
   }
 
+  Future<void> deleteActiveCourse(String courseId) async {
+    if (currentUserId == null) return;
+    try {
+      await _db
+          .collection('users')
+          .doc(currentUserId)
+          .collection('courses')
+          .doc(courseId)
+          .delete();
+    } catch (e) {
+      // ignore: avoid_print
+      print('[Firestore] deleteActiveCourse failed: $e');
+    }
+  }
+
   Future<List<Course>> getActiveCourses() async {
     if (currentUserId == null) return [];
     try {

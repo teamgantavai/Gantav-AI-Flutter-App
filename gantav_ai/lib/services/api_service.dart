@@ -110,10 +110,20 @@ class ApiService {
   static int _countLessons(Course c) =>
       c.modules.fold(0, (sum, m) => sum + m.lessons.length);
 
+  static String _cleanSearchTopic(String dream) {
+    var s = dream.trim();
+    final ctxIdx = s.toLowerCase().indexOf('. context:');
+    if (ctxIdx > 0) s = s.substring(0, ctxIdx).trim();
+    
+    // We keep it a bit raw, but remove the ". Context:" rotator wrapper
+    return s.isEmpty ? 'Programming' : s;
+  }
+
   static Future<Course?> suggestPath(
     String dream, {
     String language = 'English',
     bool allowCurated = true,
+    List<String> excludedVideoIds = const [],
   }) async {
     try {
       // 1. Verified curated courses — only when the caller opts in. Trending
@@ -127,6 +137,8 @@ class ApiService {
         }
       }
 
+      final searchTopic = _cleanSearchTopic(dream);
+
       // 2. PLAYLIST-FIRST: try to find a single-channel YouTube playlist that
       // covers the whole topic. This gives consistent teaching style and
       // avoids the "mixed random videos from 9 channels" problem.
@@ -135,13 +147,19 @@ class ApiService {
       // (Shorts-only, private videos, fewer than 3 usable items) doesn't
       // force a fallback to random individual videos.
       final playlists = await YouTubeApiService.findTopPlaylists(
-        topic: dream,
+        topic: searchTopic,
         language: language,
         max: 3,
       );
       for (final playlist in playlists) {
         final videos =
             await YouTubeApiService.fetchPlaylistVideos(playlist.id);
+
+        if (excludedVideoIds.isNotEmpty) {
+          final overlap = videos.where((v) => excludedVideoIds.contains(v.id)).length;
+          if (overlap > 0) continue; // Skip playlist if it contains excluded videos
+        }
+
         if (videos.length >= _minLessonsPerCourse) {
           return _buildCourseFromPlaylist(dream, playlist, videos);
         }
@@ -149,9 +167,12 @@ class ApiService {
 
       // 3. If no playlist works, fall back to AI-stitched individual videos.
       final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(
-        topic: dream,
+        topic: searchTopic,
         language: language,
       );
+      if (excludedVideoIds.isNotEmpty) {
+        preFilteredVideos.removeWhere((v) => excludedVideoIds.contains(v.id));
+      }
       final course = await GeminiService.generateLearningPath(
         dream: dream,
         preFilteredVideos: preFilteredVideos,

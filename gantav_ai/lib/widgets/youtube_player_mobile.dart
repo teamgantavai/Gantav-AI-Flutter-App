@@ -43,19 +43,17 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
 
   // Gesture States
   bool _isLongPressing = false;
-  bool _showPlayPauseOverlay = false;
   bool _showSeekForward = false;
   bool _showSeekBackward = false;
 
   Timer? _overlayTimer;
   Timer? _seekTimer;
 
-  late AnimationController _playPauseController;
-  late Animation<double> _playPauseScaleAnimation;
-
-  static const List<double> _speedOptions = [
-    0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0
-  ];
+  // Custom gesture tracking
+  int _lastTapTime = 0;
+  Offset _lastTapPosition = Offset.zero;
+  Timer? _longPressTimer;
+  bool _isLongPressActive = false;
 
   String _getSafeVideoId(String input) {
     if (input.isEmpty) return '';
@@ -72,14 +70,6 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
   @override
   void initState() {
     super.initState();
-
-    _playPauseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _playPauseScaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _playPauseController, curve: Curves.easeOut),
-    );
 
     final safeId = _getSafeVideoId(widget.videoId);
     _controller = YoutubePlayerController(
@@ -112,7 +102,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
   void dispose() {
     _overlayTimer?.cancel();
     _seekTimer?.cancel();
-    _playPauseController.dispose();
+    _longPressTimer?.cancel();
     _controller.removeListener(_onControllerUpdate);
     _controller.dispose();
     super.dispose();
@@ -163,33 +153,48 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
 
   // ── Gestures ─────────────────────────────────────────────────────────
 
-  void _togglePlayPause() {
-    final isPlaying = _controller.value.isPlaying;
-    if (isPlaying) {
-      _controller.pause();
+  void _handlePointerDown(PointerDownEvent event) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final timeDiff = now - _lastTapTime;
+    final dist = (event.localPosition - _lastTapPosition).distance;
+
+    if (timeDiff < 300 && dist < 40) {
+      // Double tap recognized
+      _longPressTimer?.cancel();
+      _handleDoubleTapManual(event.localPosition);
+      _lastTapTime = 0;
     } else {
-      _controller.play();
+      // Single tap start -> start long press timer
+      _lastTapTime = now;
+      _lastTapPosition = event.localPosition;
+      
+      _longPressTimer?.cancel();
+      _longPressTimer = Timer(const Duration(milliseconds: 500), () {
+        _isLongPressActive = true;
+        _speedBeforeLongPress = _currentSpeed;
+        setPlaybackRate(2.0);
+        if (mounted) setState(() => _isLongPressing = true);
+        HapticFeedback.heavyImpact();
+      });
     }
-
-    setState(() => _showPlayPauseOverlay = true);
-    _playPauseController.forward().then((_) => _playPauseController.reverse());
-
-    _overlayTimer?.cancel();
-    _overlayTimer = Timer(const Duration(milliseconds: 650), () {
-      if (mounted) setState(() => _showPlayPauseOverlay = false);
-    });
-
-    HapticFeedback.lightImpact();
   }
 
-  /// 12D.7 — Double-tap seek. Uses [details.localPosition] relative to the
-  /// widget so the hit-test is always correct on real devices regardless of
-  /// where the player widget is positioned on screen.
-  void _handleDoubleTap(TapDownDetails details) {
-    // We need the rendered width of this widget to decide left vs right.
+  void _handlePointerUp(PointerUpEvent event) {
+    _longPressTimer?.cancel();
+    if (_isLongPressActive) {
+      _isLongPressActive = false;
+      setPlaybackRate(_speedBeforeLongPress);
+      if (mounted) setState(() => _isLongPressing = false);
+      HapticFeedback.selectionClick();
+    }
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) => _handlePointerUp(PointerUpEvent(position: event.position));
+
+  void _handleDoubleTapManual(Offset localPosition) {
     final renderBox = context.findRenderObject() as RenderBox?;
     final width = renderBox?.size.width ?? MediaQuery.of(context).size.width;
-    final isRightSide = details.localPosition.dx > width / 2;
+    final isRightSide = localPosition.dx > width / 2;
 
     if (isRightSide) {
       _seekRelative(10);
@@ -215,24 +220,8 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
   void _seekRelative(int seconds) {
     final current = _controller.value.position.inSeconds;
     final duration = _controller.metadata.duration.inSeconds;
-    // Clamp to [0, duration]. Duration can be 0 while buffering; allow seek anyway.
     final newPos = (current + seconds).clamp(0, duration > 0 ? duration : 999999);
     _controller.seekTo(Duration(seconds: newPos));
-  }
-
-  /// 12D.7 — Long-press start: save current speed, then set 2×.
-  void _handleLongPressStart(LongPressStartDetails details) {
-    _speedBeforeLongPress = _currentSpeed;
-    setPlaybackRate(2.0);
-    setState(() => _isLongPressing = true);
-    HapticFeedback.heavyImpact();
-  }
-
-  /// 12D.7 — Long-press end: restore speed to what it was before the press.
-  void _handleLongPressEnd(LongPressEndDetails details) {
-    setPlaybackRate(_speedBeforeLongPress);
-    setState(() => _isLongPressing = false);
-    HapticFeedback.selectionClick();
   }
 
   // ── Build ─────────────────────────────────────────────────────────────
@@ -282,42 +271,30 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
         ],
       ),
       builder: (context, player) {
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _togglePlayPause,
-          onDoubleTapDown: _handleDoubleTap,
-          onLongPressStart: _handleLongPressStart,
-          onLongPressEnd: _handleLongPressEnd,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              player,
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            player,
 
-              // ── Double-tap seek animations ──────────────────────────
-              if (_showSeekForward) _buildSeekOverlay(isForward: true),
-              if (_showSeekBackward) _buildSeekOverlay(isForward: false),
+            // Gesture Overlay for Double Tap & Long Press
+            // Positioned over the top part of the player to avoid bottom controls
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 60,
+              child: Listener(
+                onPointerDown: _handlePointerDown,
+                onPointerUp: _handlePointerUp,
+                onPointerCancel: _handlePointerCancel,
+                behavior: HitTestBehavior.translucent,
+                child: Container(color: Colors.transparent),
+              ),
+            ),
 
-              // ── Play/Pause flash ────────────────────────────────────
-              if (_showPlayPauseOverlay)
-                Center(
-                  child: ScaleTransition(
-                    scale: _playPauseScaleAnimation,
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _controller.value.isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: Colors.white,
-                        size: 72,
-                      ),
-                    ),
-                  ),
-                ),
+            // ── Double-tap seek animations ──────────────────────────
+            if (_showSeekForward) _buildSeekOverlay(isForward: true),
+            if (_showSeekBackward) _buildSeekOverlay(isForward: false),
 
               // ── Long-press 2× indicator ─────────────────────────────
               if (_isLongPressing)
@@ -357,8 +334,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
                   ),
                 ),
             ],
-          ),
-        );
+          );
       },
     );
   }

@@ -116,7 +116,7 @@ class GeminiService {
     return true;
   }
 
-  static void _setRateLimited(AIProvider provider, {int minutes = 2}) {
+  static void _setRateLimited(AIProvider provider, {int minutes = 15}) {
     debugPrint('[AI] ⚠ ${provider.name} rate limited. Cooling down $minutes min.');
     _rateLimitExpirations[provider] =
         DateTime.now().add(Duration(minutes: minutes));
@@ -337,7 +337,7 @@ class GeminiService {
     final moduleTopics = _generateModuleTopics(courseName);
     final thumbUrl = firstVideoId.isNotEmpty
         ? 'https://img.youtube.com/vi/$firstVideoId/maxresdefault.jpg'
-        : 'https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg';
+        : '';
 
     final prompt =
         'Create a complete learning course for: "$courseName"\n'
@@ -408,20 +408,22 @@ class GeminiService {
   }
 
   static String _extractCourseName(String dream) {
-    return dream
+    var s = dream.trim();
+    // Strip ". Context: <long blob>" appended by trending prompt rotator
+    final ctxIdx = s.toLowerCase().indexOf('. context:');
+    if (ctxIdx > 0) s = s.substring(0, ctxIdx).trim();
+    // Strip generation metadata
+    s = s
         .replaceAll(RegExp(r'I want to learn:\s*', caseSensitive: false), '')
         .replaceAll(RegExp(r'in \w+ language.*', caseSensitive: false), '')
         .replaceAll(RegExp(r'taught by.*', caseSensitive: false), '')
         .replaceAll(RegExp(r'with videos from.*', caseSensitive: false), '')
-        .trim()
-        .isNotEmpty
-        ? dream
-            .replaceAll(
-                RegExp(r'I want to learn:\s*', caseSensitive: false), '')
-            .replaceAll(
-                RegExp(r'in \w+ language.*', caseSensitive: false), '')
-            .trim()
-        : 'Complete Programming Course';
+        .trim();
+    if (s.isEmpty) return 'Complete Programming Course';
+    // Cap at ~8 words for a clean title
+    final words = s.split(RegExp(r'\s+'));
+    if (words.length > 8) s = words.take(8).join(' ');
+    return s;
   }
 
   static String _extractCategory(String dream) {
@@ -654,10 +656,11 @@ class GeminiService {
     switch (task) {
       case AITask.chat:
       case AITask.quiz:
-        // Gemini ONLY — uses geminiApiKey2 via ApiConfig.geminiKeyForTask.
-        // No cross-provider fallback by design.
+        // Primary: Gemini (secondary key) — keeps primary key for course gen.
+        // Fallback: Groq — so quiz/doubt still work when Gemini is exhausted.
         if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
-        return available;
+        if (ApiConfig.hasGroq) available.add(AIProvider.groq);
+        break;
 
       case AITask.recommendations:
       // Recommendations: OpenRouter → Groq → HuggingFace → Gemini
@@ -676,7 +679,7 @@ class GeminiService {
         break;
     }
 
-    // If none available, add all that exist — but NEVER for chat/quiz.
+    // If none available, add all that exist as last resort.
     if (available.isEmpty) {
       if (ApiConfig.hasGemini) available.add(AIProvider.gemini);
       if (ApiConfig.hasGroq) available.add(AIProvider.groq);
@@ -702,13 +705,13 @@ class GeminiService {
       if (errorString.contains('429') || errorString.contains('Rate limit')) {
         // Don't retry — the provider is rate-limited. Cool it down and let
         // the fallback chain pick the next provider.
-        _setRateLimited(provider, minutes: 4);
+        _setRateLimited(provider, minutes: 15);
         rethrow;
       } else if (errorString.contains('401') ||
           errorString.contains('403') ||
           errorString.contains('Unauthorized')) {
         debugPrint('[AI] ✗ ${provider.name} auth failure (401/403) — key is dead, regenerate it');
-        _setRateLimited(provider, minutes: 60);
+        _setRateLimited(provider, minutes: 1440); // 24 hours — key must be rotated
         _markKeyDead(provider);
         rethrow;
       } else {

@@ -97,6 +97,8 @@ class CourseDetailScreen extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (!currentCourse.isVerified)
+                    _buildCourseActions(context, currentCourse),
                 ],
               ),
             ),
@@ -194,6 +196,91 @@ class CourseDetailScreen extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
+      actions: [
+        if (!currentCourse.isVerified)
+          _buildCourseActions(context, currentCourse),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  Widget _buildCourseActions(BuildContext context, Course currentCourse) {
+    return Consumer<AppState>(
+      builder: (context, appState, child) {
+        return PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert),
+          onSelected: (value) async {
+            if (value == 'save') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Course saved!')),
+              );
+            } else if (value == 'share') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Share link copied to clipboard!')),
+              );
+            } else if (value == 'delete') {
+              // Confirm delete
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Delete Course?'),
+                  content: const Text(
+                    'This will permanently remove the course and free up a slot in your library.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true && context.mounted) {
+                appState.deleteCourse(currentCourse.id);
+                Navigator.of(context).pop(); // Go back to home
+              }
+            }
+          },
+          itemBuilder: (BuildContext context) => [
+            const PopupMenuItem(
+              value: 'save',
+              child: Row(
+                children: [
+                  Icon(Icons.bookmark_border, size: 20),
+                  SizedBox(width: 12),
+                  Text('Save Course'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'share',
+              child: Row(
+                children: [
+                  Icon(Icons.share_outlined, size: 20),
+                  SizedBox(width: 12),
+                  Text('Share Course'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline, size: 20, color: AppColors.error),
+                  SizedBox(width: 12),
+                  Text('Delete', style: TextStyle(color: AppColors.error)),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -604,9 +691,15 @@ class CourseDetailScreen extends StatelessWidget {
     }
     final isComplete = currentCourse.totalLessons > 0 &&
         currentCourse.completedLessons >= currentCourse.totalLessons;
+    
+    final appState = context.watch<AppState>();
+    final isUnlocked = appState.isCertificateUnlocked(currentCourse.id);
+    
     final subtitle = isComplete
-        ? 'All lessons complete — claim your certificate.'
-        : 'Finish all lessons to unlock your verified certificate.';
+        ? (isUnlocked 
+            ? 'You\'ve passed the quizzes! Claim your certificate.' 
+            : 'Pass the quizzes (60%+) to unlock your certificate.')
+        : 'Finish all lessons and quizzes to unlock your verified certificate.';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
@@ -701,6 +794,9 @@ class CourseDetailScreen extends StatelessWidget {
     // Certificate eligible: any completed course (not exam prep categories)
     final certEligible =
         isComplete && CertificateService.isEligible(currentCourse.category);
+        
+    final appState = context.watch<AppState>();
+    final isUnlocked = appState.isCertificateUnlocked(currentCourse.id);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
@@ -739,12 +835,20 @@ class CourseDetailScreen extends StatelessWidget {
                   child: SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(
-                      onPressed: () =>
-                          _getCertificate(context, currentCourse),
-                      icon: const Icon(
-                          Icons.workspace_premium_rounded),
+                      onPressed: isUnlocked 
+                          ? () => _getCertificate(context, currentCourse)
+                          : () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Score 60% or higher on the quizzes to unlock!'),
+                                  backgroundColor: AppColors.violet,
+                                )
+                              );
+                            },
+                      icon: Icon(
+                          isUnlocked ? Icons.workspace_premium_rounded : Icons.lock_outline),
                       label: Text(
-                        'Get Certificate',
+                        isUnlocked ? 'Get Certificate' : 'Locked',
                         style: GoogleFonts.dmSans(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,

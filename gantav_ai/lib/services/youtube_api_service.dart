@@ -113,15 +113,84 @@ class YouTubeApiService {
   static const String _baseUrl = 'https://www.googleapis.com/youtube/v3';
   static const int _cacheDurationDays = 7;
 
+  // ── YouTube triple-key rotation ───────────────────────────────────────────
+  // Three YouTube keys rotate automatically. When one hits 403 (quota
+  // exhausted), we switch to the next. Only when ALL are exhausted do we
+  // stop hitting the API entirely.
+  static DateTime? _ytKey1Expiry;
+  static DateTime? _ytKey2Expiry;
+  static DateTime? _ytKey3Expiry;
+
+  static bool _isKey1Exhausted() {
+    if (_ytKey1Expiry == null) return false;
+    if (DateTime.now().isAfter(_ytKey1Expiry!)) {
+      _ytKey1Expiry = null;
+      return false;
+    }
+    return true;
+  }
+
+  static bool _isKey2Exhausted() {
+    if (_ytKey2Expiry == null) return false;
+    if (DateTime.now().isAfter(_ytKey2Expiry!)) {
+      _ytKey2Expiry = null;
+      return false;
+    }
+    return true;
+  }
+
+  static bool _isKey3Exhausted() {
+    if (_ytKey3Expiry == null) return false;
+    if (DateTime.now().isAfter(_ytKey3Expiry!)) {
+      _ytKey3Expiry = null;
+      return false;
+    }
+    return true;
+  }
+
+  /// Returns the currently usable YouTube API key, or empty string if all
+  /// keys are exhausted.
+  static String get _activeYoutubeKey {
+    if (ApiConfig.hasYoutube && !_isKey1Exhausted()) return ApiConfig.youtubeApiKey;
+    if (ApiConfig.hasYoutube2 && !_isKey2Exhausted()) return ApiConfig.youtubeApiKey2;
+    if (ApiConfig.hasYoutube3 && !_isKey3Exhausted()) return ApiConfig.youtubeApiKey3;
+    
+    // All exhausted — try key 1 again if others don't exist
+    if (ApiConfig.hasYoutube && !_isKey1Exhausted()) return ApiConfig.youtubeApiKey;
+    return '';
+  }
+
+  static bool get _isYoutubeQuotaExhausted => _activeYoutubeKey.isEmpty;
+
+  static void _markYoutubeKeyExhausted(String usedKey) {
+    if (usedKey == ApiConfig.youtubeApiKey) {
+      debugPrint('[YouTube] ⚠ Key 1 quota exhausted (403). Switching to key 2.');
+      _ytKey1Expiry = DateTime.now().add(const Duration(hours: 24));
+    } else if (usedKey == ApiConfig.youtubeApiKey2) {
+      debugPrint('[YouTube] ⚠ Key 2 quota exhausted (403). Switching to key 3.');
+      _ytKey2Expiry = DateTime.now().add(const Duration(hours: 24));
+    } else if (usedKey == ApiConfig.youtubeApiKey3) {
+      debugPrint('[YouTube] ⚠ Key 3 quota exhausted (403). Switching to key 1.');
+      _ytKey3Expiry = DateTime.now().add(const Duration(hours: 24));
+    }
+    if (_isYoutubeQuotaExhausted) {
+      debugPrint('[YouTube] ⚠ ALL keys exhausted. All YouTube requests paused for 24h.');
+    }
+  }
+
   /// Fetch high-quality YouTube videos for a topic.
   /// [language] — 'Hindi' or 'English' — determines which language videos to prioritize.
   /// This does NOT affect the roadmap UI language; it only changes which videos are fetched.
   static Future<List<YouTubeVideoStats>> fetchHighQualityVideos({
     required String topic,
     String language = 'English',
-    int maxResults = 15, // Reduced from 25 for faster response
+    int maxResults = 15,
   }) async {
     if (!ApiConfig.hasYoutube) return [];
+    if (_isYoutubeQuotaExhausted) {
+      debugPrint('[YouTube] ⏳ quota cooldown active, skipping search');
+      return [];
+    }
 
     // Build a language-aware search query
     final langQuery = language == 'Hindi' ? '$topic in Hindi tutorial' : '$topic tutorial';
@@ -216,6 +285,8 @@ class YouTubeApiService {
           : '';
       final definitionParam =
           videoDefinition != null ? '&videoDefinition=$videoDefinition' : '';
+      final ytKey = _activeYoutubeKey;
+      if (ytKey.isEmpty) return [];
       final uri = Uri.parse(
         '$_baseUrl/search?'
         'part=snippet'
@@ -227,7 +298,7 @@ class YouTubeApiService {
         '${videoDuration != null ? '&videoDuration=$videoDuration' : ''}'
         '$definitionParam'
         '$publishedAfterParam'
-        '&key=${ApiConfig.youtubeApiKey}',
+        '&key=$ytKey',
       );
 
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
@@ -237,6 +308,7 @@ class YouTubeApiService {
         return items.map((item) => item['id']['videoId'] as String).toList();
       } else {
         debugPrint('[YouTube] Search error: ${response.statusCode}');
+        if (response.statusCode == 403) _markYoutubeKeyExhausted(ytKey);
       }
     } catch (e) {
       debugPrint('[YouTube] Search exception: $e');
@@ -254,11 +326,13 @@ class YouTubeApiService {
   static Future<List<YouTubeVideoStats>> _getVideoStats(List<String> videoIds) async {
     try {
       final idString = videoIds.join(',');
+      final ytKey = _activeYoutubeKey;
+      if (ytKey.isEmpty) return [];
       final uri = Uri.parse(
         '$_baseUrl/videos?'
         'part=snippet,statistics,contentDetails'
         '&id=$idString'
-        '&key=${ApiConfig.youtubeApiKey}',
+        '&key=$ytKey',
       );
 
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
@@ -322,6 +396,10 @@ class YouTubeApiService {
     int max = 3,
   }) async {
     if (!ApiConfig.hasYoutube) return const [];
+    if (_isYoutubeQuotaExhausted) {
+      debugPrint('[YouTube] ⏳ quota cooldown active, skipping playlist search');
+      return const [];
+    }
 
     final langQuery = language == 'Hindi'
         ? '$topic complete course playlist in Hindi'
@@ -412,6 +490,8 @@ class YouTubeApiService {
     int maxResults = 10,
   }) async {
     try {
+      final ytKey = _activeYoutubeKey;
+      if (ytKey.isEmpty) return [];
       final uri = Uri.parse(
         '$_baseUrl/search?'
         'part=snippet'
@@ -419,7 +499,7 @@ class YouTubeApiService {
         '&q=${Uri.encodeComponent(query)}'
         '&type=playlist'
         '&relevanceLanguage=$relevanceLanguage'
-        '&key=${ApiConfig.youtubeApiKey}',
+        '&key=$ytKey',
       );
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
@@ -431,6 +511,7 @@ class YouTubeApiService {
             .toList();
       } else {
         debugPrint('[YouTube] Playlist search error: ${response.statusCode}');
+        if (response.statusCode == 403) _markYoutubeKeyExhausted(ytKey);
       }
     } catch (e) {
       debugPrint('[YouTube] Playlist search exception: $e');
@@ -441,13 +522,15 @@ class YouTubeApiService {
   static Future<List<YouTubePlaylistCandidate>> _fetchPlaylistDetails(
       List<String> playlistIds) async {
     try {
+      final ytKey = _activeYoutubeKey;
+      if (ytKey.isEmpty) return [];
       final idString = playlistIds.join(',');
       final uri = Uri.parse(
         '$_baseUrl/playlists?'
         'part=snippet,contentDetails'
         '&id=$idString'
         '&maxResults=50'
-        '&key=${ApiConfig.youtubeApiKey}',
+        '&key=$ytKey',
       );
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return [];
@@ -539,13 +622,15 @@ class YouTubeApiService {
     while (ids.length < maxVideos && safety < 3) {
       safety++;
       try {
+        final ytKey = _activeYoutubeKey;
+        if (ytKey.isEmpty) break;
         final uri = Uri.parse(
           '$_baseUrl/playlistItems?'
           'part=contentDetails'
           '&maxResults=50'
           '&playlistId=$playlistId'
           '${pageToken != null ? '&pageToken=$pageToken' : ''}'
-          '&key=${ApiConfig.youtubeApiKey}',
+          '&key=$ytKey',
         );
         final response =
             await http.get(uri).timeout(const Duration(seconds: 10));

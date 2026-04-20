@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../services/app_state.dart';
 import '../services/certificate_service.dart';
 import 'certificate_screen.dart';
+import 'course_detail_screen.dart';
 import 'dart:convert';
 
 class LessonPlayerScreen extends StatefulWidget {
@@ -170,6 +171,70 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
     _chatScrollController.dispose();
     _coinBadgeCtrl.dispose();
     super.dispose();
+  }
+
+  void _handleFlipCourse(BuildContext context) async {
+    final appState = context.read<AppState>();
+    final flipsLeft = appState.flipsRemaining(widget.course.id);
+    
+    if (flipsLeft <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No flips remaining for this course.')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Flip Course?'),
+        content: Text(
+          'This will find new videos from a different YouTube channel for the same topic. '
+          'You have $flipsLeft flips remaining for this course.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Flip'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && context.mounted) {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: CircularProgressIndicator(color: AppColors.violet),
+        ),
+      );
+      
+      // Delete old course later? Or `flipCourse` handles it?
+      // `flipCourse` replaces the course structure. So just call it.
+      final newCourse = await appState.flipCourse(widget.course.id);
+      
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading dialog
+        if (newCourse != null) {
+          // Replace current route with the new course
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => CourseDetailScreen(course: newCourse),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not flip course. Please try again.')),
+          );
+        }
+      }
+    }
   }
 
   void _toggleFocusMode() {
@@ -537,37 +602,50 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
             ],
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              _LikePill(
-                isLiked: _isLiked,
-                likeCount: _likeCount,
-                onLike: _toggleLike,
-                onDislike: _toggleDislike,
-                isDisliked: _isDisliked,
-                isDark: isDark,
-              ),
-              const SizedBox(width: 10),
-              _ActionPill(
-                icon: _isStarred ? Icons.bookmark : Icons.bookmark_outline,
-                label: _isStarred ? 'Saved' : 'Save',
-                isActive: _isStarred,
-                activeColor: AppColors.gold,
-                onTap: _toggleStar,
-                isDark: isDark,
-              ),
-              const SizedBox(width: 10),
-              _ActionPill(
-                icon: Icons.crop_free_rounded,
-                label: 'Focus',
-                isActive: _isFocusMode,
-                activeColor: AppColors.violet,
-                onTap: _toggleFocusMode,
-                isDark: isDark,
-              ),
-              const Spacer(),
-              // 12D.1 — coin badge for completed lesson
-              if (_isCompleted)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _LikePill(
+                  isLiked: _isLiked,
+                  likeCount: _likeCount,
+                  onLike: _toggleLike,
+                  onDislike: _toggleDislike,
+                  isDisliked: _isDisliked,
+                  isDark: isDark,
+                ),
+                const SizedBox(width: 10),
+                if (!widget.course.isVerified) ...[
+                  _ActionPill(
+                    icon: Icons.refresh,
+                    label: 'Flip',
+                    isActive: false,
+                    activeColor: AppColors.violet,
+                    onTap: () => _handleFlipCourse(context),
+                    isDark: isDark,
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                _ActionPill(
+                  icon: _isStarred ? Icons.bookmark : Icons.bookmark_outline,
+                  label: _isStarred ? 'Saved' : 'Save',
+                  isActive: _isStarred,
+                  activeColor: AppColors.gold,
+                  onTap: _toggleStar,
+                  isDark: isDark,
+                ),
+                const SizedBox(width: 10),
+                _ActionPill(
+                  icon: Icons.crop_free_rounded,
+                  label: 'Focus',
+                  isActive: _isFocusMode,
+                  activeColor: AppColors.violet,
+                  onTap: _toggleFocusMode,
+                  isDark: isDark,
+                ),
+                const SizedBox(width: 16),
+                // 12D.1 — coin badge for completed lesson
+                if (_isCompleted)
                 ScaleTransition(
                   scale: _coinBadgeScale,
                   child: Container(
@@ -594,6 +672,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
                   ),
                 ),
             ],
+          ),
           ),
           const SizedBox(height: 10),
           Divider(
@@ -1082,19 +1161,6 @@ class _LikePill extends StatelessWidget {
                     size: 18,
                     color: isLiked ? AppColors.violet : AppColors.textMuted,
                   ),
-                  if (likeCount > 0) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      _formatCount(likeCount),
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isLiked
-                            ? AppColors.violet
-                            : AppColors.textMuted,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

@@ -117,11 +117,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
     final dailyMinutes = await showDailyTimeDialog(context);
+    if (dailyMinutes == null) return;
     if (!mounted) return;
     final lang = appState.pickTrendingLang(course); // 12D.5
     appState.generateCourseInBackgroundFromCategory(
       appState.pickTrendingPrompt(course),
-      dailyMinutes: dailyMinutes,
+      dailyMinutes: dailyMinutes == 0 ? null : dailyMinutes,
       allowCurated: false,
       language: lang,
     );
@@ -371,9 +372,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildLandscapeSuggestions(List<Course> courses) {
     final rowCount = (courses.length / 2).ceil();
+    const adEveryRows = 3;
+    final slotCount = rowCount + (rowCount ~/ adEveryRows);
+    
     return SliverList(
       delegate: SliverChildBuilderDelegate(
-        (context, rowIndex) {
+        (context, index) {
+          if (index >= slotCount) return null;
+          
+          if ((index + 1) % (adEveryRows + 1) == 0) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: InlineAdCard(),
+            );
+          }
+          
+          final rowIndex = index - (index ~/ (adEveryRows + 1));
+          if (rowIndex >= rowCount) return null;
+          
           final i1 = rowIndex * 2;
           final i2 = i1 + 1;
           return Row(
@@ -403,7 +419,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           );
         },
-        childCount: rowCount,
+        childCount: slotCount,
       ),
     );
   }

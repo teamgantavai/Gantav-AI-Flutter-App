@@ -130,7 +130,7 @@ class _DailyTimeSheetState extends State<_DailyTimeSheet> {
                 ),
               ),
               TextButton(
-                onPressed: () => Navigator.of(context).pop(null),
+                onPressed: () => Navigator.of(context).pop(0),
                 child: Text(
                   'Skip — just create the course',
                   style: GoogleFonts.dmSans(

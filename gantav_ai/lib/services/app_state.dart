@@ -50,6 +50,10 @@ class AppState extends ChangeNotifier {
   bool _isGeneratingCourse = false;
   bool _isLoadingMore = false;
   int _courseBatchIndex = 0;
+
+  /// Maximum number of AI-generated courses allowed. Prevents runaway API
+  /// usage — users should remove old courses before generating new ones.
+  static const int maxCourses = 5;
   String? _authError;
   String? _notificationMessage;
   Course? _lastCompletedCourse;
@@ -59,6 +63,17 @@ class AppState extends ChangeNotifier {
   bool _needsOnboarding = false;
   bool _isGeneratingRoadmap = false;
   final Set<String> _starredLessonIds = {};
+
+  // ── Quiz Score Tracking ──────────────────────────────────────────────
+  /// Maps courseId → best quiz score (0.0 to 1.0). Persisted locally.
+  final Map<String, double> _quizScores = {};
+
+  // ── Flip Course Tracking ─────────────────────────────────────────────
+  /// Maps courseId → number of flips used (max 3).
+  final Map<String, int> _flipCounts = {};
+  /// Maps courseId → list of excluded channel names/IDs from previous flips.
+  final Map<String, List<String>> _flipExcludedChannels = {};
+  static const int maxFlips = 3;
 
   bool _dreamCollectedInOnboarding = false;
   bool get dreamCollectedInOnboarding => _dreamCollectedInOnboarding;
@@ -102,6 +117,47 @@ class AppState extends ChangeNotifier {
   ThemeMode get themeMode => _themeMode;
   UserProfile? get user => _user;
   String? get profileImagePath => _profileImagePath;
+
+  // Daily Course Generation Limit
+  static const int maxDailyGenerations = 5;
+
+  int get dailyGenerationsLeft {
+    if (_user == null) return maxDailyGenerations;
+    final now = DateTime.now();
+    if (_user!.lastGenerationDate == null) return maxDailyGenerations;
+    
+    // Check if the last generation was today
+    if (_user!.lastGenerationDate!.year == now.year &&
+        _user!.lastGenerationDate!.month == now.month &&
+        _user!.lastGenerationDate!.day == now.day) {
+      final left = maxDailyGenerations - _user!.dailyGenerations;
+      return left > 0 ? left : 0;
+    }
+    
+    // It's a new day, limit resets
+    return maxDailyGenerations;
+  }
+
+  Future<void> _incrementDailyGenerations() async {
+    if (_user == null) return;
+    
+    final now = DateTime.now();
+    int newCount = 1;
+    
+    if (_user!.lastGenerationDate != null &&
+        _user!.lastGenerationDate!.year == now.year &&
+        _user!.lastGenerationDate!.month == now.month &&
+        _user!.lastGenerationDate!.day == now.day) {
+      newCount = _user!.dailyGenerations + 1;
+    }
+    
+    _user = _user!.copyWith(
+      dailyGenerations: newCount,
+      lastGenerationDate: now,
+    );
+    notifyListeners();
+    await _firestoreService.saveUserProfile(_user!);
+  }
 
   List<Course>? _coursesCache;
   List<Course> get courses {
@@ -222,6 +278,8 @@ class AppState extends ChangeNotifier {
     await _loadLocalPreferences();
     await _loadLocalRoadmaps();
     await _loadStarredLessons();
+    await _loadQuizScores();
+    await _loadFlipData();
 
     final firebaseUser = AuthService.currentUser;
     if (firebaseUser != null &&
@@ -392,8 +450,11 @@ class AppState extends ChangeNotifier {
       return false;
     }
 
-    await AuthService.sendEmailVerification();
-
+    final verifyResult = await AuthService.sendEmailVerification();
+    if (!verifyResult.success) {
+      _authError = verifyResult.error ?? 'Account created, but failed to send verification email.';
+      // We still proceed so the user can be on the verification screen to hit "Resend"
+    }
     _authStatus = AuthStatus.needsVerification;
     _user = UserProfile(
       id: result.user!.uid,
@@ -687,10 +748,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<Course?> generateCourseFromCategory(String prompt) async {
+    if (_generatedCourses.length >= maxCourses) return null;
     try {
       final course = await ApiService.suggestPath(prompt, language: _preferredLang)
           .timeout(const Duration(seconds: 45), onTimeout: () => null);
-      if (course != null) {
+      if (course != null && _generatedCourses.length < maxCourses) {
         _generatedCourses.add(course);
         await _saveLocalCourses();
         await _firestoreService.saveActiveCourse(course);
@@ -713,6 +775,19 @@ class AppState extends ChangeNotifier {
   Future<void> generateCourseInBackground(
       String prompt, String dreamTopic,
       {int? dailyMinutes}) async {
+    // ── Max course guard ──────────────────────────────────────────────
+    if (_generatedCourses.length >= maxCourses) {
+      showNotification(
+          'You already have $maxCourses courses. Remove one before generating a new one.');
+      return;
+    }
+
+    // ── Daily Limit Guard ─────────────────────────────────────────────
+    if (dailyGenerationsLeft <= 0) {
+      showNotification('Daily limit reached! You can generate up to $maxDailyGenerations courses per day. Try again tomorrow.');
+      return;
+    }
+
     _isGeneratingCourse = true;
     showNotification(
         'AI is creating your learning path in the background. You will be notified when it is ready!');
@@ -738,6 +813,7 @@ class AppState extends ChangeNotifier {
         _lastCompletedCourse = course;
         final minutes = dailyMinutes ?? _preferences?.dailyStudyMinutes ?? 30;
         await buildRoadmapForCourse(course, minutes);
+        await _incrementDailyGenerations();
         showNotification(
             'Success: Your new course "${course.title}" is ready!');
       } else {
@@ -780,6 +856,19 @@ class AppState extends ChangeNotifier {
 
   Future<void> generateCourseInBackgroundFromCategory(String promptHint,
       {int? dailyMinutes, bool allowCurated = true, String language = 'English'}) async {
+    // ── Max course guard ──────────────────────────────────────────────
+    if (_generatedCourses.length >= maxCourses) {
+      showNotification(
+          'You\'ve reached the $maxCourses-course limit. Remove a course from your library to generate a new one.');
+      return;
+    }
+
+    // ── Daily Limit Guard ─────────────────────────────────────────────
+    if (dailyGenerationsLeft <= 0) {
+      showNotification('Daily limit reached! You can generate up to $maxDailyGenerations courses per day. Try again tomorrow.');
+      return;
+    }
+
     _isGeneratingCourse = true;
     notifyListeners();
 
@@ -807,6 +896,7 @@ class AppState extends ChangeNotifier {
         _lastCompletedCourse = course;
         final minutes = dailyMinutes ?? _preferences?.dailyStudyMinutes ?? 30;
         await buildRoadmapForCourse(course, minutes);
+        await _incrementDailyGenerations();
         showNotification('Success: Your course "${course.title}" is ready!');
       } else {
         showNotification(
@@ -823,6 +913,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> generateNextCourseBatch() async {
     if (_isLoadingMore) return;
+    // ── Max course guard ──────────────────────────────────────────────
+    if (_generatedCourses.length >= maxCourses) return;
+
     _isLoadingMore = true;
     notifyListeners();
 
@@ -845,24 +938,18 @@ class AppState extends ChangeNotifier {
       'Database design and SQL mastery',
     ];
 
-    final startIdx =
-        ((_courseBatchIndex - 1) * 2) % topics.length;
-    final batch = <Future<Course?>>[];
-    for (int i = 0; i < 2; i++) {
-      final topicIdx = (startIdx + i) % topics.length;
-      batch.add(
-        ApiService.suggestPath(topics[topicIdx], language: _preferredLang)
-            .timeout(const Duration(seconds: 40), onTimeout: () => null),
-      );
-    }
-
-    final results = await Future.wait(batch);
-    for (final course in results) {
-      if (course != null) {
+    // Only generate 1 course at a time to conserve API quota.
+    final topicIdx =
+        ((_courseBatchIndex - 1)) % topics.length;
+    try {
+      final course = await ApiService.suggestPath(
+              topics[topicIdx], language: _preferredLang)
+          .timeout(const Duration(seconds: 40), onTimeout: () => null);
+      if (course != null && _generatedCourses.length < maxCourses) {
         _generatedCourses.add(course);
         await _firestoreService.saveActiveCourse(course);
       }
-    }
+    } catch (_) {}
 
     _isLoadingMore = false;
     notifyListeners();
@@ -972,6 +1059,159 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // QUIZ SCORE TRACKING
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /// Record a quiz score for a course. Keeps the best score per course.
+  Future<void> recordQuizScore(String courseId, double score) async {
+    final current = _quizScores[courseId] ?? 0.0;
+    if (score > current) {
+      _quizScores[courseId] = score;
+      await _saveQuizScores();
+      notifyListeners();
+    }
+  }
+
+  /// Get the best quiz score for a course (0.0 to 1.0). Returns 0.0 if no quiz taken.
+  double getQuizProgress(String courseId) => _quizScores[courseId] ?? 0.0;
+
+  /// Whether the user has achieved ≥60% quiz score for the course.
+  bool isCertificateUnlocked(String courseId) => getQuizProgress(courseId) >= 0.6;
+
+  Future<void> _saveQuizScores() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final data = _quizScores.map((k, v) => MapEntry(k, v));
+      await prefs.setString('quiz_scores', jsonEncode(data));
+    } catch (_) {}
+  }
+
+  Future<void> _loadQuizScores() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('quiz_scores');
+      if (json != null) {
+        final Map<String, dynamic> data = jsonDecode(json);
+        _quizScores.clear();
+        data.forEach((k, v) => _quizScores[k] = (v as num).toDouble());
+      }
+    } catch (_) {}
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // COURSE DELETE
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /// Delete a generated course, freeing up a slot toward the 5-course limit.
+  Future<void> deleteCourse(String courseId) async {
+    _generatedCourses.removeWhere((c) => c.id == courseId);
+    _quizScores.remove(courseId);
+    _flipCounts.remove(courseId);
+    _flipExcludedChannels.remove(courseId);
+    await _saveLocalCourses();
+    await _saveQuizScores();
+    await _saveFlipData();
+    _firestoreService.deleteActiveCourse(courseId).catchError((_) {});
+    // If the deleted course was the dream course, clear the dream
+    if (_dream?.generatedCourseId == courseId) {
+      await clearDream();
+    }
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // FLIP COURSE (max 3 — same structure, different YouTube channel)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /// How many flips remain for a course.
+  int flipsRemaining(String courseId) => maxFlips - (_flipCounts[courseId] ?? 0);
+
+  /// Flip a course: keep the same topic/structure but search for videos from a
+  /// different YouTube channel. Returns the new course, or null if flips exhausted.
+  Future<Course?> flipCourse(String courseId) async {
+    if (flipsRemaining(courseId) <= 0) return null;
+
+    final idx = _generatedCourses.indexWhere((c) => c.id == courseId);
+    if (idx == -1) return null;
+    final oldCourse = _generatedCourses[idx];
+
+    _isGeneratingCourse = true;
+    notifyListeners();
+
+    try {
+      // Build an exclude string so YouTube avoids previous channels
+      final excluded = _flipExcludedChannels[courseId] ?? [];
+
+      // Use the category as the topic for the flip search
+      final topic = oldCourse.category.isNotEmpty ? oldCourse.category : oldCourse.title;
+
+      final newCourse = await ApiService.suggestPath(
+        topic,
+        language: oldCourse.language,
+        allowCurated: false, // Force fresh YouTube search, no curated
+        excludedVideoIds: excluded,
+      ).timeout(const Duration(seconds: 60), onTimeout: () => null);
+
+      if (newCourse != null) {
+        // Track the old course's channel info for future exclusions
+        for (final m in oldCourse.modules) {
+          for (final l in m.lessons) {
+            if (l.youtubeVideoId.isNotEmpty) {
+              excluded.add(l.youtubeVideoId);
+            }
+          }
+        }
+        _flipExcludedChannels[courseId] = excluded;
+        _flipCounts[courseId] = (_flipCounts[courseId] ?? 0) + 1;
+
+        // Replace the course in-place
+        _generatedCourses[idx] = newCourse;
+        await _saveLocalCourses();
+        await _saveFlipData();
+        await _firestoreService.saveActiveCourse(newCourse);
+        showNotification('Course flipped! New videos from a different source.');
+      } else {
+        showNotification('Could not flip course. AI servers may be busy.');
+      }
+
+      return newCourse;
+    } catch (e, st) {
+      debugPrint('[AppState] Error flipping course: $e\n$st');
+      showNotification('Error flipping course. Please try again.');
+      return null;
+    } finally {
+      _isGeneratingCourse = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _saveFlipData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('flip_counts', jsonEncode(_flipCounts));
+      await prefs.setString('flip_excluded', jsonEncode(_flipExcludedChannels));
+    } catch (_) {}
+  }
+
+  Future<void> _loadFlipData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final countsJson = prefs.getString('flip_counts');
+      if (countsJson != null) {
+        final Map<String, dynamic> data = jsonDecode(countsJson);
+        _flipCounts.clear();
+        data.forEach((k, v) => _flipCounts[k] = v as int);
+      }
+      final excludedJson = prefs.getString('flip_excluded');
+      if (excludedJson != null) {
+        final Map<String, dynamic> data = jsonDecode(excludedJson);
+        _flipExcludedChannels.clear();
+        data.forEach((k, v) => _flipExcludedChannels[k] = List<String>.from(v));
+      }
+    } catch (_) {}
+  }
+
   Future<void> _saveDream() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1008,6 +1248,7 @@ class AppState extends ChangeNotifier {
       if (json != null) {
         _preferences = UserPreferences.fromJson(jsonDecode(json));
       }
+      _profileImagePath = prefs.getString('profile_image_path');
     } catch (_) {}
   }
 
@@ -1092,9 +1333,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateProfileImage(String path) {
+  void updateProfileImage(String path) async {
     _profileImagePath = path;
     notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_image_path', path);
+    } catch (_) {}
   }
 
   void updateUserProfile({required String name, required String handle}) {

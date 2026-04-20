@@ -33,7 +33,7 @@ class ApiConfig {
     }
   }
 
-  static const String geminiModel = 'gemini-2.0-flash';
+  static const String geminiModel = 'gemini-2.5-flash-lite';
   static const String geminiBaseUrl =
       'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -46,7 +46,7 @@ class ApiConfig {
   // ── OpenRouter ────────────────────────────────────────────────────────────
   static String get openRouterApiKey => dotenv.env['OPENROUTER_API_KEY'] ?? '';
   static const String openRouterModel =
-      'mistralai/mistral-small-3.1-24b-instruct:free';
+      'meta-llama/llama-3.3-70b-instruct:free';
   static const String openRouterBaseUrl =
       'https://openrouter.ai/api/v1/chat/completions';
 
@@ -61,7 +61,11 @@ class ApiConfig {
 
   // ── YouTube ───────────────────────────────────────────────────────────────
   static String get youtubeApiKey => dotenv.env['YOUTUBE_API_KEY'] ?? '';
+  static String get youtubeApiKey2 => dotenv.env['YOUTUBE_API_KEY_2'] ?? '';
+  static String get youtubeApiKey3 => dotenv.env['YOUTUBE_API_KEY_3'] ?? '';
   static bool get hasYoutube => youtubeApiKey.isNotEmpty;
+  static bool get hasYoutube2 => youtubeApiKey2.isNotEmpty;
+  static bool get hasYoutube3 => youtubeApiKey3.isNotEmpty;
 
   // ── Availability checks ───────────────────────────────────────────────────
   static bool get hasGemini => geminiApiKey.isNotEmpty;
@@ -137,6 +141,8 @@ class ApiConfig {
     debugPrint('│ OpenRouter:   ${hasOpenRouter ? "✓ configured" : "✗ no key"}');
     debugPrint('│ HuggingFace:  ${hasHuggingFace ? "✓ configured (free)" : "✗ no key"}');
     debugPrint('│ YouTube:      ${hasYoutube ? "✓ configured" : "✗ no key"}');
+    debugPrint('│ YouTube (2nd):${hasYoutube2 ? " ✓ configured (fallback)" : " ✗ no key"}');
+    debugPrint('│ YouTube (3rd):${hasYoutube3 ? " ✓ configured (fallback)" : " ✗ no key"}');
     debugPrint('│ Best JSON:    ${bestForJson?.name ?? "none"}');
     debugPrint('│ Best Chat:    ${bestForChat?.name ?? "none"}');
     debugPrint('│ Configured:   $isConfigured');

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/app_state.dart';
 import '../widgets/widgets.dart';
 
 class QuizScreen extends StatefulWidget {
@@ -82,7 +84,11 @@ class _QuizScreenState extends State<QuizScreen> {
         _answered = false;
       });
     } else {
-      setState(() => _quizComplete = true);
+      setState(() {
+        _quizComplete = true;
+        final score = _correctCount / _questions.length;
+        context.read<AppState>().recordQuizScore(widget.course.id, score);
+      });
     }
   }
 
