@@ -121,8 +121,7 @@ class _QuizScreenState extends State<QuizScreen> {
                       child: Icon(
                         Icons.close,
                         size: 20,
-                        color:
-                            isDark ? AppColors.textLight : AppColors.textDark,
+                        color: isDark ? AppColors.textLight : AppColors.textDark,
                       ),
                     ),
                   ),

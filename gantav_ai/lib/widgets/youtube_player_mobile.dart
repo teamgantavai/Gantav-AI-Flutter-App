@@ -104,7 +104,22 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
     _seekTimer?.cancel();
     _longPressTimer?.cancel();
     _controller.removeListener(_onControllerUpdate);
+    
+    // Ensure we exit full screen and restore orientations
+    if (_controller.value.isFullScreen) {
+      _controller.pause();
+    }
+    
     _controller.dispose();
+    
+    // Restore preferred orientations to app defaults
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    
     super.dispose();
   }
 
@@ -153,45 +168,7 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
 
   // ── Gestures ─────────────────────────────────────────────────────────
 
-  void _handlePointerDown(PointerDownEvent event) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final timeDiff = now - _lastTapTime;
-    final dist = (event.localPosition - _lastTapPosition).distance;
-
-    if (timeDiff < 300 && dist < 40) {
-      // Double tap recognized
-      _longPressTimer?.cancel();
-      _handleDoubleTapManual(event.localPosition);
-      _lastTapTime = 0;
-    } else {
-      // Single tap start -> start long press timer
-      _lastTapTime = now;
-      _lastTapPosition = event.localPosition;
-      
-      _longPressTimer?.cancel();
-      _longPressTimer = Timer(const Duration(milliseconds: 500), () {
-        _isLongPressActive = true;
-        _speedBeforeLongPress = _currentSpeed;
-        setPlaybackRate(2.0);
-        if (mounted) setState(() => _isLongPressing = true);
-        HapticFeedback.heavyImpact();
-      });
-    }
-  }
-
-  void _handlePointerUp(PointerUpEvent event) {
-    _longPressTimer?.cancel();
-    if (_isLongPressActive) {
-      _isLongPressActive = false;
-      setPlaybackRate(_speedBeforeLongPress);
-      if (mounted) setState(() => _isLongPressing = false);
-      HapticFeedback.selectionClick();
-    }
-  }
-
-  void _handlePointerCancel(PointerCancelEvent event) => _handlePointerUp(PointerUpEvent(position: event.position));
-
-  void _handleDoubleTapManual(Offset localPosition) {
+  void _handleDoubleTap(Offset localPosition) {
     final renderBox = context.findRenderObject() as RenderBox?;
     final width = renderBox?.size.width ?? MediaQuery.of(context).size.width;
     final isRightSide = localPosition.dx > width / 2;
@@ -270,6 +247,14 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
           const SizedBox(width: 8),
         ],
       ),
+      onExitFullScreen: () {
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      },
       builder: (context, player) {
         return Stack(
           fit: StackFit.expand,
@@ -283,11 +268,24 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
               left: 0,
               right: 0,
               bottom: 60,
-              child: Listener(
-                onPointerDown: _handlePointerDown,
-                onPointerUp: _handlePointerUp,
-                onPointerCancel: _handlePointerCancel,
+              child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
+                onDoubleTapDown: (details) => _handleDoubleTap(details.localPosition),
+                onLongPressStart: (details) {
+                  _isLongPressActive = true;
+                  _speedBeforeLongPress = _currentSpeed;
+                  setPlaybackRate(2.0);
+                  if (mounted) setState(() => _isLongPressing = true);
+                  HapticFeedback.heavyImpact();
+                },
+                onLongPressEnd: (details) {
+                  if (_isLongPressActive) {
+                    _isLongPressActive = false;
+                    setPlaybackRate(_speedBeforeLongPress);
+                    if (mounted) setState(() => _isLongPressing = false);
+                    HapticFeedback.selectionClick();
+                  }
+                },
                 child: Container(color: Colors.transparent),
               ),
             ),

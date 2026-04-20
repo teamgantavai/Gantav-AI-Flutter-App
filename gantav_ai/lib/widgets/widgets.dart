@@ -3,6 +3,32 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../models/models.dart';
 
+// ── Responsive Container ────────────────────────────────────────────────────
+class ResponsiveContainer extends StatelessWidget {
+  final Widget child;
+  final double maxWidth;
+  final bool center;
+
+  const ResponsiveContainer({
+    super.key,
+    required this.child,
+    this.maxWidth = 850, // Optimal reading/learning width
+    this.center = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!center) return child;
+    
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: child,
+      ),
+    );
+  }
+}
+
 // ── Simple Progress Bar ───────────────────────────────────────────────────────
 class SimpleProgressBar extends StatelessWidget {
   final double progress;
@@ -517,9 +543,17 @@ class SectionHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: GoogleFonts.dmSans(
-            fontSize: 17, fontWeight: FontWeight.w700,
-            color: isDark ? AppColors.textLight : AppColors.textDark)),
+          Expanded(
+            child: Text(title, 
+              style: GoogleFonts.dmSans(
+                fontSize: 17, fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.textLight : AppColors.textDark),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+          if (actionText != null)
+            const SizedBox(width: 12),
           if (actionText != null)
             GestureDetector(
               onTap: onAction,
@@ -536,9 +570,16 @@ class SectionHeader extends StatelessWidget {
 class ModuleCard extends StatelessWidget {
   final Module module;
   final int index;
+  final bool isLast;
   final VoidCallback? onTap;
 
-  const ModuleCard({super.key, required this.module, required this.index, this.onTap});
+  const ModuleCard({
+    super.key,
+    required this.module,
+    required this.index,
+    this.isLast = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -548,60 +589,103 @@ class ModuleCard extends StatelessWidget {
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 300),
         opacity: module.isLocked ? 0.45 : 1.0,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36, height: 36,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Timeline
+            Column(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: module.isLocked
+                        ? AppColors.textMuted.withValues(alpha: 0.1)
+                        : AppColors.violet.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: module.isLocked
+                        ? const Icon(Icons.lock_outline,
+                            size: 18, color: AppColors.textMuted)
+                        : Text(
+                            (index + 1).toString().padLeft(2, '0'),
+                            style: GoogleFonts.dmMono(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.violet),
+                          ),
+                  ),
+                ),
+                if (!isLast)
+                  Container(
+                    width: 4,
+                    height: 50,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 16),
+            // Content Card
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: module.isLocked
-                      ? AppColors.textMuted.withValues(alpha:0.1)
-                      : AppColors.violet.withValues(alpha:0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  color:
+                      isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: isDark
+                          ? AppColors.darkBorder
+                          : AppColors.lightBorder),
                 ),
-                child: Center(
-                  child: module.isLocked
-                      ? const Icon(Icons.lock_outline, size: 16, color: AppColors.textMuted)
-                      : Text('${index + 1}',
-                          style: GoogleFonts.dmMono(
-                            fontSize: 14, fontWeight: FontWeight.w700,
-                            color: AppColors.violet)),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(module.title,
+                    Text(
+                      module.title,
                       style: GoogleFonts.dmSans(
-                        fontSize: 14, fontWeight: FontWeight.w600,
-                        color: isDark ? AppColors.textLight : AppColors.textDark)),
-                    const SizedBox(height: 3),
-                    Text('${module.completedCount}/${module.lessonCount} lessons',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: isDark ? AppColors.textLightSub : AppColors.textDarkSub)),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? AppColors.textLight
+                              : AppColors.textDark),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.play_circle_outline,
+                            size: 14,
+                            color: isDark
+                                ? AppColors.textLightSub
+                                : AppColors.textDarkSub),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${module.completedCount}/${module.lessonCount} lessons',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppColors.textLightSub
+                                  : AppColors.textDarkSub),
+                        ),
+                      ],
+                    ),
                     if (!module.isLocked && module.progress > 0) ...[
-                      const SizedBox(height: 8),
-                      SimpleProgressBar(progress: module.progress, height: 4),
+                      const SizedBox(height: 12),
+                      SimpleProgressBar(progress: module.progress, height: 6),
                     ],
                   ],
                 ),
               ),
-              if (!module.isLocked)
-                Icon(Icons.chevron_right,
-                  color: AppColors.textMuted.withValues(alpha:0.4), size: 18),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

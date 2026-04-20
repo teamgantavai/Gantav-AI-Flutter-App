@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
 import '../models/onboarding_models.dart';
+import '../widgets/widgets.dart';
 
 class RoadmapScreen extends StatefulWidget {
   final Roadmap roadmap;

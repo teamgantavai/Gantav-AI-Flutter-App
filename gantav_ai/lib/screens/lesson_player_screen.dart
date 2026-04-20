@@ -9,10 +9,9 @@ import '../widgets/youtube_player_wrapper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state.dart';
-import '../services/certificate_service.dart';
-import 'certificate_screen.dart';
 import 'course_detail_screen.dart';
 import 'dart:convert';
+import '../widgets/widgets.dart';
 
 class LessonPlayerScreen extends StatefulWidget {
   final Lesson lesson;
@@ -32,7 +31,6 @@ class LessonPlayerScreen extends StatefulWidget {
 
 class _LessonPlayerScreenState extends State<LessonPlayerScreen>
     with TickerProviderStateMixin {
-  double _playbackSpeed = 1.0;
   bool _showAiChat = false;
 
   // AI Chat state
@@ -53,7 +51,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
   // 12D.1 — coin badge animation
   late AnimationController _coinBadgeCtrl;
   late Animation<double> _coinBadgeScale;
-  bool _showCoinBadge = false;
 
   final GlobalKey<AppYoutubePlayerState> _ytKey = GlobalKey();
 
@@ -262,11 +259,6 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
     }
   }
 
-  /// 12D.7 — setPlaybackRate now called directly on the player key's state
-  Future<void> _setPlaybackSpeed(double speed) async {
-    setState(() => _playbackSpeed = speed);
-    _ytKey.currentState?.setPlaybackRate(speed);
-  }
 
   Future<void> _sendMessage() async {
     String text = _chatController.text.trim();
@@ -484,10 +476,9 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
                   );
 
               // 12D.1 — show coin badge briefly after video ends
-              setState(() => _showCoinBadge = true);
               _coinBadgeCtrl.forward(from: 0).then((_) {
                 Future.delayed(const Duration(seconds: 2), () {
-                  if (mounted) setState(() => _showCoinBadge = false);
+                  if (mounted) _coinBadgeCtrl.reverse();
                 });
               });
 
@@ -726,8 +717,24 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
               style: Theme.of(context).textTheme.titleMedium),
         ),
         ...remaining.map((lesson) {
+          final isLocked = !_isCompleted && !lesson.isCompleted;
           return GestureDetector(
             onTap: () {
+              if (isLocked) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '🔒 Complete the current video first!',
+                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                    ),
+                    backgroundColor: AppColors.error,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                );
+                return;
+              }
               Navigator.of(context).pushReplacement(
                 PageRouteBuilder(
                   pageBuilder: (_, __, ___) => LessonPlayerScreen(
@@ -742,74 +749,94 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
                 ),
               );
             },
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.04)
-                        : Colors.black.withValues(alpha: 0.04)),
-              ),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: SizedBox(
-                      width: 72,
-                      height: 42,
-                      child: Image.network(
-                        'https://img.youtube.com/vi/${lesson.youtubeVideoId}/0.jpg',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            Container(color: AppColors.darkSurface2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            child: Opacity(
+              opacity: isLocked ? 0.6 : 1.0,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : Colors.black.withValues(alpha: 0.04)),
+                ),
+                child: Row(
+                  children: [
+                    Stack(
                       children: [
-                        Text(
-                          lesson.title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w500,
-                                color: isDark
-                                    ? AppColors.textLight
-                                    : AppColors.textDark,
-                              ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Row(
-                          children: [
-                            Text(
-                              lesson.duration,
-                              style: GoogleFonts.dmMono(
-                                  fontSize: 11, color: AppColors.textMuted),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: SizedBox(
+                            width: 72,
+                            height: 42,
+                            child: Image.network(
+                              'https://img.youtube.com/vi/${lesson.youtubeVideoId}/0.jpg',
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  Container(color: AppColors.darkSurface2),
                             ),
-                            const SizedBox(width: 6),
-                            // 12D.1 — show coin value on up-next lessons
-                            Text('🪙 ${lesson.coinValue}',
-                              style: GoogleFonts.dmSans(
-                                fontSize: 10,
-                                color: const Color(0xFFF59E0B),
-                                fontWeight: FontWeight.w600,
-                              )),
-                          ],
+                          ),
                         ),
+                        if (isLocked)
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(Icons.lock, color: Colors.white, size: 18),
+                            ),
+                          ),
                       ],
                     ),
-                  ),
-                  Icon(Icons.play_circle_outline,
-                      color: AppColors.violet.withValues(alpha: 0.7), size: 20),
-                ],
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            lesson.title,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? AppColors.textLight
+                                      : AppColors.textDark,
+                                ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                lesson.duration,
+                                style: GoogleFonts.dmMono(
+                                    fontSize: 11, color: AppColors.textMuted),
+                              ),
+                              const SizedBox(width: 6),
+                              // 12D.1 — show coin value on up-next lessons
+                              Text('🪙 ${lesson.coinValue}',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 10,
+                                  color: const Color(0xFFF59E0B),
+                                  fontWeight: FontWeight.w600,
+                                )),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      isLocked ? Icons.lock_outline : Icons.play_circle_outline,
+                      size: 20,
+                      color: isLocked ? AppColors.textMuted : AppColors.violet,
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -1197,10 +1224,6 @@ class _LikePill extends StatelessWidget {
     );
   }
 
-  static String _formatCount(int count) {
-    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
-    return count.toString();
-  }
 }
 
 class _ActionPill extends StatelessWidget {

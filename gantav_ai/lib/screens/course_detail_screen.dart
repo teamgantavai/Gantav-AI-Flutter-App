@@ -74,15 +74,15 @@ class CourseDetailScreen extends StatelessWidget {
                 children: [
                   IconButton(
                     icon: Container(
-                      padding: const EdgeInsets.all(6),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: isDark
                             ? Colors.white.withValues(alpha: 0.08)
                             : Colors.black.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(Icons.arrow_back,
-                          size: 20,
+                          size: 24,
                           color: isDark
                               ? AppColors.textLight
                               : AppColors.textDark),
@@ -98,67 +98,32 @@ class CourseDetailScreen extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (!currentCourse.isVerified)
-                    _buildCourseActions(context, currentCourse),
                 ],
               ),
             ),
             Expanded(
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    flex: 4,
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildThumbnailWidget(context, currentCourse),
-                          const SizedBox(height: 16),
-                          _buildInfoContent(context, isDark, currentCourse),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 1,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.black.withValues(alpha: 0.06),
-                  ),
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                          child: Text(
-                            'Modules',
-                            style:
-                                Theme.of(context).textTheme.headlineSmall,
-                          ),
+                    flex: 6,
+                    child: CustomScrollView(
+                      slivers: [
+                        _buildThumbnail(context, currentCourse),
+                        _buildCourseInfo(context, isDark, currentCourse),
+                        SliverToBoxAdapter(
+                          child: _buildCertifiedBadge(context, isDark, currentCourse),
                         ),
-                        Expanded(
-                          child: ListView.builder(
-                            physics: const BouncingScrollPhysics(),
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: currentCourse.modules.length,
-                            itemBuilder: (context, index) {
-                              return _buildModuleCard(
-                                  context,
-                                  isDark,
-                                  currentCourse.modules[index],
-                                  index,
-                                  currentCourse);
-                            },
-                          ),
-                        ),
-                        _buildCertifiedBadge(context, isDark, currentCourse),
-                        _buildBottomCTA(context, isDark, currentCourse),
+                        const SliverToBoxAdapter(child: SizedBox(height: 50)),
                       ],
                     ),
+                  ),
+                  VerticalDivider(
+                    width: 1,
+                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                  ),
+                  Expanded(
+                    flex: 4,
+                    child: _buildModuleList(context, isDark, currentCourse),
                   ),
                 ],
               ),
@@ -166,6 +131,7 @@ class CourseDetailScreen extends StatelessWidget {
           ],
         ),
       ),
+      bottomNavigationBar: _buildBottomCTA(context, isDark, currentCourse),
     );
   }
 
@@ -176,16 +142,16 @@ class CourseDetailScreen extends StatelessWidget {
       backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
       leading: IconButton(
         icon: Container(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: isDark
                 ? Colors.white.withValues(alpha: 0.12)
                 : Colors.black.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             Icons.arrow_back,
-            size: 20,
+            size: 24,
             color: isDark ? AppColors.textLight : AppColors.textDark,
           ),
         ),
@@ -224,9 +190,9 @@ class CourseDetailScreen extends StatelessWidget {
                 );
               }
             } else if (value == 'share') {
-              Share.share(
-                'Check out "${currentCourse.title}" on Gantav AI! 🎯\nLearn faster with personalized roadmaps.',
-              );
+              SharePlus.instance.share(ShareParams(
+                text: 'Check out "${currentCourse.title}" on Gantav AI! 🎯\nLearn faster with personalized roadmaps.',
+              ));
             } else if (value == 'delete') {
               // Confirm delete
               final confirm = await showDialog<bool>(
@@ -519,24 +485,9 @@ class CourseDetailScreen extends StatelessWidget {
                       ? Colors.white.withValues(alpha: 0.08)
                       : Colors.black.withValues(alpha: 0.08)),
               _StatItem(
-                icon: Icons.calendar_today_outlined,
-                value: currentCourse.estimatedTime
-                        .replaceAll(' weeks', '')
-                        .isEmpty
-                    ? '8'
-                    : currentCourse.estimatedTime.replaceAll(' weeks', ''),
-                label: 'weeks',
-              ),
-              Container(
-                  width: 1,
-                  height: 36,
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.08)),
-              _StatItem(
-                icon: Icons.people_outline,
-                value: _formatCount(currentCourse.learnerCount),
-                label: 'learners',
+                icon: Icons.access_time,
+                value: currentCourse.estimatedTime,
+                label: 'duration',
               ),
             ],
           ),
@@ -574,7 +525,7 @@ class CourseDetailScreen extends StatelessWidget {
   }
 
   Widget _buildModuleCard(BuildContext context, bool isDark, Module module,
-      int index, Course currentCourse) {
+      int index, Course currentCourse, bool isLast) {
     bool isActuallyLocked = false;
     if (index > 0) {
       final prevModule = currentCourse.modules[index - 1];
@@ -599,54 +550,73 @@ class CourseDetailScreen extends StatelessWidget {
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 300),
         opacity: isActuallyLocked ? 0.4 : 1.0,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: !module.isLocked
-                  ? AppColors.violet.withValues(alpha: 0.2)
-                  : isDark
-                      ? AppColors.darkBorder
-                      : AppColors.lightBorder,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: isActuallyLocked
-                      ? AppColors.textMuted.withValues(alpha: 0.1)
-                      : AppColors.violet.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: isActuallyLocked
-                      ? const Icon(Icons.lock_rounded,
-                          size: 18, color: AppColors.textMuted)
-                      : Text(
-                          '${index + 1}',
-                          style: GoogleFonts.dmMono(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.violet,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Timeline
+            Column(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isActuallyLocked
+                        ? AppColors.textMuted.withValues(alpha: 0.1)
+                        : AppColors.violet.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: isActuallyLocked
+                        ? const Icon(Icons.lock_rounded,
+                            size: 18, color: AppColors.textMuted)
+                        : Text(
+                            (index + 1).toString().padLeft(2, '0'),
+                            style: GoogleFonts.dmMono(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.violet,
+                            ),
                           ),
-                        ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
+                if (!isLast)
+                  Container(
+                    width: 4,
+                    height: 50,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 16),
+            // Content Card
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: !module.isLocked
+                        ? AppColors.violet.withValues(alpha: 0.2)
+                        : isDark
+                            ? AppColors.darkBorder
+                            : AppColors.lightBorder,
+                  ),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       module.title,
                       style: GoogleFonts.dmSans(
-                        fontSize: 14,
+                        fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: isDark
                             ? AppColors.textLight
@@ -655,27 +625,34 @@ class CourseDetailScreen extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${module.completedCount}/${module.lessonCount} lessons',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.play_circle_outline,
+                            size: 14,
+                            color: isDark
+                                ? AppColors.textLightSub
+                                : AppColors.textDarkSub),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${module.completedCount}/${module.lessonCount} lessons',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
                     ),
                     if (!module.isLocked && module.progress > 0) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       SimpleProgressBar(
-                          progress: module.progress, height: 4),
+                          progress: module.progress, height: 6),
                     ],
                   ],
                 ),
               ),
-              if (!module.isLocked)
-                const Icon(Icons.chevron_right,
-                    size: 18, color: AppColors.textMuted),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -690,7 +667,7 @@ class CourseDetailScreen extends StatelessWidget {
           (context, index) {
             if (index >= currentCourse.modules.length) return null;
             return _buildModuleCard(context, isDark,
-                currentCourse.modules[index], index, currentCourse);
+                currentCourse.modules[index], index, currentCourse, index == currentCourse.modules.length - 1);
           },
           childCount: currentCourse.modules.length,
         ),
@@ -975,12 +952,7 @@ class CourseDetailScreen extends StatelessWidget {
     _openModule(context, module, currentCourse);
   }
 
-  String _formatCount(int count) {
-    if (count >= 1000) {
-      return '${(count / 1000).toStringAsFixed(1)}k';
-    }
-    return count.toString();
-  }
+
 }
 
 class _StatItem extends StatelessWidget {

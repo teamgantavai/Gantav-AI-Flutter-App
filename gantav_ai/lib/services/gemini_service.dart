@@ -327,11 +327,12 @@ class GeminiService {
     String videoContext = '';
     String firstVideoId = '';
     if (preFilteredVideos != null && preFilteredVideos.isNotEmpty) {
-      final topVideos = preFilteredVideos.take(9).toList();
+      // Increase candidates to 15 for better selection range
+      final topVideos = preFilteredVideos.take(15).toList();
       if (topVideos.isNotEmpty) firstVideoId = topVideos.first.id;
       videoContext =
-          'Use ONLY these verified YouTube videos (pick the most relevant for each lesson):\n'
-          '${topVideos.map((v) => '- ID:${v.id} Title:"${v.title}" Duration:${v.durationText} Channel:${v.channelTitle}').join('\n')}\n';
+          'Use ONLY these verified YouTube videos (pick the HIGHEST QUALITY ones for each lesson):\n'
+          '${topVideos.map((v) => '- ID:${v.id} Title:"${v.title}" Duration:${v.durationText} Channel:${v.channelTitle} Views:${v.viewCount} Engagement:${v.engagementRatio}').join('\n')}\n';
     }
 
     final moduleTopics = _generateModuleTopics(courseName);
@@ -374,10 +375,13 @@ class GeminiService {
         '}\n\n'
         'Rules:\n'
         '1. Replace VIDEO_ID_N with REAL YouTube video IDs from the list above.\n'
-        '2. Match each video to its lesson topic.\n'
+        '2. Match each video to its lesson topic. PRIORITIZE videos with high ViewCount and Engagement.\n'
         '3. Keep title EXACTLY as "$courseName" (max 6 words — be concise).\n'
         '4. Module 1: is_locked=false, Modules 2-3: is_locked=true.\n'
-        '5. Module + lesson titles MUST vary — never use the same suffix twice (no repeated "Deep Dive", "Fundamentals" everywhere). Use specific topic-driven names.';
+        '5. PEDAGOGICAL STRUCTURE: The course MUST be logically ordered: Module 1 (Fundamentals), Module 2 (Core Concepts & Practice), Module 3 (Advanced/Projects).\n'
+        '6. MASTERY FOCUS: Ensure that after completing these 9 lessons, a student has a strong grasp of $courseName. Don\'t skip essential prerequisites.\n'
+        '7. TOPIC RELEVANCE: Ensure the course content stays strictly within the domain of "$courseName". For example, if it\'s a music course, do NOT include technical or 3D modeling aspects unless specifically requested.\n'
+        '8. Module + lesson titles MUST vary — never use the same suffix twice (no repeated "Deep Dive", "Fundamentals" everywhere). Use specific topic-driven names.';
 
     try {
       final response = await _smartCall(
@@ -472,7 +476,25 @@ class GeminiService {
     if (lower.contains('blockchain') || lower.contains('web3')) {
       return 'Blockchain';
     }
-    return 'Technology';
+    if (lower.contains('guitar') || lower.contains('music') || lower.contains('piano') || lower.contains('singing')) {
+      return 'Music & Arts';
+    }
+    if (lower.contains('business') || lower.contains('startup') || lower.contains('marketing')) {
+      return 'Business';
+    }
+    if (lower.contains('finance') || lower.contains('stock') || lower.contains('investing')) {
+      return 'Finance';
+    }
+    if (lower.contains('cooking') || lower.contains('recipe') || lower.contains('chef')) {
+      return 'Cooking & Lifestyle';
+    }
+    if (lower.contains('fitness') || lower.contains('gym') || lower.contains('yoga') || lower.contains('health')) {
+      return 'Health & Fitness';
+    }
+    if (lower.contains('photography') || lower.contains('photo') || lower.contains('camera')) {
+      return 'Photography';
+    }
+    return 'General Learning';
   }
 
   static List<String> _generateModuleTopics(String courseName) {
@@ -506,6 +528,19 @@ class GeminiService {
     }
     if (lower.contains('design') || lower.contains('ui')) {
       return ['Design Principles', 'Figma & Prototyping', 'Design Systems & Case Studies'];
+    }
+    if (lower.contains('guitar') || lower.contains('music') || lower.contains('piano')) {
+      return ['Fundamentals & Technique', 'Intermediate Theory & Chords', 'Performance & Composition'];
+    }
+    if (lower.contains('stock market') || lower.contains('trading') || lower.contains('finance')) {
+      return ['Financial Foundations', 'Technical & Fundamental Analysis', 'Portfolio & Risk Management'];
+    }
+    if (lower.contains('business') || lower.contains('marketing') || lower.contains('startup')) {
+      return ['Market Research & Strategy', 'Product & Customer Acquisition', 'Scaling & Operations'];
+    }
+    if (lower.contains('cooking') || lower.contains('recipe') || lower.contains('chef')) {
+      // 3-module structure: Basics → Intermediate → Mastery
+      return ['Culinary Foundations', 'Core Techniques & Flavor Profiles', 'Advanced Mastery & Presentation'];
     }
     final cleanName = courseName
         .replaceAll(RegExp(r'(Complete|Course|Basics|Fundamentals)', caseSensitive: false), '')

@@ -244,10 +244,10 @@ class _ProfileHero extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.stars_rounded,
+                      const Icon(Icons.monetization_on_rounded,
                           color: AppColors.gold, size: 14),
                       const SizedBox(width: 5),
-                      Text('${user.gantavScore} pts',
+                      Text('${user.coins} coins',
                           style: GoogleFonts.dmMono(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -504,11 +504,12 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
       child: Container(
         height: 44,
         decoration: BoxDecoration(
-          color: isDark ? AppColors.darkSurface : AppColors.lightSurface2,
+          color: isDark ? AppColors.darkSurface2 : AppColors.lightSurface,
           borderRadius: BorderRadius.circular(12),
         ),
         child: TabBar(
           controller: tabController,
+          isScrollable: false,
           indicator: BoxDecoration(
               color: AppColors.violet,
               borderRadius: BorderRadius.circular(10)),
@@ -516,13 +517,15 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
           dividerColor: Colors.transparent,
           labelColor: Colors.white,
           unselectedLabelColor: AppColors.textMuted,
-          labelStyle:
-              GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600),
+          labelStyle: GoogleFonts.dmSans(
+              fontSize: 13, fontWeight: FontWeight.w600),
+          unselectedLabelStyle: GoogleFonts.dmSans(
+              fontSize: 13, fontWeight: FontWeight.w500),
           indicatorPadding: const EdgeInsets.all(3),
           tabs: const [
             Tab(text: 'Courses'),
             Tab(text: 'Favorites'),
-            Tab(text: 'Certs'),
+            Tab(text: 'Certificates'),
             Tab(text: 'Badges'),
           ],
         ),
@@ -535,7 +538,10 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   double get minExtent => 60;
   @override
-  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
+  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) {
+    return oldDelegate.isDark != isDark ||
+           oldDelegate.tabController != tabController;
+  }
 }
 
 // ─── Certificates Tab ─────────────────────────────────────────────────────────
@@ -559,10 +565,10 @@ class _CertificatesTabState extends State<_CertificatesTab> {
   }
 
   Future<void> _loadCertificates() async {
-    final certs = await CertificateService.getMyCertificates();
+    final certificates = await CertificateService.getMyCertificates();
     if (mounted) {
       setState(() {
-        _certificates = certs;
+        _certificates = certificates;
         _loading = false;
       });
     }
@@ -1651,9 +1657,9 @@ class _CourseListTile extends StatelessWidget {
                     appState.toggleSaveCourse(course.id);
                     break;
                   case 'share':
-                    Share.share(
-                      'Check out "${course.title}" on Gantav AI! 🎯\nhttps://gantavai.com/course/${course.id}',
-                    );
+                    SharePlus.instance.share(ShareParams(
+                      text: 'Check out "${course.title}" on Gantav AI! 🎯\nhttps://gantavai.com/course/${course.id}',
+                    ));
                     break;
                   case 'delete':
                     showDialog(

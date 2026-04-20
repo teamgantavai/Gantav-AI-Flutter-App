@@ -23,6 +23,8 @@ import 'package:gantav_ai/services/api_config.dart';
 import 'package:gantav_ai/services/ads_service.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:gantav_ai/services/notification_service.dart';
+import 'package:gantav_ai/widgets/widgets.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +51,10 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }
+  
+  // Initialize notifications
+  await NotificationService.init();
+
   // Fire-and-forget AdMob init so startup isn't blocked on Google's SDK
   // handshake. If it fails, ads skip silently (see AdsService.init).
   AdsService.init();

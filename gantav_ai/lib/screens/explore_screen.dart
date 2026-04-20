@@ -735,7 +735,7 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
     final viewInsets = MediaQuery.of(context).viewInsets;
-    final appState = Provider.of<AppState>(context);
+
 
     return Container(
       decoration: BoxDecoration(
@@ -789,7 +789,32 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Step 1: Course Name
-                    _buildSectionLabel('What do you want to learn? *', Icons.school_outlined, AppColors.violet),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildSectionLabel('What do you want to learn? *', Icons.school_outlined, AppColors.violet),
+                        Consumer<AppState>(
+                          builder: (context, appState, _) => Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: AppColors.gold.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.bolt, size: 12, color: AppColors.gold),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${appState.weeklyGenerationsLeft} generations left',
+                                  style: GoogleFonts.dmSans(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.gold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 10),
                     TextField(
                       controller: _courseNameCtrl,
@@ -814,13 +839,7 @@ class _CustomCourseBuilderSheetState extends State<_CustomCourseBuilderSheet> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Quick picks:', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.3)),
-                        Text('✨ ${appState.dailyGenerationsLeft} generations left today', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet, letterSpacing: 0.3)),
-                      ],
-                    ),
+                    Text('Quick picks:', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.3)),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 6, runSpacing: 6,

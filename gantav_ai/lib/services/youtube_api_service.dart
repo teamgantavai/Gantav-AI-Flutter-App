@@ -8,6 +8,7 @@ class YouTubeVideoStats {
   final String id;
   final String title;
   final String channelTitle;
+  final String channelId;
   final String durationText;
   final int durationSeconds; // parsed duration; used to filter out Shorts
   final int viewCount;
@@ -20,6 +21,7 @@ class YouTubeVideoStats {
     required this.id,
     required this.title,
     required this.channelTitle,
+    required this.channelId,
     required this.durationText,
     this.durationSeconds = 0,
     required this.viewCount,
@@ -38,6 +40,7 @@ class YouTubeVideoStats {
         'id': id,
         'title': title,
         'channelTitle': channelTitle,
+        'channelId': channelId,
         'durationText': durationText,
         'durationSeconds': durationSeconds,
         'viewCount': viewCount,
@@ -52,6 +55,7 @@ class YouTubeVideoStats {
         id: json['id'],
         title: json['title'],
         channelTitle: json['channelTitle'] ?? '',
+        channelId: json['channelId'] ?? '',
         durationText: json['durationText'] ?? '',
         durationSeconds: (json['durationSeconds'] as num?)?.toInt() ?? 0,
         viewCount: json['viewCount'],
@@ -185,6 +189,7 @@ class YouTubeApiService {
     required String topic,
     String language = 'English',
     int maxResults = 15,
+    List<String> excludedChannelIds = const [],
   }) async {
     if (!ApiConfig.hasYoutube) return [];
     if (_isYoutubeQuotaExhausted) {
@@ -246,22 +251,24 @@ class YouTubeApiService {
     // 2. Get Stats — batch call is fast
     final videos = await _getVideoStats(videoIds);
 
-    // 3. Filter by quality AND duration. Drop anything under 90s as a
-    //    belt-and-braces guard against Shorts slipping past the API filter.
+    // 3. Filter by quality, duration, and excluded channels.
     final List<YouTubeVideoStats> filtered = videos.where((v) {
       if (v.isShort(minLongFormSeconds: 90)) return false;
+      if (excludedChannelIds.contains(v.channelId) || 
+          excludedChannelIds.contains(v.channelTitle)) {
+         return false;
+      }
       // Relaxed filter: high engagement OR decent view count
       return v.viewCount > 1000 || v.engagementRatio > 0.8;
     }).toList();
 
     filtered.sort((a, b) => b.engagementRatio.compareTo(a.engagementRatio));
-    // Take top 8 — skip comment fetching for speed (comments slow things down a lot)
+    // Take top 8
     final topVideos = filtered.take(8).toList();
 
     if (topVideos.isNotEmpty) {
       await _cacheVideos(cacheKey, topVideos);
     }
-
     return topVideos;
   }
 
@@ -358,6 +365,7 @@ class YouTubeApiService {
             id: item['id'],
             title: snippet['title'] ?? 'Unknown',
             channelTitle: snippet['channelTitle'] ?? '',
+            channelId: snippet['channelId'] ?? '',
             durationText: _parseDuration(durationIso),
             durationSeconds: _parseDurationSeconds(durationIso),
             viewCount: views.toInt(),
@@ -395,6 +403,7 @@ class YouTubeApiService {
     int minVideos = 3,
     int maxVideos = 40,
     int max = 3,
+    List<String> excludedChannelIds = const [],
   }) async {
     if (!ApiConfig.hasYoutube) return const [];
     if (_isYoutubeQuotaExhausted) {
@@ -416,7 +425,11 @@ class YouTubeApiService {
     if (candidates.isEmpty) return const [];
 
     final filtered = candidates
-        .where((c) => c.videoCount >= minVideos && c.videoCount <= maxVideos)
+        .where((c) => 
+            c.videoCount >= minVideos && 
+            c.videoCount <= maxVideos &&
+            !excludedChannelIds.contains(c.channelId) &&
+            !excludedChannelIds.contains(c.channelTitle))
         .toList()
       ..sort((a, b) => b.score.compareTo(a.score));
 

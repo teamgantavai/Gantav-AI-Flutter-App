@@ -8,6 +8,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("androidx.core:core:1.15.0")
+        force("androidx.core:core-ktx:1.15.0")
+    }
+}
+
 android {
     namespace = "com.gantavai.gantav_ai"
     compileSdk = flutter.compileSdkVersion

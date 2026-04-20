@@ -141,6 +141,7 @@ class Course {
   final List<String> skills;
   final List<Module> modules;
   final int likes;
+  final String? channelId;
 
   final bool isVerified;
 
@@ -159,6 +160,7 @@ class Course {
     this.skills = const [],
     this.modules = const [],
     this.likes = 0,
+    this.channelId,
     this.isVerified = false,
   });
 
@@ -221,6 +223,7 @@ class Course {
               .toList()
           : const [],
       isVerified: json['is_verified'] ?? false,
+      channelId: json['channel_id'],
     );
   }
 
@@ -240,6 +243,7 @@ class Course {
       'likes': likes,
       'skills': skills,
       'modules': modules.map((m) => m.toJson()).toList(),
+      'channel_id': channelId,
       'is_verified': isVerified,
     };
   }
@@ -710,6 +714,7 @@ class Lesson {
   final String description;
   final bool isCompleted;
   final List<Chapter> chapters;
+  final String? channelId;
 
   const Lesson({
     required this.id,
@@ -719,6 +724,7 @@ class Lesson {
     this.description = '',
     this.isCompleted = false,
     this.chapters = const [],
+    this.channelId,
   });
 
   /// 12D.1 — Coin value derived from video duration.
@@ -751,6 +757,7 @@ class Lesson {
               .map((c) => Chapter.fromJson(c))
               .toList()
           : const [],
+      channelId: json['channel_id'],
     );
   }
 
@@ -763,6 +770,7 @@ class Lesson {
       'description': description,
       'is_completed': isCompleted,
       'chapters': chapters.map((c) => c.toJson()).toList(),
+      'channel_id': channelId,
     };
   }
 }

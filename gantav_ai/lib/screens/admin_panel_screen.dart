@@ -99,9 +99,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
           _moduleNameController.clear();
         });
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No valid YouTube links found.')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No valid YouTube links found.')),
+          );
+        }
       }
     } finally {
       setState(() => _isLoading = false);
@@ -374,7 +376,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.library_books_outlined, size: 64, color: AppColors.textMuted.withOpacity(0.3)),
+            Icon(Icons.library_books_outlined, size: 64, color: AppColors.textMuted.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
             Text('No verified courses yet', style: GoogleFonts.dmSans(color: AppColors.textMuted)),
           ],
@@ -473,7 +475,7 @@ class _CourseManageCard extends StatefulWidget {
 
 class _CourseManageCardState extends State<_CourseManageCard> {
   bool _isExpanded = false;
-  Map<String, YouTubeVideoStats> _videoStats = {};
+  final Map<String, YouTubeVideoStats> _videoStats = {};
   bool _isLoadingStats = false;
 
   Future<void> _fetchStats() async {
@@ -575,7 +577,7 @@ class _CourseManageCardState extends State<_CourseManageCard> {
                           ],
                         ),
                       );
-                    }).toList(),
+                    }),
                   ],
                 ),
               ),

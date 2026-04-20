@@ -20,7 +20,7 @@ class _ProgressScreenState extends State<ProgressScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       // Force rebuild so the active tab indicator updates
       if (mounted) setState(() {});
@@ -110,8 +110,8 @@ class _ProgressScreenState extends State<ProgressScreen>
                   height: 44,
                   decoration: BoxDecoration(
                     color: isDark
-                        ? AppColors.darkSurface
-                        : AppColors.lightSurface2,
+                        ? AppColors.darkSurface2
+                        : AppColors.lightSurface,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: TabBar(
@@ -132,7 +132,6 @@ class _ProgressScreenState extends State<ProgressScreen>
                     indicatorPadding: const EdgeInsets.all(3),
                     tabs: const [
                       Tab(text: 'Roadmaps'),
-                      Tab(text: 'Quizzes'),
                       Tab(text: 'Activity'),
                     ],
                   ),
@@ -148,9 +147,7 @@ class _ProgressScreenState extends State<ProgressScreen>
                   children: [
                     // Tab 1: Course Progress
                     _buildCourseProgressTab(context, appState, isDark),
-                    // Tab 2: Quiz Stats
-                    _buildQuizTab(context, user, isDark),
-                    // Tab 3: Weekly Activity
+                    // Tab 2: Weekly Activity
                     _buildActivityTab(context, user, isDark),
                   ],
                 ),
@@ -205,45 +202,7 @@ class _ProgressScreenState extends State<ProgressScreen>
     );
   }
 
-  Widget _buildQuizTab(BuildContext context, dynamic user, bool isDark) {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics()),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Quiz Performance',
-              style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 16),
-          // Bug #7 fix: quizzesPassed pulled live from user profile
-          _StatTile(
-            icon: Icons.quiz_outlined,
-            label: 'Quizzes Passed',
-            value: '${user?.quizzesPassed ?? 0}',
-            color: AppColors.violet,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-          _StatTile(
-            icon: Icons.stars_rounded,
-            label: 'Gantav Score',
-            value: '${user?.gantavScore ?? 0}',
-            color: AppColors.gold,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 10),
-          _StatTile(
-            icon: Icons.local_fire_department,
-            label: 'Current Streak',
-            value: '${user?.streakDays ?? 0} days',
-            color: AppColors.teal,
-            isDark: isDark,
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildActivityTab(BuildContext context, dynamic user, bool isDark) {
     return SingleChildScrollView(
@@ -308,9 +267,9 @@ class _ProgressScreenState extends State<ProgressScreen>
           ),
           const SizedBox(height: 10),
           _StatTile(
-            icon: Icons.stars_rounded,
-            label: 'Gantav Score',
-            value: '${user?.gantavScore ?? 0}',
+            icon: Icons.monetization_on_rounded,
+            label: 'Gantav Coins',
+            value: '${user?.coins ?? 0}',
             color: AppColors.gold,
             isDark: isDark,
           ),

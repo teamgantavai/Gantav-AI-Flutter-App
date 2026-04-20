@@ -10,11 +10,10 @@ import '../services/firestore_service.dart';
 import '../services/onboarding_service.dart';
 import '../services/admin_service.dart';
 import '../services/course_roadmap_builder.dart';
-import '../services/gemini_service.dart';
+
 import '../models/trending_data.dart';
 import 'dart:math' as math;
 import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 enum AuthStatus {
   unauthenticated,
@@ -77,9 +76,10 @@ class AppState extends ChangeNotifier {
   // ── Flip Course Tracking ─────────────────────────────────────────────
   /// Maps courseId → number of flips used (max 3).
   final Map<String, int> _flipCounts = {};
+  final Map<String, List<String>> _flipExcludedVideoIds = {};
   /// Maps courseId → list of excluded channel names/IDs from previous flips.
-  final Map<String, List<String>> _flipExcludedChannels = {};
-  static const int maxFlips = 3;
+  final Map<String, List<String>> _flipExcludedChannelIds = {};
+  static const int maxFlips = 2;
 
   bool _dreamCollectedInOnboarding = false;
   bool get dreamCollectedInOnboarding => _dreamCollectedInOnboarding;
@@ -124,24 +124,35 @@ class AppState extends ChangeNotifier {
   UserProfile? get user => _user;
   String? get profileImagePath => _profileImagePath;
 
-  // Daily Course Generation Limit
-  static const int maxDailyGenerations = 5;
+  // Weekly Course Generation Limit
+  static const int maxWeeklyGenerations = 5;
 
-  int get dailyGenerationsLeft {
-    if (_user == null) return maxDailyGenerations;
+  int get weeklyGenerationsLeft {
+    if (_user == null) return maxWeeklyGenerations;
     final now = DateTime.now();
-    if (_user!.lastGenerationDate == null) return maxDailyGenerations;
+    if (_user!.lastGenerationDate == null) return maxWeeklyGenerations;
     
-    // Check if the last generation was today
-    if (_user!.lastGenerationDate!.year == now.year &&
-        _user!.lastGenerationDate!.month == now.month &&
-        _user!.lastGenerationDate!.day == now.day) {
-      final left = maxDailyGenerations - _user!.dailyGenerations;
+    // Check if the last generation was in the same week
+    // We'll use a simple week calculation (ISO week or just days since epoch / 7)
+    // For simplicity, we can check if it's within 7 days AND the same week start.
+    // Or just use Jiffy or similar if available. But let's use native Dart.
+    
+    final lastGen = _user!.lastGenerationDate!;
+    // Calculate week start for both (Sunday as start)
+    final nowWeekStart = now.subtract(Duration(days: now.weekday % 7));
+    final lastWeekStart = lastGen.subtract(Duration(days: lastGen.weekday % 7));
+    
+    final isSameWeek = nowWeekStart.year == lastWeekStart.year &&
+                       nowWeekStart.month == lastWeekStart.month &&
+                       nowWeekStart.day == lastWeekStart.day;
+
+    if (isSameWeek) {
+      final left = maxWeeklyGenerations - _user!.dailyGenerations; // We'll keep the field name for now
       return left > 0 ? left : 0;
     }
     
-    // It's a new day, limit resets
-    return maxDailyGenerations;
+    // It's a new week, limit resets
+    return maxWeeklyGenerations;
   }
 
   Future<void> _incrementDailyGenerations() async {
@@ -150,11 +161,18 @@ class AppState extends ChangeNotifier {
     final now = DateTime.now();
     int newCount = 1;
     
-    if (_user!.lastGenerationDate != null &&
-        _user!.lastGenerationDate!.year == now.year &&
-        _user!.lastGenerationDate!.month == now.month &&
-        _user!.lastGenerationDate!.day == now.day) {
-      newCount = _user!.dailyGenerations + 1;
+    final lastGen = _user!.lastGenerationDate;
+    if (lastGen != null) {
+      final nowWeekStart = now.subtract(Duration(days: now.weekday % 7));
+      final lastWeekStart = lastGen.subtract(Duration(days: lastGen.weekday % 7));
+      
+      final isSameWeek = nowWeekStart.year == lastWeekStart.year &&
+                         nowWeekStart.month == lastWeekStart.month &&
+                         nowWeekStart.day == lastWeekStart.day;
+                         
+      if (isSameWeek) {
+        newCount = _user!.dailyGenerations + 1;
+      }
     }
     
     _user = _user!.copyWith(
@@ -363,14 +381,14 @@ class AppState extends ChangeNotifier {
     // Surface stale API-key warnings — if a provider's key returned 401 on
     // a previous session, nudge the user to regenerate it. Fire-and-forget
     // so startup never blocks on this.
-    GeminiService.loadAndReportDeadKeys().then((dead) {
-      if (dead.isEmpty) return;
-      final pretty = dead
-          .map((n) => n[0].toUpperCase() + n.substring(1))
-          .join(', ');
-      showNotification(
-          '⚠ $pretty API key looks invalid (401). Regenerate it and update your .env to restore full AI.');
-    }).catchError((_) {});
+    // GeminiService.loadAndReportDeadKeys().then((dead) {
+    //   if (dead.isEmpty) return;
+    //   final pretty = dead
+    //       .map((n) => n[0].toUpperCase() + n.substring(1))
+    //       .join(', ');
+    //   showNotification(
+    //       '⚠ $pretty API key looks invalid (401). Regenerate it and update your .env to restore full AI.');
+    // }).catchError((_) {});
   }
 
   Future<void> _loadUserFromFirebase(dynamic firebaseUser) async {
@@ -443,6 +461,10 @@ class AppState extends ChangeNotifier {
       return false;
     }
 
+    // Clear stale local data from a previous account to prevent cross-account
+    // leakage (e.g. old profile photo appearing on the new account).
+    await _clearAllLocalUserData();
+
     await _loadUserFromFirebase(result.user);
     await _saveAuthStatus();
 
@@ -486,6 +508,10 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return true;
     }
+
+    // Clear stale local data from a previous account to prevent cross-account
+    // leakage (e.g. old profile photo appearing on the new account).
+    await _clearAllLocalUserData();
 
     await _loadUserFromFirebase(result.user);
     await _saveAuthStatus();
@@ -821,7 +847,7 @@ class AppState extends ChangeNotifier {
     if (_generatedCourses.length >= maxCourses) return null;
     try {
       final course = await ApiService.suggestPath(prompt, language: _preferredLang)
-          .timeout(const Duration(seconds: 45), onTimeout: () => null);
+          .timeout(const Duration(seconds: 60), onTimeout: () => null);
       if (course != null && _generatedCourses.length < maxCourses) {
         _generatedCourses.add(course);
         await _saveLocalCourses();
@@ -845,19 +871,8 @@ class AppState extends ChangeNotifier {
   Future<void> generateCourseInBackground(
       String prompt, String dreamTopic,
       {int? dailyMinutes}) async {
-    // ── Max course guard ──────────────────────────────────────────────
-    if (_generatedCourses.length >= maxCourses) {
-      showNotification(
-          'You already have $maxCourses courses. Remove one before generating a new one.');
-      return;
-    }
-
-    // ── Daily Limit Guard ─────────────────────────────────────────────
-    if (dailyGenerationsLeft <= 0) {
-      showNotification('Daily limit reached! You can generate up to $maxDailyGenerations courses per day. Try again tomorrow.');
-      return;
-    }
-
+    // ── Limits removed per user request ───────────────────────────────
+    
     _isGeneratingCourse = true;
     showNotification(
         'AI is creating your learning path in the background. You will be notified when it is ready!');
@@ -926,19 +941,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> generateCourseInBackgroundFromCategory(String promptHint,
       {int? dailyMinutes, bool allowCurated = true, String language = 'English'}) async {
-    // ── Max course guard ──────────────────────────────────────────────
-    if (_generatedCourses.length >= maxCourses) {
-      showNotification(
-          'You\'ve reached the $maxCourses-course limit. Remove a course from your library to generate a new one.');
-      return;
-    }
-
-    // ── Daily Limit Guard ─────────────────────────────────────────────
-    if (dailyGenerationsLeft <= 0) {
-      showNotification('Daily limit reached! You can generate up to $maxDailyGenerations courses per day. Try again tomorrow.');
-      return;
-    }
-
+    // ── Limits removed per user request ───────────────────────────────
+    
     _isGeneratingCourse = true;
     notifyListeners();
 
@@ -1212,29 +1216,42 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Build an exclude string so YouTube avoids previous channels
-      final excluded = _flipExcludedChannels[courseId] ?? [];
+      final excludedVideos = _flipExcludedVideoIds[courseId] ?? [];
+      final excludedChannels = _flipExcludedChannelIds[courseId] ?? [];
 
-      // Use the category as the topic for the flip search
-      final topic = oldCourse.category.isNotEmpty ? oldCourse.category : oldCourse.title;
+      if (oldCourse.channelId != null && !excludedChannels.contains(oldCourse.channelId)) {
+        excludedChannels.add(oldCourse.channelId!);
+      }
+      for (var mod in oldCourse.modules) {
+        for (var les in mod.lessons) {
+          if (les.youtubeVideoId.isNotEmpty && !excludedVideos.contains(les.youtubeVideoId)) {
+            excludedVideos.add(les.youtubeVideoId);
+          }
+          if (les.channelId != null && !excludedChannels.contains(les.channelId)) {
+            excludedChannels.add(les.channelId!);
+          }
+        }
+      }
+
+      // Use the title (cleaned) as the topic for the flip search, as it's more specific
+      // than the category (e.g. "Python for Data Science" vs "Programming").
+      // Also ensure we include the category if the title is too generic.
+      String topic = oldCourse.title.replaceAll('…', '').replaceAll('Complete', '').replaceAll('Course', '').trim();
+      if (topic.length < 5 && oldCourse.category.isNotEmpty) {
+        topic = oldCourse.category;
+      }
 
       final newCourse = await ApiService.suggestPath(
         topic,
         language: oldCourse.language,
         allowCurated: false, // Force fresh YouTube search, no curated
-        excludedVideoIds: excluded,
+        excludedVideoIds: excludedVideos,
+        excludedChannelIds: excludedChannels,
       ).timeout(const Duration(seconds: 60), onTimeout: () => null);
 
       if (newCourse != null) {
-        // Track the old course's channel info for future exclusions
-        for (final m in oldCourse.modules) {
-          for (final l in m.lessons) {
-            if (l.youtubeVideoId.isNotEmpty) {
-              excluded.add(l.youtubeVideoId);
-            }
-          }
-        }
-        _flipExcludedChannels[courseId] = excluded;
+        _flipExcludedVideoIds[courseId] = excludedVideos;
+        _flipExcludedChannelIds[courseId] = excludedChannels;
         _flipCounts[courseId] = (_flipCounts[courseId] ?? 0) + 1;
 
         // Replace the course in-place
@@ -1262,7 +1279,8 @@ class AppState extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('flip_counts', jsonEncode(_flipCounts));
-      await prefs.setString('flip_excluded', jsonEncode(_flipExcludedChannels));
+      await prefs.setString('flip_excluded_vids', jsonEncode(_flipExcludedVideoIds));
+      await prefs.setString('flip_excluded_chans', jsonEncode(_flipExcludedChannelIds));
     } catch (_) {}
   }
 
@@ -1275,11 +1293,17 @@ class AppState extends ChangeNotifier {
         _flipCounts.clear();
         data.forEach((k, v) => _flipCounts[k] = v as int);
       }
-      final excludedJson = prefs.getString('flip_excluded');
-      if (excludedJson != null) {
-        final Map<String, dynamic> data = jsonDecode(excludedJson);
-        _flipExcludedChannels.clear();
-        data.forEach((k, v) => _flipExcludedChannels[k] = List<String>.from(v));
+      final vidsJson = prefs.getString('flip_excluded_vids');
+      if (vidsJson != null) {
+        final Map<String, dynamic> data = jsonDecode(vidsJson);
+        _flipExcludedVideoIds.clear();
+        data.forEach((k, v) => _flipExcludedVideoIds[k] = List<String>.from(v));
+      }
+      final chansJson = prefs.getString('flip_excluded_chans');
+      if (chansJson != null) {
+        final Map<String, dynamic> data = jsonDecode(chansJson);
+        _flipExcludedChannelIds.clear();
+        data.forEach((k, v) => _flipExcludedChannelIds[k] = List<String>.from(v));
       }
     } catch (_) {}
   }
@@ -1467,21 +1491,69 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> signOut() async {
-    await AuthService.signOut();
-    _authStatus = AuthStatus.unauthenticated;
+  /// Clears ALL user-specific data from in-memory state AND SharedPreferences.
+  /// Called on signOut and before loading a new account to prevent cross-account
+  /// data leakage (e.g. profile photo appearing on wrong account).
+  Future<void> _clearAllLocalUserData() async {
+    // ── In-memory state reset ──────────────────────────────────────────
     _user = null;
     _dream = null;
     _preferences = null;
     _roadmaps = [];
-    _needsOnboarding = false;
     _generatedCourses.clear();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('authStatus');
-    await prefs.remove('user');
-    await prefs.remove('dream');
-    await prefs.remove('user_preferences');
-    await prefs.remove('local_roadmaps');
+    _courses = [];
+    _pulseEvents = [];
+    _starredLessonIds.clear();
+    _savedCourseIds.clear();
+    _quizScores.clear();
+    _flipCounts.clear();
+    _flipExcludedVideoIds.clear();
+    _flipExcludedChannelIds.clear();
+    _notificationMessage = null;
+    _lastCompletedCourse = null;
+    _notificationMessage = null;
+    _coinEarnedEvent = null;
+    _streakBumpEvent = null;
+    _trendingCardLang.clear();
+    _courseBatchIndex = 0;
+
+    // ── Delete profile image file from disk ────────────────────────────
+    if (_profileImagePath != null) {
+      try {
+        final oldFile = File(_profileImagePath!);
+        if (await oldFile.exists()) {
+          await oldFile.delete();
+        }
+      } catch (_) {}
+      _profileImagePath = null;
+    }
+
+    // ── SharedPreferences cleanup ──────────────────────────────────────
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await Future.wait([
+        prefs.remove('authStatus'),
+        prefs.remove('user'),
+        prefs.remove('dream'),
+        prefs.remove('dream_collected'),
+        prefs.remove('user_preferences'),
+        prefs.remove('local_courses'),
+        prefs.remove('local_roadmaps'),
+        prefs.remove('profile_image_path'),
+        prefs.remove('starred_lessons'),
+        prefs.remove('saved_courses'),
+        prefs.remove('quiz_scores'),
+        prefs.remove('flip_counts'),
+        prefs.remove('flip_excluded_vids'),
+        prefs.remove('flip_excluded_chans'),
+      ]);
+    } catch (_) {}
+  }
+
+  Future<void> signOut() async {
+    await AuthService.signOut();
+    _authStatus = AuthStatus.unauthenticated;
+    await _clearAllLocalUserData();
     notifyListeners();
   }
 

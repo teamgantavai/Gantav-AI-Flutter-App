@@ -124,6 +124,7 @@ class ApiService {
     String language = 'English',
     bool allowCurated = true,
     List<String> excludedVideoIds = const [],
+    List<String> excludedChannelIds = const [],
   }) async {
     try {
       // 1. Verified curated courses — only when the caller opts in. Trending
@@ -150,17 +151,26 @@ class ApiService {
         topic: searchTopic,
         language: language,
         max: 3,
+        excludedChannelIds: excludedChannelIds,
       );
       for (final playlist in playlists) {
-        final videos =
-            await YouTubeApiService.fetchPlaylistVideos(playlist.id);
+        final videos = await YouTubeApiService.fetchPlaylistVideos(playlist.id);
 
         if (excludedVideoIds.isNotEmpty) {
           final overlap = videos.where((v) => excludedVideoIds.contains(v.id)).length;
-          if (overlap > 0) continue; // Skip playlist if it contains excluded videos
+          if (overlap > 0) continue; 
         }
 
         if (videos.length >= _minLessonsPerCourse) {
+          // Instead of building directly, we use Gemini to pick and structure 
+          // from these playlist videos. This ensures high-quality titles and flow.
+          final course = await GeminiService.generateLearningPath(
+            dream: dream,
+            preFilteredVideos: videos,
+          );
+          if (course != null) return course;
+          
+          // Fallback if Gemini fails
           return _buildCourseFromPlaylist(dream, playlist, videos);
         }
       }
@@ -169,6 +179,7 @@ class ApiService {
       final preFilteredVideos = await YouTubeApiService.fetchHighQualityVideos(
         topic: searchTopic,
         language: language,
+        excludedChannelIds: excludedChannelIds,
       );
       if (excludedVideoIds.isNotEmpty) {
         preFilteredVideos.removeWhere((v) => excludedVideoIds.contains(v.id));
@@ -224,6 +235,7 @@ class ApiService {
           title: v.title,
           youtubeVideoId: v.id,
           duration: v.durationText,
+          channelId: v.channelId,
         ));
         totalLessons++;
       }
@@ -265,6 +277,7 @@ class ApiService {
       estimatedTime: _estimateTotalTime(videos),
       skills: _cleanSkills(dream),
       modules: modules,
+      channelId: playlist.channelId,
     );
   }
 
@@ -328,6 +341,7 @@ class ApiService {
            title: v.title,
            youtubeVideoId: v.id,
            duration: v.durationText,
+           channelId: v.channelId,
          ));
          vidIdx++;
        }
