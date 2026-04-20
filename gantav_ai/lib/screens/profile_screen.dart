@@ -16,6 +16,7 @@ import 'verify_certificate_screen.dart';
 import 'legal_screen.dart';
 import '../models/models.dart';
 import '../models/certificate.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -1185,18 +1186,41 @@ class _SettingsSheet extends StatelessWidget {
         },
       ),
       _SettingAction(
-        icon: Icons.notifications_outlined,
-        title: 'Notifications',
-        subtitle: 'Push & reminder preferences',
-        color: AppColors.teal,
-        onTap: () {},
+        icon: Icons.help_outline_rounded,
+        title: 'FAQs',
+        subtitle: 'Frequently asked questions',
+        color: AppColors.gold,
+        onTap: () {
+          Navigator.pop(context);
+          _showFAQSheet(context, isDark);
+        },
       ),
       _SettingAction(
-        icon: Icons.help_outline,
-        title: 'Help & Support',
-        subtitle: 'FAQs, contact us',
+        icon: Icons.alternate_email_rounded,
+        title: 'Contact Us',
+        subtitle: 'teamgantavai@gmail.com',
         color: AppColors.teal,
-        onTap: () {},
+        onTap: () async {
+          final Uri emailLaunchUri = Uri(
+            scheme: 'mailto',
+            path: 'teamgantavai@gmail.com',
+            queryParameters: {
+              'subject': 'Support Request - Gantav AI',
+            },
+          );
+          if (await canLaunchUrl(emailLaunchUri)) {
+            await launchUrl(emailLaunchUri, mode: LaunchMode.externalApplication);
+          } else {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Could not open email app. Email: teamgantavai@gmail.com'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+        },
       ),
       _SettingAction(
         icon: Icons.gavel_outlined,
@@ -1687,6 +1711,130 @@ class _CourseListTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+void _showFAQSheet(BuildContext context, bool isDark) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (ctx) => DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      maxChildSize: 0.9,
+      minChildSize: 0.5,
+      expand: false,
+      builder: (_, controller) => _FAQView(controller: controller, isDark: isDark),
+    ),
+  );
+}
+
+class _FAQView extends StatelessWidget {
+  final ScrollController controller;
+  final bool isDark;
+
+  const _FAQView({required this.controller, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final faqs = [
+      {
+        'q': 'How do I generate a course?',
+        'a': 'Simply enter any topic you want to learn in the search bar on the Home screen. Gantav AI will analyze YouTube content and generate a structured roadmap with lessons and quizzes for you.'
+      },
+      {
+        'q': 'Is Gantav AI free to use?',
+        'a': 'Yes! You can generate up to 5 courses for free. You can delete old courses to free up slots for new topics.'
+      },
+      {
+        'q': 'How do I earn certificates?',
+        'a': 'Complete all lessons in a course and pass the associated quizzes with a score of 60% or higher to unlock your Gantav Verified certificate.'
+      },
+      {
+        'q': 'Can I learn on multiple devices?',
+        'a': 'Absolutely. Your progress is synced to your Google account, allowing you to pick up exactly where you left off on any device.'
+      },
+      {
+        'q': 'What are "Flips"?',
+        'a': 'If you don\'t like the video selected for a lesson, you can "Flip" it. Gantav AI will search for an alternative high-quality video for that specific topic.'
+      },
+    ];
+
+    return Column(
+      children: [
+        const SizedBox(height: 12),
+        Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: AppColors.textMuted.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Row(
+            children: [
+              Text(
+                'Frequently Asked Questions',
+                style: GoogleFonts.dmSans(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? AppColors.textLight : AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            controller: controller,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            itemCount: faqs.length,
+            itemBuilder: (context, index) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: ExpansionTile(
+                  shape: const RoundedRectangleBorder(side: BorderSide.none),
+                  collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
+                  title: Text(
+                    faqs[index]['q']!,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.textLight : AppColors.textDark,
+                    ),
+                  ),
+                  iconColor: AppColors.violet,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Text(
+                        faqs[index]['a']!,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          height: 1.5,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
