@@ -1546,6 +1546,7 @@ class AppState extends ChangeNotifier {
         prefs.remove('flip_counts'),
         prefs.remove('flip_excluded_vids'),
         prefs.remove('flip_excluded_chans'),
+        prefs.remove('certificates_local'),
       ]);
     } catch (_) {}
   }

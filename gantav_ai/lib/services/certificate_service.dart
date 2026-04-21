@@ -122,8 +122,8 @@ class CertificateService {
 
   /// All certificates owned by the current user. Firestore preferred, local
   /// as fallback.
-  static Future<List<Certificate>> getMyCertificates() async {
-    final uid = _uid;
+  static Future<List<Certificate>> getMyCertificates({String? userId}) async {
+    final uid = userId ?? _uid;
     if (uid != null) {
       try {
         final snap = await _db
@@ -154,6 +154,7 @@ class CertificateService {
             }
           })
           .whereType<Certificate>()
+          .where((c) => uid == null || c.userId == uid)
           .toList();
     } catch (_) {
       return const [];

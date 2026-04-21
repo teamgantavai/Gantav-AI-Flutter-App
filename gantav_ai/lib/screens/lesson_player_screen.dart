@@ -236,27 +236,11 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
 
   void _toggleFocusMode() {
     setState(() => _isFocusMode = !_isFocusMode);
-    if (_isFocusMode) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-    } else {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ]);
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && !_isFocusMode) {
-          SystemChrome.setPreferredOrientations([
-            DeviceOrientation.portraitUp,
-            DeviceOrientation.portraitDown,
-            DeviceOrientation.landscapeLeft,
-            DeviceOrientation.landscapeRight,
-          ]);
-        }
-      });
-    }
+    
+    // 12D.7 — Use the player controller's built-in full screen toggle.
+    // This handles the orientation transition more reliably than manual
+    // SystemChrome calls which can conflict with the player's internal state.
+    _ytKey.currentState?.toggleFullScreen();
   }
 
 
@@ -338,7 +322,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
         child: Column(
           children: [
             _buildTopBar(isDark),
-            _buildVideoPlayer(),
+            _buildVideoPlayer(false),
             Expanded(
               child: _showAiChat
                   ? _buildAiChatPanel(isDark)
@@ -358,10 +342,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
       body: Stack(
         children: [
           Center(
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: _buildVideoPlayer(),
-            ),
+            child: _buildVideoPlayer(true),
           ),
           Positioned(
             top: 20,
@@ -453,51 +434,54 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
     );
   }
 
-  Widget _buildVideoPlayer() {
+  Widget _buildVideoPlayer(bool isLandscape) {
+    final playerWidget = AppYoutubePlayer(
+      key: _ytKey,
+      videoId: widget.lesson.youtubeVideoId,
+      autoPlay: false,
+      onVideoEnd: () {
+        if (!_isCompleted) {
+          setState(() => _isCompleted = true);
+          _saveInteractionState();
+          context.read<AppState>().markLessonAsCompleted(
+                widget.course.id,
+                widget.module.id,
+                widget.lesson.id,
+              );
+
+          // 12D.1 — show coin badge briefly after video ends
+          _coinBadgeCtrl.forward(from: 0).then((_) {
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) _coinBadgeCtrl.reverse();
+            });
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '✅ +${widget.lesson.coinValue} coins! Take the quiz to continue.',
+                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: AppColors.teal,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      },
+    );
+
+    if (isLandscape) {
+      return SizedBox.expand(child: playerWidget);
+    }
+
     return SizedBox(
       width: double.infinity,
       child: AspectRatio(
         aspectRatio: 16 / 9,
-        // 12D.7 — AppYoutubePlayer key is set so _ytKey.currentState is
-        // always valid; the mobile implementation handles 10s double-tap
-        // seek and long-press 2× speed natively inside the player widget.
-        child: AppYoutubePlayer(
-          key: _ytKey,
-          videoId: widget.lesson.youtubeVideoId,
-          autoPlay: false,
-          onVideoEnd: () {
-            if (!_isCompleted) {
-              setState(() => _isCompleted = true);
-              _saveInteractionState();
-              context.read<AppState>().markLessonAsCompleted(
-                    widget.course.id,
-                    widget.module.id,
-                    widget.lesson.id,
-                  );
-
-              // 12D.1 — show coin badge briefly after video ends
-              _coinBadgeCtrl.forward(from: 0).then((_) {
-                Future.delayed(const Duration(seconds: 2), () {
-                  if (mounted) _coinBadgeCtrl.reverse();
-                });
-              });
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '✅ +${widget.lesson.coinValue} coins! Take the quiz to continue.',
-                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-                  ),
-                  backgroundColor: AppColors.teal,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-            }
-          },
-        ),
+        child: playerWidget,
       ),
     );
   }

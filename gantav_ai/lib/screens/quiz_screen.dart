@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/app_state.dart';
 import '../widgets/widgets.dart';
+import 'lesson_player_screen.dart';
 
 class QuizScreen extends StatefulWidget {
   final Lesson lesson;
@@ -88,7 +89,52 @@ class _QuizScreenState extends State<QuizScreen> {
         _quizComplete = true;
         final score = _correctCount / _questions.length;
         context.read<AppState>().recordQuizScore(widget.course.id, score);
+        
+        // 12D.7 — Auto-navigate to next lesson if passed
+        if (score >= 0.6) {
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted && _quizComplete) {
+              _navigateToNextLesson();
+            }
+          });
+        }
       });
+    }
+  }
+
+  void _navigateToNextLesson() {
+    Module? nextMod;
+    Lesson? nextLes;
+    bool foundCurrent = false;
+    for (final m in widget.course.modules) {
+      for (final l in m.lessons) {
+        if (foundCurrent) {
+          nextMod = m;
+          nextLes = l;
+          break;
+        }
+        if (l.id == widget.lesson.id) {
+          foundCurrent = true;
+        }
+      }
+      if (nextLes != null) break;
+    }
+
+    if (nextLes != null) {
+      Navigator.of(context).pop(); // pop quiz screen
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => LessonPlayerScreen(
+            course: widget.course,
+            module: nextMod!,
+            lesson: nextLes!,
+          ),
+        ),
+      );
+    } else {
+      // End of course
+      Navigator.of(context).pop();
+      Navigator.of(context).pop();
     }
   }
 
@@ -556,9 +602,11 @@ class _QuizScreenState extends State<QuizScreen> {
             height: 48,
             child: ElevatedButton(
               onPressed: () {
-                Navigator.of(context).pop();
-                if (!passed) return;
-                Navigator.of(context).pop(); // Pop lesson player too
+                if (!passed) {
+                  Navigator.of(context).pop();
+                  return;
+                }
+                _navigateToNextLesson();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: passed ? AppColors.teal : AppColors.violet,

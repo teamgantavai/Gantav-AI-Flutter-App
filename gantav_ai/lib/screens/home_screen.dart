@@ -5,6 +5,8 @@ import '../theme/app_theme.dart';
 import '../services/app_state.dart';
 import '../widgets/widgets.dart';
 import '../widgets/daily_time_dialog.dart';
+import '../widgets/course_gen_dialog.dart';
+
 import '../widgets/inline_ad_card.dart';
 import 'course_detail_screen.dart';
 import 'roadmap_screen.dart';
@@ -116,15 +118,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _generateTrending(BuildContext context, TrendingCourse course) async {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
-    final dailyMinutes = await showDailyTimeDialog(context);
-    if (dailyMinutes == null) return;
+    
+    // 12D.5 — Use the currently selected language for this card as initial selection
+    final currentLangCode = appState.trendingCardLang(course);
+    final initialLang = currentLangCode == 'hi' ? 'Hindi' : 'English';
+    
+    final selection = await showCourseGenDialog(context, initialLanguage: initialLang);
+    if (selection == null) return;
     if (!mounted) return;
-    final lang = appState.pickTrendingLang(course); // 12D.5
+    
     appState.generateCourseInBackgroundFromCategory(
       appState.pickTrendingPrompt(course),
-      dailyMinutes: dailyMinutes == 0 ? null : dailyMinutes,
+      dailyMinutes: selection.dailyMinutes == 0 ? null : selection.dailyMinutes,
       allowCurated: false,
-      language: lang,
+      language: selection.language,
     );
     messenger.showSnackBar(
       SnackBar(

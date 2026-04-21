@@ -51,9 +51,13 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
 
   // Custom gesture tracking
   int _lastTapTime = 0;
-  Offset _lastTapPosition = Offset.zero;
+  Offset _doubleTapPosition = Offset.zero;
   Timer? _longPressTimer;
   bool _isLongPressActive = false;
+
+  /// Static flag to prevent [dispose] from resetting orientations when
+  /// we are intentionally switching between portrait/landscape layouts.
+  static bool skipOrientationResetOnDispose = false;
 
   String _getSafeVideoId(String input) {
     if (input.isEmpty) return '';
@@ -112,13 +116,15 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
     
     _controller.dispose();
     
-    // Restore preferred orientations to app defaults
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    // Restore preferred orientations to app defaults unless skipped
+    if (!skipOrientationResetOnDispose) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
     
     super.dispose();
   }
@@ -166,6 +172,10 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
     return _controller.value.position.inSeconds.toDouble();
   }
 
+  void toggleFullScreen() {
+    _controller.toggleFullScreenMode();
+  }
+
   // ── Gestures ─────────────────────────────────────────────────────────
 
   void _handleDoubleTap(Offset localPosition) {
@@ -197,143 +207,147 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
   void _seekRelative(int seconds) {
     final current = _controller.value.position.inSeconds;
     final duration = _controller.metadata.duration.inSeconds;
-    final newPos = (current + seconds).clamp(0, duration > 0 ? duration : 999999);
-    _controller.seekTo(Duration(seconds: newPos));
+    _controller.seekTo(Duration(seconds: (current + seconds).clamp(0, duration)));
   }
-
-  // ── Build ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    return YoutubePlayerBuilder(
-      player: YoutubePlayer(
-        controller: _controller,
-        showVideoProgressIndicator: true,
-        progressIndicatorColor: const Color(0xFF6D5BDB),
-        progressColors: const ProgressBarColors(
-          playedColor: Color(0xFF6D5BDB),
-          handleColor: Color(0xFF6D5BDB),
-          bufferedColor: Colors.white30,
-          backgroundColor: Colors.white12,
-        ),
-        onReady: () {
-          setState(() => _isReady = true);
-          if (_currentSpeed != 1.0) _controller.setPlaybackRate(_currentSpeed);
-        },
-        bottomActions: [
-          const SizedBox(width: 8),
-          CurrentPosition(),
-          const SizedBox(width: 8),
-          const Expanded(child: ProgressBar(isExpanded: true)),
-          const SizedBox(width: 8),
-          RemainingDuration(),
-          if (_currentSpeed != 1.0)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                '${_currentSpeed}x',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold),
-              ),
-            ),
-          const FullScreenButton(),
-          const SizedBox(width: 8),
-        ],
+    final player = YoutubePlayer(
+      controller: _controller,
+      showVideoProgressIndicator: true,
+      progressIndicatorColor: const Color(0xFF6D5BDB),
+      progressColors: const ProgressBarColors(
+        playedColor: Color(0xFF6D5BDB),
+        handleColor: Color(0xFF6D5BDB),
+        bufferedColor: Colors.white30,
+        backgroundColor: Colors.white12,
       ),
-      onExitFullScreen: () {
-        SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-          DeviceOrientation.portraitDown,
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
+      onReady: () {
+        setState(() => _isReady = true);
+        if (_currentSpeed != 1.0) _controller.setPlaybackRate(_currentSpeed);
       },
-      builder: (context, player) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            player,
-
-            // Gesture Overlay for Double Tap & Long Press
-            // Positioned over the top part of the player to avoid bottom controls
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 60,
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onDoubleTapDown: (details) => _handleDoubleTap(details.localPosition),
-                onLongPressStart: (details) {
-                  _isLongPressActive = true;
-                  _speedBeforeLongPress = _currentSpeed;
-                  setPlaybackRate(2.0);
-                  if (mounted) setState(() => _isLongPressing = true);
-                  HapticFeedback.heavyImpact();
-                },
-                onLongPressEnd: (details) {
-                  if (_isLongPressActive) {
-                    _isLongPressActive = false;
-                    setPlaybackRate(_speedBeforeLongPress);
-                    if (mounted) setState(() => _isLongPressing = false);
-                    HapticFeedback.selectionClick();
-                  }
-                },
-                child: Container(color: Colors.transparent),
-              ),
+      bottomActions: [
+        const SizedBox(width: 8),
+        CurrentPosition(),
+        const SizedBox(width: 8),
+        const Expanded(child: ProgressBar(isExpanded: true)),
+        const SizedBox(width: 8),
+        RemainingDuration(),
+        if (_currentSpeed != 1.0)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(4),
             ),
+            child: Text(
+              '${_currentSpeed}x',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold),
+            ),
+          ),
+        const FullScreenButton(),
+        const SizedBox(width: 8),
+      ],
+    );
 
-            // ── Double-tap seek animations ──────────────────────────
-            if (_showSeekForward) _buildSeekOverlay(isForward: true),
-            if (_showSeekBackward) _buildSeekOverlay(isForward: false),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        player,
+        
+        // ── Gesture Overlay ─────────────────────────────────────
+        // We use a translucent listener on top of the player to 
+        // intercept double-taps and long-presses without blocking
+        // single-taps to the player's own controls.
+        Positioned.fill(
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (event) {
+              final now = DateTime.now().millisecondsSinceEpoch;
+              if (now - _lastTapTime < 300) {
+                _handleDoubleTap(event.localPosition);
+                _lastTapTime = 0;
+              } else {
+                _lastTapTime = now;
+              }
+              
+              _longPressTimer?.cancel();
+              _longPressTimer = Timer(const Duration(milliseconds: 500), () {
+                _isLongPressActive = true;
+                _speedBeforeLongPress = _currentSpeed;
+                setPlaybackRate(2.0);
+                if (mounted) setState(() => _isLongPressing = true);
+                HapticFeedback.heavyImpact();
+              });
+            },
+            onPointerUp: (event) {
+              _longPressTimer?.cancel();
+              if (_isLongPressActive) {
+                _isLongPressActive = false;
+                setPlaybackRate(_speedBeforeLongPress);
+                if (mounted) setState(() => _isLongPressing = false);
+                HapticFeedback.selectionClick();
+              }
+            },
+            onPointerCancel: (event) {
+              _longPressTimer?.cancel();
+              if (_isLongPressActive) {
+                _isLongPressActive = false;
+                setPlaybackRate(_speedBeforeLongPress);
+                if (mounted) setState(() => _isLongPressing = false);
+                HapticFeedback.selectionClick();
+              }
+            },
+            child: const SizedBox.expand(),
+          ),
+        ),
 
-              // ── Long-press 2× indicator ─────────────────────────────
-              if (_isLongPressing)
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7C6AFF).withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF7C6AFF).withValues(alpha: 0.4),
-                          blurRadius: 12,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.speed_rounded,
-                            color: Colors.white, size: 20),
-                        SizedBox(width: 6),
-                        Text(
-                          '2×',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+        // ── Double-tap seek animations ──────────────────────────
+        if (_showSeekForward) _buildSeekOverlay(isForward: true),
+        if (_showSeekBackward) _buildSeekOverlay(isForward: false),
+
+        // ── Long-press 2× indicator ─────────────────────────────
+        if (_isLongPressing)
+          Positioned(
+            top: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C6AFF).withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF7C6AFF).withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.speed_rounded,
+                      color: Colors.white, size: 20),
+                  SizedBox(width: 6),
+                  Text(
+                    '2×',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-            ],
-          );
-      },
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 

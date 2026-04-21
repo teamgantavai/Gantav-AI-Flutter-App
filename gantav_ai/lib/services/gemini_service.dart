@@ -344,44 +344,40 @@ class GeminiService {
         'Create a complete learning course for: "$courseName"\n'
         '$videoContext'
         'CRITICAL: The course title MUST be exactly "$courseName". Do NOT use \$dream placeholder.\n'
-        'Return ONLY valid JSON (no markdown backticks, no extra text):\n'
+        'Return ONLY valid JSON (no markdown backticks, no extra text). Use the following format as a guide, but YOU MUST ADAPT the number of modules (2 to 5) and lessons per module (2 to 6) based on the depth and complexity of the topic:\n'
         '{\n'
         '  "id": "gen_${DateTime.now().millisecondsSinceEpoch}",\n'
         '  "title": "$courseName",\n'
         '  "description": "A comprehensive course on ${courseName.toLowerCase()}",\n'
         '  "category": "$courseCategory",\n'
         '  "thumbnail_url": "$thumbUrl",\n'
-        '  "total_lessons": 9,\n'
+        '  "total_lessons": 5,\n'
+        '  "estimated_time": "3h 45m",\n'
         '  "rating": 4.8,\n'
         '  "learner_count": 0,\n'
         '  "skills": ["${moduleTopics[0]}", "${moduleTopics[1]}", "${moduleTopics[2]}"],\n'
         '  "modules": [\n'
         '    {"id":"mod_1","title":"${moduleTopics[0]}","lesson_count":3,"is_locked":false,"lessons":[\n'
-        '      {"id":"les_1","title":"Getting Started with ${moduleTopics[0]}","youtube_video_id":"VIDEO_ID_1","duration":"15:00"},\n'
-        '      {"id":"les_2","title":"Key ${moduleTopics[0]} Building Blocks","youtube_video_id":"VIDEO_ID_2","duration":"18:00"},\n'
-        '      {"id":"les_3","title":"${moduleTopics[0]} Hands-On Walkthrough","youtube_video_id":"VIDEO_ID_3","duration":"20:00"}\n'
+        '      {"id":"les_1","title":"Getting Started","youtube_video_id":"VIDEO_ID_1","duration":"15:00"},\n'
+        '      {"id":"les_2","title":"Core Concepts","youtube_video_id":"VIDEO_ID_2","duration":"18:00"},\n'
+        '      {"id":"les_3","title":"Practice","youtube_video_id":"VIDEO_ID_3","duration":"20:00"}\n'
         '    ]},\n'
-        '    {"id":"mod_2","title":"${moduleTopics[1]}","lesson_count":3,"is_locked":true,"lessons":[\n'
-        '      {"id":"les_4","title":"${moduleTopics[1]} in Action","youtube_video_id":"VIDEO_ID_4","duration":"22:00"},\n'
-        '      {"id":"les_5","title":"Patterns & Pitfalls in ${moduleTopics[1]}","youtube_video_id":"VIDEO_ID_5","duration":"25:00"},\n'
-        '      {"id":"les_6","title":"Mini-Project: ${moduleTopics[1]}","youtube_video_id":"VIDEO_ID_6","duration":"19:00"}\n'
-        '    ]},\n'
-        '    {"id":"mod_3","title":"${moduleTopics[2]}","lesson_count":3,"is_locked":true,"lessons":[\n'
-        '      {"id":"les_7","title":"${moduleTopics[2]} Case Study","youtube_video_id":"VIDEO_ID_7","duration":"23:00"},\n'
-        '      {"id":"les_8","title":"Production-Grade ${moduleTopics[2]}","youtube_video_id":"VIDEO_ID_8","duration":"27:00"},\n'
-        '      {"id":"les_9","title":"Capstone: $courseName","youtube_video_id":"VIDEO_ID_9","duration":"35:00"}\n'
+        '    {"id":"mod_2","title":"${moduleTopics[1]}","lesson_count":2,"is_locked":true,"lessons":[\n'
+        '      {"id":"les_4","title":"Advanced Topic","youtube_video_id":"VIDEO_ID_4","duration":"22:00"},\n'
+        '      {"id":"les_5","title":"Final Project","youtube_video_id":"VIDEO_ID_5","duration":"25:00"}\n'
         '    ]}\n'
         '  ]\n'
         '}\n\n'
         'Rules:\n'
-        '1. Replace VIDEO_ID_N with REAL YouTube video IDs from the list above.\n'
-        '2. Match each video to its lesson topic. PRIORITIZE videos with high ViewCount and Engagement.\n'
-        '3. Keep title EXACTLY as "$courseName" (max 6 words — be concise).\n'
-        '4. Module 1: is_locked=false, Modules 2-3: is_locked=true.\n'
-        '5. PEDAGOGICAL STRUCTURE: The course MUST be logically ordered: Module 1 (Fundamentals), Module 2 (Core Concepts & Practice), Module 3 (Advanced/Projects).\n'
-        '6. MASTERY FOCUS: Ensure that after completing these 9 lessons, a student has a strong grasp of $courseName. Don\'t skip essential prerequisites.\n'
-        '7. TOPIC RELEVANCE: Ensure the course content stays strictly within the domain of "$courseName". For example, if it\'s a music course, do NOT include technical or 3D modeling aspects unless specifically requested.\n'
-        '8. Module + lesson titles MUST vary — never use the same suffix twice (no repeated "Deep Dive", "Fundamentals" everywhere). Use specific topic-driven names.';
+        '1. Generate a dynamic number of modules (e.g., 2 to 5) and lessons per module (e.g., 2 to 8) based on how complex the topic "$courseName" is.\n'
+        '2. Update "total_lessons" to match the actual total number of lessons generated.\n'
+        '3. Replace VIDEO_ID_N with REAL YouTube video IDs from the list above. Match each video to its lesson topic. PRIORITIZE videos with high ViewCount and Engagement.\n'
+        '4. Keep title EXACTLY as "$courseName" (max 6 words — be concise).\n'
+        '5. Module 1: is_locked=false, all other Modules: is_locked=true.\n'
+        '6. PEDAGOGICAL STRUCTURE: The course MUST be logically ordered: Fundamentals, Core Concepts & Practice, Advanced/Projects. Feel free to use or expand on these suggested skills: ${moduleTopics.join(', ')}.\n'
+        '7. MASTERY FOCUS: Ensure that after completing the course, a student has a strong grasp of $courseName. Don\'t skip essential prerequisites.\n'
+        '8. TOPIC RELEVANCE: Ensure the course content stays strictly within the domain of "$courseName".\n'
+        '9. Module + lesson titles MUST vary — never use the same suffix twice. Use specific topic-driven names.';
 
     try {
       final response = await _smartCall(
@@ -402,6 +398,9 @@ class GeminiService {
       }
       if (data['category'] == null || (data['category'] as String).trim().isEmpty) {
         data['category'] = courseCategory;
+      }
+      if (data['estimated_time'] == null || (data['estimated_time'] as String).trim().isEmpty) {
+        data['estimated_time'] = '3h 45m'; // Sensible default for generated paths
       }
 
       return Course.fromJson(data);

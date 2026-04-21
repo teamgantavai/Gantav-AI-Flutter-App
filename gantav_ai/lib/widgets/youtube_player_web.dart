@@ -116,6 +116,12 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> {
     return await _controller.currentTime;
   }
 
+  void toggleFullScreen() {
+    // Full screen is handled natively by the browser on Web,
+    // so we don't need a manual toggle here. This method exists
+    // for cross-platform compatibility with the mobile player.
+  }
+
   /// Show professional settings bottom sheet
   void showSettingsSheet() {
     showModalBottomSheet(

@@ -273,13 +273,6 @@ class SuggestedCourseRow extends StatelessWidget {
                   Row(
                     children: [
                       Flexible(child: _CatPill(category: course.isVerified ? 'Gantav Verified' : course.category, small: true, isVerified: course.isVerified)),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.star_rounded, color: AppColors.gold, size: 12),
-                      const SizedBox(width: 3),
-                      Text(course.rating.toStringAsFixed(1),
-                        style: GoogleFonts.dmMono(
-                          fontSize: 11, fontWeight: FontWeight.w600,
-                          color: AppColors.gold)),
                     ],
                   ),
                   const SizedBox(height: 5),

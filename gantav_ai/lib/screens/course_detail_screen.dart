@@ -123,7 +123,12 @@ class CourseDetailScreen extends StatelessWidget {
                   ),
                   Expanded(
                     flex: 4,
-                    child: _buildModuleList(context, isDark, currentCourse),
+                    child: CustomScrollView(
+                      slivers: [
+                        _buildModuleList(context, isDark, currentCourse),
+                        const SliverToBoxAdapter(child: SizedBox(height: 50)),
+                      ],
+                    ),
                   ),
                 ],
               ),

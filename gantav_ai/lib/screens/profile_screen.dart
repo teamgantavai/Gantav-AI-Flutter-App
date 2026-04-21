@@ -99,7 +99,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     _GeneratedCoursesTab(
                         appState: appState, isDark: isDark),
                     _FavoritesTab(appState: appState, isDark: isDark),
-                    _CertificatesTab(isDark: isDark),
+                    _CertificatesTab(isDark: isDark, userId: user.id),
                     _AchievementsTab(user: user, isDark: isDark),
                   ],
                 ),
@@ -548,7 +548,8 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 
 class _CertificatesTab extends StatefulWidget {
   final bool isDark;
-  const _CertificatesTab({required this.isDark});
+  final String userId;
+  const _CertificatesTab({required this.isDark, required this.userId});
 
   @override
   State<_CertificatesTab> createState() => _CertificatesTabState();
@@ -565,7 +566,7 @@ class _CertificatesTabState extends State<_CertificatesTab> {
   }
 
   Future<void> _loadCertificates() async {
-    final certificates = await CertificateService.getMyCertificates();
+    final certificates = await CertificateService.getMyCertificates(userId: widget.userId);
     if (mounted) {
       setState(() {
         _certificates = certificates;
@@ -916,15 +917,6 @@ class _GeneratedCoursesTab extends StatelessWidget {
                                 style: GoogleFonts.dmSans(
                                     fontSize: 11,
                                     color: AppColors.textMuted)),
-                            const SizedBox(width: 10),
-                            const Icon(Icons.star_rounded,
-                                size: 12, color: AppColors.gold),
-                            const SizedBox(width: 2),
-                            Text(course.rating.toStringAsFixed(1),
-                                style: GoogleFonts.dmSans(
-                                    fontSize: 11,
-                                    color: AppColors.gold,
-                                    fontWeight: FontWeight.w600)),
                           ],
                         ),
                         if (course.isInProgress) ...[
@@ -1578,8 +1570,6 @@ class _LessonListTile extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.star_rounded,
-              size: 18, color: AppColors.gold),
         ],
       ),
     );

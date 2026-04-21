@@ -374,6 +374,7 @@ class ApiService {
       rating: 4.8,
       learnerCount: 154,
       totalLessons: vidIdx,
+      estimatedTime: _estimateTotalTime(videos),
       skills: _cleanSkills(dream),
       modules: modules,
     );

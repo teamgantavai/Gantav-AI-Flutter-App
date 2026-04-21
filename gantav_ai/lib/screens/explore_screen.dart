@@ -9,6 +9,8 @@ import '../models/trending_data.dart';
 import '../widgets/widgets.dart';
 import 'course_detail_screen.dart';
 import '../widgets/daily_time_dialog.dart';
+import '../widgets/course_gen_dialog.dart';
+
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -77,11 +79,12 @@ class _ExploreScreenState extends State<ExploreScreen>
 
   Future<void> _generateCourseFromSubCategory(SubCategory sub) async {
     final appState = context.read<AppState>();
-    final dailyMinutes = await showDailyTimeDialog(context);
-    if (dailyMinutes == null) return;
+    final selection = await showCourseGenDialog(context);
+    if (selection == null) return;
     if (!mounted) return;
     appState.generateCourseInBackgroundFromCategory(sub.promptHint,
-        dailyMinutes: dailyMinutes == 0 ? null : dailyMinutes);
+        dailyMinutes: selection.dailyMinutes == 0 ? null : selection.dailyMinutes,
+        language: selection.language);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -522,13 +525,18 @@ class _ExploreScreenState extends State<ExploreScreen>
   Future<void> _generateFromTrending(TrendingCourse course) async {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
-    final dailyMinutes = await showDailyTimeDialog(context);
-    if (dailyMinutes == null) return;
+    
+    // 12D.5 — Use the default language for this card as initial selection
+    final initialLang = course.defaultLang == 'hi' ? 'Hindi' : 'English';
+    final selection = await showCourseGenDialog(context, initialLanguage: initialLang);
+    if (selection == null) return;
     if (!mounted) return;
+    
     appState.generateCourseInBackgroundFromCategory(
         appState.pickTrendingPrompt(course),
-        dailyMinutes: dailyMinutes == 0 ? null : dailyMinutes,
-        allowCurated: false);
+        dailyMinutes: selection.dailyMinutes == 0 ? null : selection.dailyMinutes,
+        allowCurated: false,
+        language: selection.language);
     messenger.showSnackBar(
       SnackBar(
         content: Row(
