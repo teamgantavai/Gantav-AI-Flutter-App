@@ -42,9 +42,6 @@ class _QuizScreenState extends State<QuizScreen> {
   Future<void> _loadQuiz() async {
     setState(() => _isLoading = true);
 
-    // Prefer the (possibly concise) category, but if it looks like a raw
-    // generation prompt (too long, contains " with videos from "), fall back
-    // to the course title so the AI prompt stays focused.
     String topic = widget.course.category;
     if (topic.length > 60 ||
         topic.toLowerCase().contains('with videos from')) {
@@ -85,18 +82,26 @@ class _QuizScreenState extends State<QuizScreen> {
         _answered = false;
       });
     } else {
-      setState(() {
-        _quizComplete = true;
-        final score = _correctCount / _questions.length;
-        context.read<AppState>().recordQuizScore(widget.course.id, score);
-        
-        // 12D.7 — Auto-navigate to next lesson if passed
-        if (score >= 0.6) {
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted && _quizComplete) {
-              _navigateToNextLesson();
-            }
-          });
+      _finishQuiz();
+    }
+  }
+
+  void _finishQuiz() {
+    final score = _correctCount / _questions.length;
+    final passed = score >= 0.6;
+
+    setState(() => _quizComplete = true);
+
+    // Record per-course score (for certificate)
+    context.read<AppState>().recordQuizScore(widget.course.id, score);
+
+    // Record per-lesson quiz pass — THIS UNLOCKS THE NEXT LESSON
+    if (passed) {
+      context.read<AppState>().markLessonQuizPassed(widget.lesson.id);
+      // Auto-navigate to next lesson after 2 seconds
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && _quizComplete) {
+          _navigateToNextLesson();
         }
       });
     }
@@ -121,13 +126,14 @@ class _QuizScreenState extends State<QuizScreen> {
     }
 
     if (nextLes != null) {
-      Navigator.of(context).pop(); // pop quiz screen
+      Navigator.of(context).pop(); // pop quiz
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => LessonPlayerScreen(
             course: widget.course,
             module: nextMod!,
             lesson: nextLes!,
+            autoPlay: true, // Auto-play the next lesson
           ),
         ),
       );
@@ -193,7 +199,6 @@ class _QuizScreenState extends State<QuizScreen> {
               ),
             ),
 
-            // Progress indicator
             if (!_isLoading && !_quizComplete && _questions.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -203,7 +208,6 @@ class _QuizScreenState extends State<QuizScreen> {
                 ),
               ),
 
-            // Content
             Expanded(
               child: _isLoading
                   ? _buildLoadingState(isDark)
@@ -235,10 +239,8 @@ class _QuizScreenState extends State<QuizScreen> {
                 color: AppColors.violet, size: 28),
           ),
           const SizedBox(height: 16),
-          Text(
-            'AI is creating your quiz...',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('AI is creating your quiz...',
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
           Text(
             'Generating questions about "${widget.lesson.title}"',
@@ -246,7 +248,7 @@ class _QuizScreenState extends State<QuizScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          SizedBox(
+          const SizedBox(
             width: 24,
             height: 24,
             child: CircularProgressIndicator(
@@ -277,14 +279,12 @@ class _QuizScreenState extends State<QuizScreen> {
                   color: Colors.orange, size: 32),
             ),
             const SizedBox(height: 16),
-            Text(
-              'Quiz not available right now',
-              style: Theme.of(context).textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
+            Text('Quiz not available right now',
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center),
             const SizedBox(height: 6),
             Text(
-              'AI services are busy or offline. Check your connection and try again in a moment.',
+              'AI services are busy or offline. Check your connection and try again.',
               style: Theme.of(context).textTheme.bodySmall,
               textAlign: TextAlign.center,
             ),
@@ -292,10 +292,8 @@ class _QuizScreenState extends State<QuizScreen> {
             ElevatedButton.icon(
               onPressed: _loadQuiz,
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: Text(
-                'Retry',
-                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-              ),
+              label: Text('Retry',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.violet,
                 foregroundColor: Colors.white,
@@ -315,13 +313,14 @@ class _QuizScreenState extends State<QuizScreen> {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.symmetric(
-        horizontal: isWide ? MediaQuery.of(context).size.width * 0.15 : 20,
+        horizontal: isWide
+            ? MediaQuery.of(context).size.width * 0.15
+            : 20,
         vertical: 24,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // AI badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
@@ -331,32 +330,25 @@ class _QuizScreenState extends State<QuizScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.auto_awesome,
-                    size: 11, color: AppColors.violet),
+                const Icon(Icons.auto_awesome, size: 11, color: AppColors.violet),
                 const SizedBox(width: 4),
-                Text(
-                  'AI Generated',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.violet,
-                  ),
-                ),
+                Text('AI Generated',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.violet)),
               ],
             ),
           ),
           const SizedBox(height: 16),
 
-          // Question
-          Text(
-            q.question,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  height: 1.4,
-                ),
-          ),
+          Text(q.question,
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(height: 1.4)),
           const SizedBox(height: 24),
 
-          // Options
           ...q.options.asMap().entries.map((entry) {
             final idx = entry.key;
             final option = entry.value;
@@ -412,11 +404,9 @@ class _QuizScreenState extends State<QuizScreen> {
                       ),
                       child: Center(
                         child: showCorrect
-                            ? const Icon(Icons.check,
-                                size: 16, color: AppColors.success)
+                            ? const Icon(Icons.check, size: 16, color: AppColors.success)
                             : showWrong
-                                ? const Icon(Icons.close,
-                                    size: 16, color: AppColors.error)
+                                ? const Icon(Icons.close, size: 16, color: AppColors.error)
                                 : Text(
                                     String.fromCharCode(65 + idx),
                                     style: GoogleFonts.dmMono(
@@ -429,15 +419,11 @@ class _QuizScreenState extends State<QuizScreen> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        option,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                      ),
+                      child: Text(option,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w500)),
                     ),
                   ],
                 ),
@@ -445,7 +431,6 @@ class _QuizScreenState extends State<QuizScreen> {
             );
           }),
 
-          // Explanation (shown after answering)
           if (_answered) ...[
             const SizedBox(height: 8),
             Container(
@@ -514,9 +499,7 @@ class _QuizScreenState extends State<QuizScreen> {
                       ? 'Next question'
                       : 'See results',
                   style: GoogleFonts.dmSans(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                      fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -531,19 +514,22 @@ class _QuizScreenState extends State<QuizScreen> {
   Widget _buildResultScreen(bool isDark, bool isWide) {
     final score = _correctCount / _questions.length;
     final passed = score >= 0.6;
+    final appState = context.watch<AppState>();
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.symmetric(
-        horizontal: isWide ? MediaQuery.of(context).size.width * 0.15 : 20,
+        horizontal: isWide
+            ? MediaQuery.of(context).size.width * 0.15
+            : 20,
         vertical: 32,
       ),
       child: Column(
         children: [
           // Score circle
           Container(
-            width: 100,
-            height: 100,
+            width: 110,
+            height: 110,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: passed
@@ -568,13 +554,9 @@ class _QuizScreenState extends State<QuizScreen> {
                       color: passed ? AppColors.success : AppColors.error,
                     ),
                   ),
-                  Text(
-                    '$_correctCount/${_questions.length}',
-                    style: GoogleFonts.dmMono(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
+                  Text('$_correctCount/${_questions.length}',
+                      style: GoogleFonts.dmMono(
+                          fontSize: 12, color: AppColors.textMuted)),
                 ],
               ),
             ),
@@ -582,21 +564,50 @@ class _QuizScreenState extends State<QuizScreen> {
           const SizedBox(height: 20),
 
           Text(
-            passed ? 'Well done!' : 'Keep practicing!',
+            passed ? '🎉 Well done!' : '📚 Keep practicing!',
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const SizedBox(height: 6),
           Text(
             passed
-                ? 'You passed this quiz. Keep going!'
-                : 'Review the lesson and try again.',
+                ? 'You passed! The next lesson is now unlocked.'
+                : 'Score 60% or higher to unlock the next lesson.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppColors.textMuted,
                 ),
+            textAlign: TextAlign.center,
           ),
+
+          // Coins earned
+          if (passed) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🪙', style: TextStyle(fontSize: 18)),
+                  const SizedBox(width: 8),
+                  Text('+25 coins earned!',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFFF59E0B),
+                      )),
+                ],
+              ),
+            ),
+          ],
+
           const SizedBox(height: 28),
 
-          // Action buttons
+          // Actions
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -614,9 +625,7 @@ class _QuizScreenState extends State<QuizScreen> {
               child: Text(
                 passed ? 'Continue to next lesson' : 'Back to lesson',
                 style: GoogleFonts.dmSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+                    fontSize: 15, fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -643,13 +652,9 @@ class _QuizScreenState extends State<QuizScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: Text(
-                  'Retry quiz',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: Text('Retry quiz',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 14, fontWeight: FontWeight.w600)),
               ),
             ),
         ],

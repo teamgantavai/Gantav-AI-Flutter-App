@@ -10,6 +10,7 @@ import '../widgets/course_gen_dialog.dart';
 import '../widgets/inline_ad_card.dart';
 import 'course_detail_screen.dart';
 import 'roadmap_screen.dart';
+import 'coin_store_screen.dart';
 import '../models/models.dart';
 import '../models/trending_data.dart';
 
@@ -23,14 +24,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
 
-  // 12D.3 — coin-fly animation
+  // coin-fly animation
   late AnimationController _coinCtrl;
   late Animation<double> _coinFlyAnim;
   late Animation<double> _coinFadeAnim;
   int _pendingCoins = 0;
   bool _showCoinBurst = false;
 
-  // 12D.2 — streak confetti / flame-pulse
+  // streak confetti / flame-pulse
   late AnimationController _streakCtrl;
   late Animation<double> _streakPulse;
   bool _showStreakBurst = false;
@@ -40,7 +41,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // Coin fly animation
     _coinCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -52,7 +52,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       CurvedAnimation(parent: _coinCtrl, curve: const Interval(0.5, 1.0)),
     );
 
-    // Streak pulse animation
     _streakCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -61,7 +60,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       CurvedAnimation(parent: _streakCtrl, curve: Curves.elasticOut),
     );
 
-    // Watch for events after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _listenToAppState();
     });
@@ -76,7 +74,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     final appState = context.read<AppState>();
 
-    // 12D.3 — coin burst
     final coinEvent = appState.coinEarnedEvent;
     if (coinEvent != null) {
       setState(() {
@@ -89,7 +86,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       });
     }
 
-    // 12D.2 — streak burst
     final streakEvent = appState.streakBumpEvent;
     if (streakEvent != null) {
       setState(() {
@@ -119,7 +115,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
     
-    // 12D.5 — Use the currently selected language for this card as initial selection
     final currentLangCode = appState.trendingCardLang(course);
     final initialLang = currentLangCode == 'hi' ? 'Hindi' : 'English';
     
@@ -219,16 +214,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                       child: Row(
                         children: [
-                          // 12D.3 — coin stat chip with animation target key
+                          // Coin chip — tapping opens the Coin Store
                           _CoinStatChip(
                             coins: user.coins,
                             showBurst: _showCoinBurst,
                             pendingCoins: _pendingCoins,
                             flyAnim: _coinFlyAnim,
                             fadeAnim: _coinFadeAnim,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) => const CoinStoreScreen()),
+                            ),
                           ),
                           const SizedBox(width: 12),
-                          // 12D.2 — streak chip with pulse animation
                           _StreakStatChip(
                             streakDays: user.streakDays,
                             pulseAnim: _streakPulse,
@@ -287,7 +285,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                   SliverToBoxAdapter(
                     child: SizedBox(
-                      // 12D.4 — taller card for cleaner hierarchy with lang toggle
                       height: 210,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
@@ -333,7 +330,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ),
 
-            // 12D.2 — streak burst overlay
+            // streak burst overlay
             if (_showStreakBurst)
               _StreakBurstOverlay(
                 streak: _burstStreak,
@@ -346,16 +343,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildPortraitSuggestions(List<Course> courses) {
-    // Inject a Sponsored ad card every [_adEvery] real courses. Pattern:
-    //   [c][c][c][c][c][c][ad][c][c][c][c][c][c][ad] ...
-    // Low cadence = user sees mostly content, not ads.
     const adEvery = 6;
     final slotCount = courses.length + (courses.length ~/ adEvery);
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           if (index >= slotCount) return null;
-          // Ad every (adEvery+1)-th slot — positions 6, 13, 20, ...
           if ((index + 1) % (adEvery + 1) == 0) {
             return const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
@@ -432,8 +425,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _navigateToCourse(BuildContext context, dynamic course) {
-    // Default suggestion courses are just placeholders — tapping them should
-    // take the user to the Explore tab where they can generate a real course.
     if (course is Course && course.id.startsWith('default_')) {
       context.read<AppState>().setTabIndex(1);
       return;
@@ -442,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 }
 
-// ─── 12D.3 — Coin stat chip with animated burst ───────────────────────────────
+// ─── Coin stat chip ───────────────────────────────────────────────────────────
 
 class _CoinStatChip extends StatelessWidget {
   final int coins;
@@ -450,6 +441,7 @@ class _CoinStatChip extends StatelessWidget {
   final int pendingCoins;
   final Animation<double> flyAnim;
   final Animation<double> fadeAnim;
+  final VoidCallback onTap; // ← new
 
   const _CoinStatChip({
     required this.coins,
@@ -457,6 +449,7 @@ class _CoinStatChip extends StatelessWidget {
     required this.pendingCoins,
     required this.flyAnim,
     required this.fadeAnim,
+    required this.onTap,
   });
 
   @override
@@ -466,38 +459,59 @@ class _CoinStatChip extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.08 : 0.06),
+          // ── tappable chip ──────────────────────────────────────────
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.15)),
-            ),
-            child: Row(
-              children: [
-                const Text('🪙', style: TextStyle(fontSize: 20)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              onTap: onTap,
+              child: Ink(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.08 : 0.06),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  child: Row(
                     children: [
-                      Text('$coins',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 16, fontWeight: FontWeight.w700,
-                          color: const Color(0xFFF59E0B)),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text('Coins',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          color: isDark ? AppColors.textLightSub : AppColors.textDarkSub),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const Text('🪙', style: TextStyle(fontSize: 20)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('$coins',
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFFF59E0B)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            Text('Coins',
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? AppColors.textLightSub
+                                        : AppColors.textDarkSub),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                      // small store icon hint
+                      Icon(Icons.storefront_rounded,
+                          size: 14,
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.6)),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
-          // 12D.3 — flying coin label
+          // ── flying coin burst label ────────────────────────────────
           if (showBurst)
             Positioned(
               top: 0,
@@ -509,23 +523,25 @@ class _CoinStatChip extends StatelessWidget {
                   child: Opacity(
                     opacity: fadeAnim.value,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF59E0B),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
-                            blurRadius: 12, spreadRadius: 2,
+                            color: const Color(0xFFF59E0B)
+                                .withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            spreadRadius: 2,
                           ),
                         ],
                       ),
                       child: Text('+$pendingCoins 🪙',
-                        style: GoogleFonts.dmSans(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        )),
+                          style: GoogleFonts.dmSans(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800)),
                     ),
                   ),
                 ),
@@ -537,7 +553,7 @@ class _CoinStatChip extends StatelessWidget {
   }
 }
 
-// ─── 12D.2 — Streak stat chip with pulse animation ────────────────────────────
+// ─── Streak stat chip ─────────────────────────────────────────────────────────
 
 class _StreakStatChip extends StatelessWidget {
   final int streakDays;
@@ -577,22 +593,27 @@ class _StreakStatChip extends StatelessWidget {
           child: Row(
             children: [
               Icon(Icons.local_fire_department,
-                color: AppColors.teal, size: 20),
+                  color: AppColors.teal, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('$streakDays',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 16, fontWeight: FontWeight.w700,
-                        color: AppColors.teal),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                        style: GoogleFonts.dmSans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.teal),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     Text('Day streak',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: isDark ? AppColors.textLightSub : AppColors.textDarkSub),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                        style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppColors.textLightSub
+                                : AppColors.textDarkSub),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
@@ -604,7 +625,7 @@ class _StreakStatChip extends StatelessWidget {
   }
 }
 
-// ─── 12D.2 — Streak burst overlay (centered) ─────────────────────────────────
+// ─── Streak burst overlay ─────────────────────────────────────────────────────
 
 class _StreakBurstOverlay extends StatelessWidget {
   final int streak;
@@ -615,14 +636,16 @@ class _StreakBurstOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Positioned(
       top: 120,
-      left: 0, right: 0,
+      left: 0,
+      right: 0,
       child: Center(
         child: AnimatedBuilder(
           animation: pulseAnim,
           builder: (_, __) => Transform.scale(
             scale: pulseAnim.value,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
                 color: AppColors.teal,
                 borderRadius: BorderRadius.circular(30),
@@ -640,11 +663,10 @@ class _StreakBurstOverlay extends StatelessWidget {
                   const Text('🔥', style: TextStyle(fontSize: 22)),
                   const SizedBox(width: 8),
                   Text('$streak-day streak!',
-                    style: GoogleFonts.dmSans(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    )),
+                      style: GoogleFonts.dmSans(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800)),
                 ],
               ),
             ),
@@ -655,11 +677,11 @@ class _StreakBurstOverlay extends StatelessWidget {
   }
 }
 
-// ─── 12D.4 & 12D.5 — Trending Course Card (polished + lang toggle) ────────────
+// ─── Trending Course Card ─────────────────────────────────────────────────────
 
 class _TrendingCourseCard extends StatelessWidget {
   final TrendingCourse course;
-  final String currentLang; // 'en' | 'hi'
+  final String currentLang;
   final VoidCallback onTap;
   final void Function(String lang) onLangToggle;
 
@@ -701,11 +723,11 @@ class _TrendingCourseCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 12D.4 — top row: icon + badge (consistent right-aligned badge)
                   Row(
                     children: [
                       Container(
-                        width: 38, height: 38,
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(11),
@@ -713,12 +735,12 @@ class _TrendingCourseCard extends StatelessWidget {
                         child: Icon(course.icon, color: Colors.white, size: 20),
                       ),
                       const Spacer(),
-                      // 12D.5 — language toggle flag
                       GestureDetector(
                         onTap: () =>
                             onLangToggle(currentLang == 'en' ? 'hi' : 'en'),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.25),
                             borderRadius: BorderRadius.circular(20),
@@ -745,25 +767,23 @@ class _TrendingCourseCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      // badge — fixed position after lang toggle
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.22),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(course.badge,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: 0.4,
-                          )),
+                            style: GoogleFonts.dmSans(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                letterSpacing: 0.4)),
                       ),
                     ],
                   ),
                   const Spacer(),
-                  // 12D.4 — title row — capped at 2 lines, clear hierarchy
                   Text(
                     course.title,
                     style: GoogleFonts.dmSans(
@@ -789,11 +809,11 @@ class _TrendingCourseCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 10),
-                  // 12D.4 — CTA row at bottom — consistent placement
                   Row(
                     children: [
                       Icon(Icons.play_circle_fill_rounded,
-                        size: 14, color: Colors.white.withValues(alpha: 0.9)),
+                          size: 14,
+                          color: Colors.white.withValues(alpha: 0.9)),
                       const SizedBox(width: 5),
                       Text(
                         'Tap to generate',
@@ -822,7 +842,8 @@ class _RoadmapCard extends StatelessWidget {
   final RoadmapDay? todayDay;
   final VoidCallback onTap;
 
-  const _RoadmapCard({required this.roadmap, required this.todayDay, required this.onTap});
+  const _RoadmapCard(
+      {required this.roadmap, required this.todayDay, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -838,10 +859,14 @@ class _RoadmapCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [AppColors.violet.withValues(alpha: isDark ? 0.15 : 0.10), AppColors.teal.withValues(alpha: isDark ? 0.08 : 0.05)],
+            colors: [
+              AppColors.violet.withValues(alpha: isDark ? 0.15 : 0.10),
+              AppColors.teal.withValues(alpha: isDark ? 0.08 : 0.05)
+            ],
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
+          border:
+              Border.all(color: AppColors.violet.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -849,22 +874,42 @@ class _RoadmapCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 40, height: 40,
-                  decoration: BoxDecoration(color: AppColors.violet.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.route_rounded, size: 20, color: AppColors.violet),
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                      color: AppColors.violet.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.route_rounded,
+                      size: 20, color: AppColors.violet),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('My Roadmap', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.violet)),
+                      Text('My Roadmap',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.violet)),
                       const SizedBox(height: 2),
-                      Text(roadmap.title, style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? AppColors.textLight : AppColors.textDark), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(roadmap.title,
+                          style: GoogleFonts.dmSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.textLight
+                                  : AppColors.textDark),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
-                Text('$pct%', style: GoogleFonts.dmMono(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.violet)),
+                Text('$pct%',
+                    style: GoogleFonts.dmMono(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.violet)),
               ],
             ),
             const SizedBox(height: 12),
@@ -873,21 +918,39 @@ class _RoadmapCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: roadmap.taskProgress,
                 minHeight: 5,
-                backgroundColor: isDark ? AppColors.darkSurface2 : AppColors.lightSurface2,
-                valueColor: const AlwaysStoppedAnimation(AppColors.violet),
+                backgroundColor: isDark
+                    ? AppColors.darkSurface2
+                    : AppColors.lightSurface2,
+                valueColor:
+                    const AlwaysStoppedAnimation(AppColors.violet),
               ),
             ),
             const SizedBox(height: 10),
             Row(
               children: [
-                Icon(allDoneToday ? Icons.check_circle : Icons.today_outlined, size: 14, color: allDoneToday ? AppColors.teal : AppColors.gold),
+                Icon(
+                    allDoneToday
+                        ? Icons.check_circle
+                        : Icons.today_outlined,
+                    size: 14,
+                    color:
+                        allDoneToday ? AppColors.teal : AppColors.gold),
                 const SizedBox(width: 6),
                 Text(
-                  allDoneToday ? "Today's tasks complete! 🎉" : 'Today: $todayDone/$todayTotal tasks done',
-                  style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w500, color: allDoneToday ? AppColors.teal : AppColors.textMuted),
+                  allDoneToday
+                      ? "Today's tasks complete! 🎉"
+                      : 'Today: $todayDone/$todayTotal tasks done',
+                  style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: allDoneToday
+                          ? AppColors.teal
+                          : AppColors.textMuted),
                 ),
                 const Spacer(),
-                Text('Day ${roadmap.currentDayNumber}/${roadmap.totalDays}', style: GoogleFonts.dmMono(fontSize: 11, color: AppColors.textMuted)),
+                Text('Day ${roadmap.currentDayNumber}/${roadmap.totalDays}',
+                    style: GoogleFonts.dmMono(
+                        fontSize: 11, color: AppColors.textMuted)),
               ],
             ),
           ],

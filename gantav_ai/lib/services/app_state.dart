@@ -15,6 +15,9 @@ import '../models/trending_data.dart';
 import 'dart:math' as math;
 import 'package:firebase_analytics/firebase_analytics.dart';
 
+// Import badge catalog for shop
+import '../screens/coin_store_screen.dart';
+
 enum AuthStatus {
   unauthenticated,
   authenticated,
@@ -23,16 +26,12 @@ enum AuthStatus {
   needsOnboarding
 }
 
-/// 12D.3 — Payload emitted when the user earns coins.
-/// The UI layer listens and triggers the coin-fly animation.
 class CoinEarnedEvent {
   final int coins;
-  final String reason; // e.g. "Lesson completed"
+  final String reason;
   CoinEarnedEvent({required this.coins, required this.reason});
 }
 
-/// 12D.2 — Payload emitted when a streak increments so the UI can
-/// trigger confetti / flame-pulse without polling.
 class StreakBumpEvent {
   final int newStreak;
   StreakBumpEvent(this.newStreak);
@@ -55,8 +54,6 @@ class AppState extends ChangeNotifier {
   bool _isLoadingMore = false;
   int _courseBatchIndex = 0;
 
-  /// Maximum number of AI-generated courses allowed. Prevents runaway API
-  /// usage — users should remove old courses before generating new ones.
   static const int maxCourses = 5;
   String? _authError;
   String? _notificationMessage;
@@ -69,26 +66,28 @@ class AppState extends ChangeNotifier {
   final Set<String> _starredLessonIds = {};
   final Set<String> _savedCourseIds = {};
 
-  // ── Quiz Score Tracking ──────────────────────────────────────────────
-  /// Maps courseId → best quiz score (0.0 to 1.0). Persisted locally.
+  // Quiz Score Tracking (per-course)
   final Map<String, double> _quizScores = {};
 
-  // ── Flip Course Tracking ─────────────────────────────────────────────
-  /// Maps courseId → number of flips used (max 3).
+  // ── Per-Lesson Quiz Pass Tracking ───────────────────────────────────────
+  /// Maps lessonId → true if user passed that lesson's quiz (>=60%)
+  final Map<String, bool> _lessonQuizPassed = {};
+
+  // ── Badge / Shop Tracking ────────────────────────────────────────────────
+  final Set<String> _purchasedBadges = {};
+
+  // Flip Course Tracking
   final Map<String, int> _flipCounts = {};
   final Map<String, List<String>> _flipExcludedVideoIds = {};
-  /// Maps courseId → list of excluded channel names/IDs from previous flips.
   final Map<String, List<String>> _flipExcludedChannelIds = {};
   static const int maxFlips = 2;
 
   bool _dreamCollectedInOnboarding = false;
   bool get dreamCollectedInOnboarding => _dreamCollectedInOnboarding;
 
-  /// 12D.3 — latest coin-earned event; UI watches and clears after animating
   CoinEarnedEvent? _coinEarnedEvent;
   CoinEarnedEvent? get coinEarnedEvent => _coinEarnedEvent;
 
-  /// 12D.2 — latest streak-bump event; UI watches and clears after animating
   StreakBumpEvent? _streakBumpEvent;
   StreakBumpEvent? get streakBumpEvent => _streakBumpEvent;
 
@@ -106,7 +105,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// 12D.5 — per-card language override map: cardId → 'en' | 'hi'
   final Map<String, String> _trendingCardLang = {};
 
   String trendingCardLang(TrendingCourse t) =>
@@ -124,57 +122,40 @@ class AppState extends ChangeNotifier {
   UserProfile? get user => _user;
   String? get profileImagePath => _profileImagePath;
 
-  // Weekly Course Generation Limit
   static const int maxWeeklyGenerations = 5;
 
   int get weeklyGenerationsLeft {
     if (_user == null) return maxWeeklyGenerations;
     final now = DateTime.now();
     if (_user!.lastGenerationDate == null) return maxWeeklyGenerations;
-    
-    // Check if the last generation was in the same week
-    // We'll use a simple week calculation (ISO week or just days since epoch / 7)
-    // For simplicity, we can check if it's within 7 days AND the same week start.
-    // Or just use Jiffy or similar if available. But let's use native Dart.
-    
     final lastGen = _user!.lastGenerationDate!;
-    // Calculate week start for both (Sunday as start)
     final nowWeekStart = now.subtract(Duration(days: now.weekday % 7));
     final lastWeekStart = lastGen.subtract(Duration(days: lastGen.weekday % 7));
-    
     final isSameWeek = nowWeekStart.year == lastWeekStart.year &&
-                       nowWeekStart.month == lastWeekStart.month &&
-                       nowWeekStart.day == lastWeekStart.day;
-
+        nowWeekStart.month == lastWeekStart.month &&
+        nowWeekStart.day == lastWeekStart.day;
     if (isSameWeek) {
-      final left = maxWeeklyGenerations - _user!.dailyGenerations; // We'll keep the field name for now
+      final left = maxWeeklyGenerations - _user!.dailyGenerations;
       return left > 0 ? left : 0;
     }
-    
-    // It's a new week, limit resets
     return maxWeeklyGenerations;
   }
 
   Future<void> _incrementDailyGenerations() async {
     if (_user == null) return;
-    
     final now = DateTime.now();
     int newCount = 1;
-    
     final lastGen = _user!.lastGenerationDate;
     if (lastGen != null) {
       final nowWeekStart = now.subtract(Duration(days: now.weekday % 7));
       final lastWeekStart = lastGen.subtract(Duration(days: lastGen.weekday % 7));
-      
       final isSameWeek = nowWeekStart.year == lastWeekStart.year &&
-                         nowWeekStart.month == lastWeekStart.month &&
-                         nowWeekStart.day == lastWeekStart.day;
-                         
+          nowWeekStart.month == lastWeekStart.month &&
+          nowWeekStart.day == lastWeekStart.day;
       if (isSameWeek) {
         newCount = _user!.dailyGenerations + 1;
       }
     }
-    
     _user = _user!.copyWith(
       dailyGenerations: newCount,
       lastGenerationDate: now,
@@ -241,7 +222,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Default suggestion data for first-time users who have no courses yet.
   static final List<Course> _defaultSuggestions = [
     Course(
       id: 'default_1', title: 'Python for Beginners', description: 'Start coding with Python',
@@ -258,21 +238,6 @@ class AppState extends ChangeNotifier {
       category: 'Mobile Development', thumbnailUrl: 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=500&q=80', rating: 4.9, learnerCount: 7600,
       totalLessons: 9, skills: ['Dart', 'Widgets', 'State'], modules: [],
     ),
-    Course(
-      id: 'default_4', title: 'Machine Learning Basics', description: 'Learn ML fundamentals',
-      category: 'AI & ML', thumbnailUrl: 'https://images.unsplash.com/photo-1555949963-ff9fe0c870eb?w=500&q=80', rating: 4.8, learnerCount: 11200,
-      totalLessons: 9, skills: ['NumPy', 'Pandas', 'Scikit-learn'], modules: [],
-    ),
-    Course(
-      id: 'default_5', title: 'Data Science with Python', description: 'Analyze and visualize data',
-      category: 'Data Science', thumbnailUrl: 'https://images.unsplash.com/photo-1551288049-bbbda536ad4a?w=500&q=80', rating: 4.7, learnerCount: 8500,
-      totalLessons: 9, skills: ['Pandas', 'Matplotlib', 'Stats'], modules: [],
-    ),
-    Course(
-      id: 'default_6', title: 'React & Node.js Fullstack', description: 'Full-stack JavaScript',
-      category: 'Web Development', thumbnailUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=500&q=80', rating: 4.8, learnerCount: 10300,
-      totalLessons: 12, skills: ['React', 'Node.js', 'MongoDB'], modules: [],
-    ),
   ];
 
   List<Course> get suggestedCourses {
@@ -280,6 +245,7 @@ class AppState extends ChangeNotifier {
     if (real.isEmpty) return _defaultSuggestions;
     return real;
   }
+
   List<PulseEvent> get pulseEvents => _pulseEvents;
   bool get isLoading => _isLoading;
   bool get isInitialLoading => _isInitialLoading;
@@ -324,6 +290,76 @@ class AppState extends ChangeNotifier {
     return starred;
   }
 
+  // ── Per-lesson quiz pass API ─────────────────────────────────────────────
+
+  bool isLessonQuizPassed(String lessonId) =>
+      _lessonQuizPassed[lessonId] ?? false;
+
+  Future<void> markLessonQuizPassed(String lessonId) async {
+    if (_lessonQuizPassed[lessonId] == true) return;
+    _lessonQuizPassed[lessonId] = true;
+    await _saveLessonQuizData();
+    // Award 25 coins for passing a quiz
+    if (_user != null) {
+      _user = _user!.copyWith(coins: _user!.coins + 25);
+      _coinEarnedEvent = CoinEarnedEvent(coins: 25, reason: 'Quiz passed!');
+      await _firestoreService.saveUserProfile(_user!);
+    }
+    notifyListeners();
+  }
+
+  Future<void> _saveLessonQuizData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('lesson_quiz_passed', jsonEncode(_lessonQuizPassed));
+    } catch (_) {}
+  }
+
+  Future<void> _loadLessonQuizData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('lesson_quiz_passed');
+      if (raw != null) {
+        final Map<String, dynamic> data = jsonDecode(raw);
+        _lessonQuizPassed.clear();
+        data.forEach((k, v) => _lessonQuizPassed[k] = v as bool);
+      }
+    } catch (_) {}
+  }
+
+  // ── Badge Shop API ───────────────────────────────────────────────────────
+
+  bool hasBadge(String badgeId) => _purchasedBadges.contains(badgeId);
+
+  List<ShopBadge> get ownedBadges =>
+      BadgeCatalog.all.where((b) => _purchasedBadges.contains(b.id)).toList();
+
+  Future<bool> purchaseBadge(String badgeId, int cost) async {
+    if (_user == null || _user!.coins < cost) return false;
+    if (_purchasedBadges.contains(badgeId)) return true; // already owned
+    _purchasedBadges.add(badgeId);
+    _user = _user!.copyWith(coins: _user!.coins - cost);
+    await _savePurchasedBadges();
+    await _firestoreService.saveUserProfile(_user!);
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> _savePurchasedBadges() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('purchased_badges', _purchasedBadges.toList());
+    } catch (_) {}
+  }
+
+  Future<void> _loadPurchasedBadges() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList('purchased_badges') ?? [];
+      _purchasedBadges.addAll(list);
+    } catch (_) {}
+  }
+
   void clearNotification() {
     if (_notificationMessage != null) {
       _notificationMessage = null;
@@ -345,7 +381,6 @@ class AppState extends ChangeNotifier {
     _isInitialLoading = true;
     notifyListeners();
 
-    // Start a timer to ensure splash screen shows for at least 2 seconds
     final splashFuture = Future.delayed(const Duration(milliseconds: 2200));
 
     await _loadThemePreference();
@@ -358,6 +393,8 @@ class AppState extends ChangeNotifier {
     await _loadSavedCourses();
     await _loadQuizScores();
     await _loadFlipData();
+    await _loadLessonQuizData();
+    await _loadPurchasedBadges();
 
     final firebaseUser = AuthService.currentUser;
     if (firebaseUser != null &&
@@ -372,23 +409,9 @@ class AppState extends ChangeNotifier {
       _isLoading = false;
     }
 
-    // Wait for the splash timer to complete before hiding the splash screen
     await splashFuture;
-    
     _isInitialLoading = false;
     notifyListeners();
-
-    // Surface stale API-key warnings — if a provider's key returned 401 on
-    // a previous session, nudge the user to regenerate it. Fire-and-forget
-    // so startup never blocks on this.
-    // GeminiService.loadAndReportDeadKeys().then((dead) {
-    //   if (dead.isEmpty) return;
-    //   final pretty = dead
-    //       .map((n) => n[0].toUpperCase() + n.substring(1))
-    //       .join(', ');
-    //   showNotification(
-    //       '⚠ $pretty API key looks invalid (401). Regenerate it and update your .env to restore full AI.');
-    // }).catchError((_) {});
   }
 
   Future<void> _loadUserFromFirebase(dynamic firebaseUser) async {
@@ -461,20 +484,13 @@ class AppState extends ChangeNotifier {
       return false;
     }
 
-    // Clear stale local data from a previous account to prevent cross-account
-    // leakage (e.g. old profile photo appearing on the new account).
     await _clearAllLocalUserData();
-
     await _loadUserFromFirebase(result.user);
     await _saveAuthStatus();
 
     if (result.isNewUser && _user != null) {
       await _firestoreService.saveUserProfile(_user!);
     }
-    // Skip the forced roadmap-onboarding flow — users land on the main app
-    // after sign-in. Preferences get defaults (dailyStudyMinutes = 30) and the
-    // user can tune them from Profile later. Previously we forced everyone
-    // through a 3-step onboarding which killed retention.
     _authStatus = AuthStatus.authenticated;
     _needsOnboarding = false;
 
@@ -509,15 +525,10 @@ class AppState extends ChangeNotifier {
       return true;
     }
 
-    // Clear stale local data from a previous account to prevent cross-account
-    // leakage (e.g. old profile photo appearing on the new account).
     await _clearAllLocalUserData();
-
     await _loadUserFromFirebase(result.user);
     await _saveAuthStatus();
 
-    // Forced onboarding removed (see Google sign-in path above). Users go
-    // straight to main app after verified sign-in.
     _authStatus = AuthStatus.authenticated;
     _needsOnboarding = false;
 
@@ -549,7 +560,6 @@ class AppState extends ChangeNotifier {
     final verifyResult = await AuthService.sendEmailVerification();
     if (!verifyResult.success) {
       _authError = verifyResult.error ?? 'Account created, but failed to send verification email.';
-      // We still proceed so the user can be on the verification screen to hit "Resend"
     }
     _authStatus = AuthStatus.needsVerification;
     _user = UserProfile(
@@ -577,7 +587,6 @@ class AppState extends ChangeNotifier {
       await user.reload();
       if (user.emailVerified) {
         await _loadUserFromFirebase(user);
-        // Straight into main app — no onboarding gate.
         _authStatus = AuthStatus.authenticated;
         _needsOnboarding = false;
         await _saveAuthStatus();
@@ -589,9 +598,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Sends a Firebase password-reset email to [email]. Returns null on
-  /// success, or a user-facing error string on failure. Called from the
-  /// auth screen's "Forgot password?" link.
   Future<String?> sendPasswordReset(String email) async {
     final trimmed = email.trim();
     final validationError = AuthService.validateEmail(trimmed);
@@ -685,30 +691,23 @@ class AppState extends ChangeNotifier {
   void markTaskComplete(String roadmapId, int dayNumber, String taskId) {
     final roadmapIdx = _roadmaps.indexWhere((r) => r.id == roadmapId);
     if (roadmapIdx == -1) return;
-
     final roadmap = _roadmaps[roadmapIdx];
     final dayIdx =
         roadmap.days.indexWhere((d) => d.dayNumber == dayNumber);
     if (dayIdx == -1) return;
-
     final day = roadmap.days[dayIdx];
     final taskIdx = day.tasks.indexWhere((t) => t.id == taskId);
     if (taskIdx == -1) return;
-
     day.tasks[taskIdx].isCompleted = true;
     day.tasks[taskIdx].completedAt = DateTime.now();
-
     if (day.allTasksCompleted) {
       day.isCompleted = true;
       day.completedAt = DateTime.now();
     }
-
     if (roadmap.isComplete) {
       roadmap.completedAt = DateTime.now();
     }
-
     _updateUserProgressStats();
-
     notifyListeners();
     _saveLocalRoadmaps();
     _firestoreService.updateRoadmap(roadmap).catchError((_) {});
@@ -718,42 +717,33 @@ class AppState extends ChangeNotifier {
       String roadmapId, int dayNumber, String taskId) {
     final roadmapIdx = _roadmaps.indexWhere((r) => r.id == roadmapId);
     if (roadmapIdx == -1) return;
-
     final roadmap = _roadmaps[roadmapIdx];
     final dayIdx =
         roadmap.days.indexWhere((d) => d.dayNumber == dayNumber);
     if (dayIdx == -1) return;
-
     final day = roadmap.days[dayIdx];
     final taskIdx = day.tasks.indexWhere((t) => t.id == taskId);
     if (taskIdx == -1) return;
-
     final task = day.tasks[taskIdx];
     task.isCompleted = !task.isCompleted;
     task.completedAt = task.isCompleted ? DateTime.now() : null;
-
     day.isCompleted = day.allTasksCompleted;
     day.completedAt = day.isCompleted ? DateTime.now() : null;
     roadmap.completedAt = roadmap.isComplete ? DateTime.now() : null;
-
     _updateUserProgressStats();
-
     notifyListeners();
     _saveLocalRoadmaps();
     _firestoreService.updateRoadmap(roadmap).catchError((_) {});
   }
 
-  /// Updates gantav score, streak, week activity, and coins from roadmap data.
   void _updateUserProgressStats() {
     if (_user == null || _roadmaps.isEmpty) return;
 
     int totalCompletedTasks = 0;
-    int completedDays = 0;
     final prevStreak = _user!.streakDays;
 
     for (final roadmap in _roadmaps) {
       totalCompletedTasks += roadmap.completedTasks;
-      completedDays += roadmap.completedDays;
     }
 
     final newScore = totalCompletedTasks * 10;
@@ -784,7 +774,6 @@ class AppState extends ChangeNotifier {
           (todayRoadmapDay?.completedTaskCount ?? 0) > 0;
     }
 
-    // 12D.2 — fire streak bump event when streak increments
     if (streak > prevStreak && streak > 0) {
       _streakBumpEvent = StreakBumpEvent(streak);
     }
@@ -796,7 +785,7 @@ class AppState extends ChangeNotifier {
       email: _user!.email,
       gantavScore: newScore,
       streakDays: streak,
-      lessonsCompleted: completedDays,
+      lessonsCompleted: _user!.lessonsCompleted,
       quizzesPassed: _user!.quizzesPassed,
       weekActivity: weekActivity,
       coins: _user!.coins,
@@ -853,7 +842,6 @@ class AppState extends ChangeNotifier {
         await _saveLocalCourses();
         await _firestoreService.saveActiveCourse(course);
       }
-
       notifyListeners();
       return course;
     } catch (_) {
@@ -871,8 +859,6 @@ class AppState extends ChangeNotifier {
   Future<void> generateCourseInBackground(
       String prompt, String dreamTopic,
       {int? dailyMinutes}) async {
-    // ── Limits removed per user request ───────────────────────────────
-    
     _isGeneratingCourse = true;
     showNotification(
         'AI is creating your learning path in the background. You will be notified when it is ready!');
@@ -914,12 +900,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // ─── Trending angle rotator ───────────────────────────────────────────
   final Map<String, List<int>> _trendingAngleQueue = {};
   final math.Random _trendingRng = math.Random();
 
-  /// 12D.5 — Compose a fresh prompt for a trending card, respecting the
-  /// per-card language override.
   String pickTrendingPrompt(TrendingCourse t) {
     if (t.angles.isEmpty) return t.promptHint;
     var queue = _trendingAngleQueue[t.id];
@@ -932,8 +915,6 @@ class AppState extends ChangeNotifier {
     return '$angle. Context: ${t.promptHint}';
   }
 
-  /// 12D.5 — Returns 'English' or 'Hindi' for the YouTube search language
-  /// for this trending card, respecting the user's per-card toggle.
   String pickTrendingLang(TrendingCourse t) {
     final code = trendingCardLang(t);
     return code == 'hi' ? 'Hindi' : 'English';
@@ -941,8 +922,6 @@ class AppState extends ChangeNotifier {
 
   Future<void> generateCourseInBackgroundFromCategory(String promptHint,
       {int? dailyMinutes, bool allowCurated = true, String language = 'English'}) async {
-    // ── Limits removed per user request ───────────────────────────────
-    
     _isGeneratingCourse = true;
     notifyListeners();
 
@@ -992,25 +971,19 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Remove a course from the user's library. Frees up a slot for new
-  /// generations.
   Future<void> deleteCourse(String courseId) async {
     _generatedCourses.removeWhere((c) => c.id == courseId);
     _courses.removeWhere((c) => c.id == courseId);
     _savedCourseIds.remove(courseId);
-    
     await _saveLocalCourses();
     await _saveLocalSavedCourses();
     await _firestoreService.deleteCourse(courseId);
-    
     _analytics.logEvent(name: 'course_deleted', parameters: {'course_id': courseId});
-    
     notifyListeners();
   }
 
   Future<void> generateNextCourseBatch() async {
     if (_isLoadingMore) return;
-    // ── Max course guard ──────────────────────────────────────────────
     if (_generatedCourses.length >= maxCourses) return;
 
     _isLoadingMore = true;
@@ -1028,16 +1001,9 @@ class AppState extends ChangeNotifier {
       'UI/UX design principles',
       'Blockchain and Web3 development',
       'DevOps and CI/CD pipelines',
-      'Game development with Unity',
-      'iOS development with Swift',
-      'Backend development with Go',
-      'Full-stack JavaScript development',
-      'Database design and SQL mastery',
     ];
 
-    // Only generate 1 course at a time to conserve API quota.
-    final topicIdx =
-        ((_courseBatchIndex - 1)) % topics.length;
+    final topicIdx = ((_courseBatchIndex - 1)) % topics.length;
     try {
       final course = await ApiService.suggestPath(
               topics[topicIdx], language: _preferredLang)
@@ -1157,10 +1123,9 @@ class AppState extends ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // QUIZ SCORE TRACKING
+  // QUIZ SCORE TRACKING (per-course for certificate unlock)
   // ═══════════════════════════════════════════════════════════════════════
 
-  /// Record a quiz score for a course. Keeps the best score per course.
   Future<void> recordQuizScore(String courseId, double score) async {
     final current = _quizScores[courseId] ?? 0.0;
     if (score > current) {
@@ -1170,10 +1135,8 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Get the best quiz score for a course (0.0 to 1.0). Returns 0.0 if no quiz taken.
   double getQuizProgress(String courseId) => _quizScores[courseId] ?? 0.0;
 
-  /// Whether the user has achieved ≥60% quiz score for the course.
   bool isCertificateUnlocked(String courseId) => getQuizProgress(courseId) >= 0.6;
 
   Future<void> _saveQuizScores() async {
@@ -1197,14 +1160,11 @@ class AppState extends ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // FLIP COURSE (max 3 — same structure, different YouTube channel)
+  // FLIP COURSE
   // ═══════════════════════════════════════════════════════════════════════
 
-  /// How many flips remain for a course.
   int flipsRemaining(String courseId) => maxFlips - (_flipCounts[courseId] ?? 0);
 
-  /// Flip a course: keep the same topic/structure but search for videos from a
-  /// different YouTube channel. Returns the new course, or null if flips exhausted.
   Future<Course?> flipCourse(String courseId) async {
     if (flipsRemaining(courseId) <= 0) return null;
 
@@ -1233,9 +1193,6 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      // Use the title (cleaned) as the topic for the flip search, as it's more specific
-      // than the category (e.g. "Python for Data Science" vs "Programming").
-      // Also ensure we include the category if the title is too generic.
       String topic = oldCourse.title.replaceAll('…', '').replaceAll('Complete', '').replaceAll('Course', '').trim();
       if (topic.length < 5 && oldCourse.category.isNotEmpty) {
         topic = oldCourse.category;
@@ -1244,7 +1201,7 @@ class AppState extends ChangeNotifier {
       final newCourse = await ApiService.suggestPath(
         topic,
         language: oldCourse.language,
-        allowCurated: false, // Force fresh YouTube search, no curated
+        allowCurated: false,
         excludedVideoIds: excludedVideos,
         excludedChannelIds: excludedChannels,
       ).timeout(const Duration(seconds: 60), onTimeout: () => null);
@@ -1253,8 +1210,6 @@ class AppState extends ChangeNotifier {
         _flipExcludedVideoIds[courseId] = excludedVideos;
         _flipExcludedChannelIds[courseId] = excludedChannels;
         _flipCounts[courseId] = (_flipCounts[courseId] ?? 0) + 1;
-
-        // Replace the course in-place
         _generatedCourses[idx] = newCourse;
         await _saveLocalCourses();
         await _saveFlipData();
@@ -1438,7 +1393,6 @@ class AppState extends ChangeNotifier {
       final String fileName = 'profile_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final String localPath = '${directory.path}/$fileName';
 
-      // Remove old image if it exists to save space
       if (_profileImagePath != null) {
         final oldFile = File(_profileImagePath!);
         if (await oldFile.exists()) {
@@ -1454,7 +1408,6 @@ class AppState extends ChangeNotifier {
       await prefs.setString('profile_image_path', localPath);
     } catch (e) {
       debugPrint('Error saving profile image locally: $e');
-      // Fallback: just use the original path if copy fails
       _profileImagePath = path;
       notifyListeners();
     }
@@ -1491,11 +1444,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Clears ALL user-specific data from in-memory state AND SharedPreferences.
-  /// Called on signOut and before loading a new account to prevent cross-account
-  /// data leakage (e.g. profile photo appearing on wrong account).
   Future<void> _clearAllLocalUserData() async {
-    // ── In-memory state reset ──────────────────────────────────────────
     _user = null;
     _dream = null;
     _preferences = null;
@@ -1509,15 +1458,15 @@ class AppState extends ChangeNotifier {
     _flipCounts.clear();
     _flipExcludedVideoIds.clear();
     _flipExcludedChannelIds.clear();
+    _lessonQuizPassed.clear();
+    _purchasedBadges.clear();
     _notificationMessage = null;
     _lastCompletedCourse = null;
-    _notificationMessage = null;
     _coinEarnedEvent = null;
     _streakBumpEvent = null;
     _trendingCardLang.clear();
     _courseBatchIndex = 0;
 
-    // ── Delete profile image file from disk ────────────────────────────
     if (_profileImagePath != null) {
       try {
         final oldFile = File(_profileImagePath!);
@@ -1528,7 +1477,6 @@ class AppState extends ChangeNotifier {
       _profileImagePath = null;
     }
 
-    // ── SharedPreferences cleanup ──────────────────────────────────────
     try {
       final prefs = await SharedPreferences.getInstance();
       await Future.wait([
@@ -1547,6 +1495,8 @@ class AppState extends ChangeNotifier {
         prefs.remove('flip_excluded_vids'),
         prefs.remove('flip_excluded_chans'),
         prefs.remove('certificates_local'),
+        prefs.remove('lesson_quiz_passed'),
+        prefs.remove('purchased_badges'),
       ]);
     } catch (_) {}
   }
@@ -1558,7 +1508,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 12D.1 & 12D.3 — Mark lesson complete, award coins, fire CoinEarnedEvent.
+  /// Mark lesson complete, award coins based on duration, fire CoinEarnedEvent.
+  /// Also awards streak daily bonus (15 coins) if first lesson today.
   Future<void> markLessonAsCompleted(String courseId, String moduleId, String lessonId) async {
     List<Course> targetList;
     int courseIdx = _generatedCourses.indexWhere((c) => c.id == courseId);
@@ -1567,8 +1518,7 @@ class AppState extends ChangeNotifier {
     } else {
       courseIdx = _courses.indexWhere((c) => c.id == courseId);
       if (courseIdx == -1) {
-        debugPrint(
-            '[AppState] markLessonAsCompleted: course $courseId not in state');
+        debugPrint('[AppState] markLessonAsCompleted: course $courseId not in state');
         return;
       }
       targetList = _courses;
@@ -1576,7 +1526,6 @@ class AppState extends ChangeNotifier {
 
     final course = targetList[courseIdx];
 
-    // 12D.1 — find the lesson to get its coinValue before rebuilding the tree
     int coinsToAward = 10;
     for (final m in course.modules) {
       if (m.id == moduleId) {
@@ -1634,6 +1583,12 @@ class AppState extends ChangeNotifier {
 
     final totalCompleted = finalModules.fold(0, (sum, m) => sum + m.completedCount);
 
+    // Check if course is fully completed — award 100 bonus coins
+    final courseCompleted = totalCompleted >= course.totalLessons && course.totalLessons > 0;
+    if (courseCompleted && course.completedLessons < course.totalLessons) {
+      coinsToAward += 100; // Course completion bonus
+    }
+
     final updated = Course(
       id: course.id,
       title: course.title,
@@ -1652,30 +1607,34 @@ class AppState extends ChangeNotifier {
     );
     targetList[courseIdx] = updated;
 
-    // 12D.1 & 12D.3 — award coins to user profile
     if (_user != null) {
       final prevStreak = _user!.streakDays;
-      _user = _user!.copyWith(coins: _user!.coins + coinsToAward);
-      _coinEarnedEvent = CoinEarnedEvent(
-        coins: coinsToAward,
-        reason: 'Lesson completed',
-      );
-
-      // Update weekly activity for today
       final weekActivity = List<bool>.from(_user!.weekActivity);
       final todayWeekday = DateTime.now().weekday - 1;
-      if (todayWeekday >= 0 && todayWeekday < 7) {
+      
+      // Streak daily bonus: 15 coins for first lesson of the day
+      bool streakBonus = false;
+      if (todayWeekday >= 0 && todayWeekday < 7 && !_user!.weekActivity[todayWeekday]) {
+        coinsToAward += 15;
+        streakBonus = true;
         weekActivity[todayWeekday] = true;
       }
 
-      // Simple streak bump: if today wasn't already marked, increment streak
       int newStreak = _user!.streakDays;
-      if (todayWeekday >= 0 && todayWeekday < 7 && !_user!.weekActivity[todayWeekday]) {
+      if (streakBonus) {
         newStreak = prevStreak + 1;
         if (newStreak > prevStreak) {
-          _streakBumpEvent = StreakBumpEvent(newStreak); // 12D.2
+          _streakBumpEvent = StreakBumpEvent(newStreak);
         }
       }
+
+      _user = _user!.copyWith(coins: _user!.coins + coinsToAward);
+      _coinEarnedEvent = CoinEarnedEvent(
+        coins: coinsToAward,
+        reason: courseCompleted
+            ? 'Course completed! 🎉'
+            : (streakBonus ? 'Lesson + streak bonus!' : 'Lesson completed'),
+      );
 
       _user = UserProfile(
         id: _user!.id,
@@ -1721,8 +1680,6 @@ class AppState extends ChangeNotifier {
   }
 
   bool isLessonStarred(String lessonId) => _starredLessonIds.contains(lessonId);
-
-  // ── Saved Courses ─────────────────────────────────────────────────────
 
   Future<void> _loadSavedCourses() async {
     final prefs = await SharedPreferences.getInstance();

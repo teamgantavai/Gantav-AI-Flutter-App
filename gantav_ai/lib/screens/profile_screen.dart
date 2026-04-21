@@ -17,6 +17,7 @@ import 'legal_screen.dart';
 import '../models/models.dart';
 import '../models/certificate.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'coin_store_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -408,6 +409,7 @@ class _ProfileHero extends StatelessWidget {
     );
   }
 }
+
 
 // ─── Stats Row ────────────────────────────────────────────────────────────────
 
@@ -1004,7 +1006,7 @@ class _GeneratedCoursesTab extends StatelessWidget {
   }
 }
 
-// ─── Achievements Tab ─────────────────────────────────────────────────────────
+// ─── Achievements / Badges Tab ───────────────────────────────────────────────
 
 class _AchievementsTab extends StatelessWidget {
   final dynamic user;
@@ -1013,6 +1015,9 @@ class _AchievementsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.read<AppState>();
+    final ownedBadges = appState.ownedBadges;
+
     final achievements = [
       {
         'icon': Icons.rocket_launch_outlined,
@@ -1058,65 +1063,156 @@ class _AchievementsTab extends StatelessWidget {
       },
     ];
 
-    return GridView.builder(
+    return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       physics: const BouncingScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.1),
-      itemCount: achievements.length,
-      itemBuilder: (ctx, i) {
-        final a = achievements[i];
-        final earned = a['earned'] as bool;
-        final color = a['color'] as Color;
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: earned
-                ? color.withValues(alpha: isDark ? 0.12 : 0.08)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-                color: earned
-                    ? color.withValues(alpha: 0.3)
-                    : isDark
-                        ? AppColors.darkBorder
-                        : AppColors.lightBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(a['icon'] as IconData,
-                  color: earned ? color : AppColors.textMuted, size: 28),
-              const Spacer(),
-              Text(a['title'] as String,
+      children: [
+        // ── Shop badges earned ──────────────────────────────────────
+        if (ownedBadges.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                Text(
+                  'Shop Badges',
                   style: GoogleFonts.dmSans(
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: earned
-                          ? (isDark
-                              ? AppColors.textLight
-                              : AppColors.textDark)
-                          : AppColors.textMuted)),
-              Text(a['desc'] as String,
-                  style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      color: AppColors.textMuted,
-                      height: 1.3)),
-              if (!earned) ...[
-                const SizedBox(height: 6),
-                Text('Locked',
+                      color: isDark ? AppColors.textLight : AppColors.textDark),
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.gold.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(
+                        color: AppColors.gold.withValues(alpha: 0.25)),
+                  ),
+                  child: Text(
+                    '${ownedBadges.length} earned',
                     style: GoogleFonts.dmSans(
                         fontSize: 10,
-                        color:
-                            AppColors.textMuted.withValues(alpha: 0.6)))
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.gold),
+                  ),
+                ),
               ],
-            ],
+            ),
           ),
-        );
-      },
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 0.9),
+            itemCount: ownedBadges.length,
+            itemBuilder: (ctx, i) {
+              final b = ownedBadges[i];
+              return Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: b.color.withValues(alpha: isDark ? 0.12 : 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: b.color.withValues(alpha: 0.35), width: 1.5),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(b.icon, color: b.color, size: 28),
+                    const SizedBox(height: 6),
+                    Text(b.title,
+                        style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: b.color),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+        ],
+
+        // ── Achievement badges ──────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            'Achievements',
+            style: GoogleFonts.dmSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.textLight : AppColors.textDark),
+          ),
+        ),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.1),
+          itemCount: achievements.length,
+          itemBuilder: (ctx, i) {
+            final a = achievements[i];
+            final earned = a['earned'] as bool;
+            final color = a['color'] as Color;
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: earned
+                    ? color.withValues(alpha: isDark ? 0.12 : 0.08)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: earned
+                        ? color.withValues(alpha: 0.3)
+                        : isDark
+                            ? AppColors.darkBorder
+                            : AppColors.lightBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(a['icon'] as IconData,
+                      color: earned ? color : AppColors.textMuted, size: 28),
+                  const Spacer(),
+                  Text(a['title'] as String,
+                      style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: earned
+                              ? (isDark
+                                  ? AppColors.textLight
+                                  : AppColors.textDark)
+                              : AppColors.textMuted)),
+                  Text(a['desc'] as String,
+                      style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                          height: 1.3)),
+                  if (!earned) ...[
+                    const SizedBox(height: 6),
+                    Text('Locked',
+                        style: GoogleFonts.dmSans(
+                            fontSize: 10,
+                            color: AppColors.textMuted
+                                .withValues(alpha: 0.6)))
+                  ],
+                ],
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }
@@ -1168,6 +1264,19 @@ class _SettingsSheet extends StatelessWidget {
                     builder: (_) => const AdminPanelScreen()));
           },
         ),
+      _SettingAction(
+        icon: Icons.storefront_rounded,
+        title: 'Coin Store',
+        subtitle: 'Spend coins on badges',
+        color: const Color(0xFFF59E0B),
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CoinStoreScreen()),
+          );
+        },
+      ),
       _SettingAction(
         icon: Icons.verified_outlined,
         title: 'Verify Certificate',
@@ -1727,6 +1836,7 @@ void _showFAQSheet(BuildContext context, bool isDark) {
     ),
   );
 }
+
 
 class _FAQView extends StatelessWidget {
   final ScrollController controller;
