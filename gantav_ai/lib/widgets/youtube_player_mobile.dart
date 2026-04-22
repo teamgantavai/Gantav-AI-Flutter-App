@@ -176,6 +176,10 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer>
     _controller.toggleFullScreenMode();
   }
 
+  void pause() {
+    _controller.pause();
+  }
+
   // ── Gestures ─────────────────────────────────────────────────────────
 
   void _handleDoubleTap(Offset localPosition) {

@@ -13,11 +13,10 @@ class UserProfile {
   final int lessonsCompleted;
   final int quizzesPassed;
   final List<bool> weekActivity; // 7 days Mon-Sun
-  /// 12D.1 — total coins earned
   final int coins;
-  /// Daily course generation limit tracking
   final int dailyGenerations;
   final DateTime? lastGenerationDate;
+  final List<String> purchasedBadges;
 
   const UserProfile({
     required this.id,
@@ -32,6 +31,7 @@ class UserProfile {
     this.coins = 0,
     this.dailyGenerations = 0,
     this.lastGenerationDate,
+    this.purchasedBadges = const [],
   });
 
   String get initials {
@@ -54,6 +54,7 @@ class UserProfile {
     List<bool>? weekActivity,
     int? dailyGenerations,
     DateTime? lastGenerationDate,
+    List<String>? purchasedBadges,
   }) {
     return UserProfile(
       id: id,
@@ -68,6 +69,7 @@ class UserProfile {
       coins: coins ?? this.coins,
       dailyGenerations: dailyGenerations ?? this.dailyGenerations,
       lastGenerationDate: lastGenerationDate ?? this.lastGenerationDate,
+      purchasedBadges: purchasedBadges ?? this.purchasedBadges,
     );
   }
 
@@ -89,6 +91,9 @@ class UserProfile {
       lastGenerationDate: json['last_generation_date'] != null 
           ? DateTime.tryParse(json['last_generation_date'])
           : null,
+      purchasedBadges: json['purchased_badges'] != null
+          ? List<String>.from(json['purchased_badges'])
+          : const [],
     );
   }
 
@@ -105,6 +110,7 @@ class UserProfile {
       quizzesPassed: 28,
       weekActivity: [true, true, true, true, true, false, true],
       coins: 340,
+      purchasedBadges: ['badge_flame', 'badge_star'],
     );
   }
 
@@ -122,6 +128,7 @@ class UserProfile {
       'coins': coins,
       'daily_generations': dailyGenerations,
       'last_generation_date': lastGenerationDate?.toIso8601String(),
+      'purchased_badges': purchasedBadges,
     };
   }
 }

@@ -18,6 +18,7 @@ import '../models/models.dart';
 import '../models/certificate.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'coin_store_screen.dart';
+import 'package:gantav_ai/services/share_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -379,7 +380,7 @@ class _ProfileHero extends StatelessWidget {
                 onPressed: () {
                   SharePlus.instance.share(ShareParams(
                     text:
-                        'Check out my learning journey on Gantav AI! 🎯\nhttps://gantavai.com/u/${user.handle}',
+                        'Check out my learning journey on Gantav AI! 🎯',
                   ));
                 },
                 style: OutlinedButton.styleFrom(
@@ -1041,6 +1042,20 @@ class _AchievementsTab extends StatelessWidget {
         'color': AppColors.teal
       },
       {
+        'icon': Icons.verified_rounded,
+        'title': 'Quick Learner',
+        'desc': 'Finished 5 lessons in 1 day',
+        'earned': user.lessonsCompleted >= 5, // Simplified logic
+        'color': AppColors.violet
+      },
+      {
+        'icon': Icons.star_rounded,
+        'title': 'Perfect Score',
+        'desc': 'Scored 100% on any quiz',
+        'earned': user.quizzesPassed > 0, // Simplified logic
+        'color': AppColors.gold
+      },
+      {
         'icon': Icons.school_outlined,
         'title': 'Scholar',
         'desc': 'Completed 25 lessons',
@@ -1055,11 +1070,25 @@ class _AchievementsTab extends StatelessWidget {
         'color': AppColors.gold
       },
       {
+        'icon': Icons.task_alt_rounded,
+        'title': 'Course Finisher',
+        'desc': 'Completed a full course',
+        'earned': user.lessonsCompleted >= 10, // Simplified logic
+        'color': AppColors.teal
+      },
+      {
         'icon': Icons.workspace_premium_outlined,
         'title': 'Certified',
         'desc': 'Earned first certificate',
         'earned': user.lessonsCompleted >= 10,
         'color': AppColors.gold,
+      },
+      {
+        'icon': Icons.calendar_month_rounded,
+        'title': 'Persistence',
+        'desc': 'Learned for 30 total days',
+        'earned': user.streakDays >= 30, // Simplified logic
+        'color': AppColors.violet
       },
     ];
 
@@ -1104,38 +1133,15 @@ class _AchievementsTab extends StatelessWidget {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 140,
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
-                childAspectRatio: 0.9),
+                childAspectRatio: 0.95),
             itemCount: ownedBadges.length,
             itemBuilder: (ctx, i) {
               final b = ownedBadges[i];
-              return Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: b.color.withValues(alpha: isDark ? 0.12 : 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: b.color.withValues(alpha: 0.35), width: 1.5),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(b.icon, color: b.color, size: 28),
-                    const SizedBox(height: 6),
-                    Text(b.title,
-                        style: GoogleFonts.dmSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: b.color),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              );
+              return _ShareableBadgeCard(b: b, isDark: isDark);
             },
           ),
           const SizedBox(height: 24),
@@ -1155,64 +1161,189 @@ class _AchievementsTab extends StatelessWidget {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 220,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1.1),
+              childAspectRatio: 1.2),
           itemCount: achievements.length,
           itemBuilder: (ctx, i) {
             final a = achievements[i];
-            final earned = a['earned'] as bool;
-            final color = a['color'] as Color;
-            return Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: earned
-                    ? color.withValues(alpha: isDark ? 0.12 : 0.08)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                    color: earned
-                        ? color.withValues(alpha: 0.3)
-                        : isDark
-                            ? AppColors.darkBorder
-                            : AppColors.lightBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(a['icon'] as IconData,
-                      color: earned ? color : AppColors.textMuted, size: 28),
-                  const Spacer(),
-                  Text(a['title'] as String,
-                      style: GoogleFonts.dmSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: earned
-                              ? (isDark
-                                  ? AppColors.textLight
-                                  : AppColors.textDark)
-                              : AppColors.textMuted)),
-                  Text(a['desc'] as String,
-                      style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
-                          height: 1.3)),
-                  if (!earned) ...[
-                    const SizedBox(height: 6),
-                    Text('Locked',
-                        style: GoogleFonts.dmSans(
-                            fontSize: 10,
-                            color: AppColors.textMuted
-                                .withValues(alpha: 0.6)))
-                  ],
-                ],
-              ),
-            );
+            return _ShareableAchievementCard(a: a, isDark: isDark);
           },
         ),
       ],
+    );
+  }
+}
+
+class _ShareableBadgeCard extends StatefulWidget {
+  final dynamic b;
+  final bool isDark;
+  const _ShareableBadgeCard({required this.b, required this.isDark});
+
+  @override
+  State<_ShareableBadgeCard> createState() => _ShareableBadgeCardState();
+}
+
+class _ShareableBadgeCardState extends State<_ShareableBadgeCard> {
+  final GlobalKey _cardKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    final b = widget.b;
+    final isDark = widget.isDark;
+
+    return RepaintBoundary(
+      key: _cardKey,
+      child: Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: b.color.withValues(alpha: isDark ? 0.12 : 0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: b.color.withValues(alpha: 0.35), width: 1.5),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(b.icon, color: b.color, size: 28),
+                const SizedBox(height: 6),
+                Text(b.title,
+                    style: GoogleFonts.dmSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: b.color),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: GestureDetector(
+              onTap: () {
+                ShareHelper.shareWidgetAsImage(
+                  key: _cardKey,
+                  text: 'Check out my "${b.title}" badge on Gantav AI! 🎯',
+                  fileName: 'gantav_badge_${b.id}',
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: b.color.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.share_rounded, color: b.color, size: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShareableAchievementCard extends StatefulWidget {
+  final Map<String, dynamic> a;
+  final bool isDark;
+  const _ShareableAchievementCard({required this.a, required this.isDark});
+
+  @override
+  State<_ShareableAchievementCard> createState() =>
+      _ShareableAchievementCardState();
+}
+
+class _ShareableAchievementCardState extends State<_ShareableAchievementCard> {
+  final GlobalKey _cardKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.a;
+    final isDark = widget.isDark;
+    final earned = a['earned'] as bool;
+    final color = a['color'] as Color;
+
+    return RepaintBoundary(
+      key: _cardKey,
+      child: Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: earned
+                  ? color.withValues(alpha: isDark ? 0.12 : 0.08)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: earned
+                      ? color.withValues(alpha: 0.3)
+                      : isDark
+                          ? AppColors.darkBorder
+                          : AppColors.lightBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(a['icon'] as IconData,
+                    color: earned ? color : AppColors.textMuted, size: 28),
+                const Spacer(),
+                Text(a['title'] as String,
+                    style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: earned
+                            ? (isDark
+                                ? AppColors.textLight
+                                : AppColors.textDark)
+                            : AppColors.textMuted)),
+                Text(a['desc'] as String,
+                    style: GoogleFonts.dmSans(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                        height: 1.3)),
+                if (!earned) ...[
+                  const SizedBox(height: 6),
+                  Text('Locked',
+                      style: GoogleFonts.dmSans(
+                          fontSize: 10,
+                          color: AppColors.textMuted.withValues(alpha: 0.6)))
+                ],
+              ],
+            ),
+          ),
+          if (earned)
+            Positioned(
+              top: 10,
+              right: 10,
+              child: GestureDetector(
+                onTap: () {
+                  ShareHelper.shareWidgetAsImage(
+                    key: _cardKey,
+                    text:
+                        'I earned the "${a['title']}" achievement on Gantav AI! 🏆\n${a['desc']}',
+                    fileName: 'gantav_achievement_${a['title']}',
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.share_rounded, color: color, size: 14),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

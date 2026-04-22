@@ -122,6 +122,10 @@ class AppYoutubePlayerState extends State<AppYoutubePlayer> {
     // for cross-platform compatibility with the mobile player.
   }
 
+  void pause() {
+    _controller.pauseVideo();
+  }
+
   /// Show professional settings bottom sheet
   void showSettingsSheet() {
     showModalBottomSheet(

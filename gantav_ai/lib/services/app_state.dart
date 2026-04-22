@@ -338,7 +338,10 @@ class AppState extends ChangeNotifier {
     if (_user == null || _user!.coins < cost) return false;
     if (_purchasedBadges.contains(badgeId)) return true; // already owned
     _purchasedBadges.add(badgeId);
-    _user = _user!.copyWith(coins: _user!.coins - cost);
+    _user = _user!.copyWith(
+      coins: _user!.coins - cost,
+      purchasedBadges: _purchasedBadges.toList(),
+    );
     await _savePurchasedBadges();
     await _firestoreService.saveUserProfile(_user!);
     notifyListeners();
@@ -418,6 +421,7 @@ class AppState extends ChangeNotifier {
     final firestoreProfile = await _firestoreService.getUserProfile();
     if (firestoreProfile != null) {
       _user = firestoreProfile;
+      _purchasedBadges.addAll(firestoreProfile.purchasedBadges);
     } else {
       _user = UserProfile(
         id: firebaseUser.uid,

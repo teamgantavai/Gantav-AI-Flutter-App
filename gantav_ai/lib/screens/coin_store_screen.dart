@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
 import '../services/app_state.dart';
+import '../models/models.dart';
+import '../services/share_helper.dart';
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
@@ -44,12 +47,44 @@ class BadgeCatalog {
       cost: 75,
     ),
     ShopBadge(
+      id: 'badge_rocket',
+      title: 'Rocket',
+      description: 'Launching into knowledge at full speed',
+      icon: Icons.rocket_launch_rounded,
+      color: Color(0xFF8B5CF6),
+      cost: 100,
+    ),
+    ShopBadge(
+      id: 'badge_target',
+      title: 'Goal Getter',
+      description: 'Never misses a deadline or a lesson',
+      icon: Icons.track_changes_rounded,
+      color: Color(0xFFF43F5E),
+      cost: 120,
+    ),
+    ShopBadge(
+      id: 'badge_brain',
+      title: 'Big Brain',
+      description: 'Your intellect is undeniable',
+      icon: Icons.psychology_rounded,
+      color: Color(0xFF10B981),
+      cost: 125,
+    ),
+    ShopBadge(
       id: 'badge_diamond',
       title: 'Diamond',
       description: 'Rare and brilliant — just like your progress',
       icon: Icons.diamond_outlined,
       color: Color(0xFF06B6D4),
       cost: 150,
+    ),
+    ShopBadge(
+      id: 'badge_shield',
+      title: 'Steadfast',
+      description: 'Unwavering dedication to your learning goals',
+      icon: Icons.shield_rounded,
+      color: Color(0xFF3B82F6),
+      cost: 175,
     ),
     ShopBadge(
       id: 'badge_crown',
@@ -60,20 +95,36 @@ class BadgeCatalog {
       cost: 200,
     ),
     ShopBadge(
-      id: 'badge_rocket',
-      title: 'Rocket',
-      description: 'Launching into knowledge at full speed',
-      icon: Icons.rocket_launch_rounded,
-      color: Color(0xFF8B5CF6),
-      cost: 100,
+      id: 'badge_medal',
+      title: 'Top Scorer',
+      description: 'Consistently hitting high marks in quizzes',
+      icon: Icons.military_tech_rounded,
+      color: Color(0xFFFACC15),
+      cost: 250,
     ),
     ShopBadge(
-      id: 'badge_brain',
-      title: 'Big Brain',
-      description: 'Your intellect is undeniable',
-      icon: Icons.psychology_rounded,
-      color: Color(0xFF10B981),
-      cost: 125,
+      id: 'badge_fire',
+      title: 'Master Flame',
+      description: 'The ultimate symbol of intense learning speed',
+      icon: Icons.whatshot_rounded,
+      color: Color(0xFFEA580C),
+      cost: 300,
+    ),
+    ShopBadge(
+      id: 'badge_lightning',
+      title: 'Storm Bolt',
+      description: 'Lightning fast comprehension and progress',
+      icon: Icons.bolt_rounded,
+      color: Color(0xFFFDE047),
+      cost: 400,
+    ),
+    ShopBadge(
+      id: 'badge_gem',
+      title: 'Grand Emerald',
+      description: 'The pinnacle of achievement in Gantav AI',
+      icon: Icons.auto_awesome_rounded,
+      color: Color(0xFF059669),
+      cost: 500,
     ),
   ];
 }
@@ -94,6 +145,7 @@ class _CoinStoreScreenState extends State<CoinStoreScreen>
   late Animation<double> _celebScale;
   late Animation<double> _celebFade;
   ShopBadge? _celebBadge;
+  final GlobalKey _celebKey = GlobalKey();
 
   // Shake animation for insufficient coins
   late AnimationController _shakeCtrl;
@@ -406,11 +458,11 @@ class _CoinStoreScreenState extends State<CoinStoreScreen>
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
                     sliver: SliverGrid(
                       gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 220,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
-                        childAspectRatio: 0.82,
+                        childAspectRatio: 0.9,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
@@ -451,6 +503,7 @@ class _CoinStoreScreenState extends State<CoinStoreScreen>
                   scaleAnim: _celebScale,
                   fadeAnim: _celebFade,
                   isDark: isDark,
+                  celebKey: _celebKey,
                 ),
             ],
           ),
@@ -551,12 +604,14 @@ class _BadgeUnlockOverlay extends StatelessWidget {
   final Animation<double> scaleAnim;
   final Animation<double> fadeAnim;
   final bool isDark;
+  final GlobalKey celebKey;
 
   const _BadgeUnlockOverlay({
     required this.badge,
     required this.scaleAnim,
     required this.fadeAnim,
     required this.isDark,
+    required this.celebKey,
   });
 
   @override
@@ -571,95 +626,124 @@ class _BadgeUnlockOverlay extends StatelessWidget {
               opacity: fadeAnim,
               child: Transform.scale(
                 scale: scaleAnim.value,
-                child: Container(
-                  width: 260,
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 32, horizontal: 28),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.darkSurface
-                        : AppColors.lightSurface,
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                        color: badge.color.withValues(alpha: 0.4),
-                        width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: badge.color.withValues(alpha: 0.3),
-                        blurRadius: 40,
-                        spreadRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: badge.color.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: badge.color.withValues(alpha: 0.4),
-                              blurRadius: 24,
-                              spreadRadius: 4,
-                            ),
-                          ],
+                child: RepaintBoundary(
+                  key: celebKey,
+                  child: Container(
+                    width: 300,
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 32, horizontal: 28),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppColors.darkSurface
+                          : AppColors.lightSurface,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                          color: badge.color.withValues(alpha: 0.4),
+                          width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: badge.color.withValues(alpha: 0.3),
+                          blurRadius: 40,
+                          spreadRadius: 4,
                         ),
-                        child: Icon(badge.icon,
-                            color: badge.color, size: 40),
-                      ),
-                      const SizedBox(height: 20),
-                      Text(
-                        '🎉 Badge Unlocked!',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? AppColors.textLight
-                              : AppColors.textDark,
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: badge.color.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: badge.color.withValues(alpha: 0.4),
+                                blurRadius: 24,
+                                spreadRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Icon(badge.icon,
+                              color: badge.color, size: 40),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        badge.title,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: badge.color,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        badge.description,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.dmSans(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                            height: 1.4),
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: badge.color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(100),
-                          border: Border.all(
-                              color: badge.color.withValues(alpha: 0.3)),
-                        ),
-                        child: Text(
-                          'Now showing on your profile ✨',
+                        const SizedBox(height: 20),
+                        Text(
+                          '🎉 Badge Unlocked!',
                           style: GoogleFonts.dmSans(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: badge.color),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: isDark
+                                ? AppColors.textLight
+                                : AppColors.textDark,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 6),
+                        Text(
+                          badge.title,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: badge.color,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          badge.description,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                              height: 1.4),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: badge.color.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(100),
+                            border: Border.all(
+                                color: badge.color.withValues(alpha: 0.3)),
+                          ),
+                          child: Text(
+                            'Now showing on your profile ✨',
+                            style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: badge.color),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              ShareHelper.shareWidgetAsImage(
+                                key: celebKey,
+                                text: 'I just unlocked the ${badge.title} badge on Gantav AI! 🎯\n\n${badge.description}',
+                                fileName: 'gantav_badge_${badge.id}',
+                              );
+                            },
+                            icon: const Icon(Icons.share_rounded, size: 18),
+                            label: Text('Share Achievement',
+                                style: GoogleFonts.dmSans(
+                                    fontWeight: FontWeight.bold, fontSize: 13)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: badge.color,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -673,7 +757,7 @@ class _BadgeUnlockOverlay extends StatelessWidget {
 
 // ─── Badge Card ───────────────────────────────────────────────────────────────
 
-class _BadgeCard extends StatelessWidget {
+class _BadgeCard extends StatefulWidget {
   final ShopBadge badge;
   final bool owned;
   final bool canAfford;
@@ -691,8 +775,24 @@ class _BadgeCard extends StatelessWidget {
   });
 
   @override
+  State<_BadgeCard> createState() => _BadgeCardState();
+}
+
+class _BadgeCardState extends State<_BadgeCard> {
+  final GlobalKey _cardKey = GlobalKey();
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
+    final badge = widget.badge;
+    final owned = widget.owned;
+    final canAfford = widget.canAfford;
+    final coins = widget.coins;
+    final isDark = widget.isDark;
+    final onBuy = widget.onBuy;
+
+    return RepaintBoundary(
+      key: _cardKey,
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: owned
@@ -786,6 +886,25 @@ class _BadgeCard extends StatelessWidget {
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         color: badge.color)),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () {
+                    ShareHelper.shareWidgetAsImage(
+                      key: _cardKey,
+                      text: 'I just unlocked the ${badge.title} badge on Gantav AI! 🎯\n\n${badge.description}',
+                      fileName: 'gantav_badge_${badge.id}',
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: badge.color.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.share_rounded,
+                        color: badge.color, size: 14),
+                  ),
+                ),
               ],
             )
           else
@@ -831,6 +950,7 @@ class _BadgeCard extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

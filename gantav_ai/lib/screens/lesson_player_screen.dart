@@ -1231,6 +1231,7 @@ class _LessonPlayerScreenState extends State<LessonPlayerScreen>
               );
               return;
             }
+            _ytKey.currentState?.pause();
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => QuizScreen(

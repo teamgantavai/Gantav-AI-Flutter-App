@@ -63,13 +63,23 @@ class AdsService {
       return 'ca-app-pub-3940256099942544/2934735716';
     }
     
-    // PRODUCTION IDs: Replace these with your real IDs from AdMob console.
-    // The current ones are placeholders that will show real ads if correctly
-    // configured in the AdMob dashboard.
+    // ⚠️ PRODUCTION IDs: Replace these with your REAL IDs from the AdMob console.
     if (defaultTargetPlatform == TargetPlatform.android) {
-      // Example: 'ca-app-pub-7593223018428807/1234567890'
-      return 'ca-app-pub-3940256099942544/6300978111'; 
+      return 'ca-app-pub-4671371520079456/9041316490'; // User provided ID
     }
-    return 'ca-app-pub-3940256099942544/2934735716';
+    return 'ca-app-pub-4671371520079456/9041316490'; // User provided ID
+  }
+
+  /// AdMob unit ID for Native Ads.
+  static String get nativeAdUnitId {
+    if (kDebugMode) {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        return 'ca-app-pub-3940256099942544/2247696110'; // Google Test ID
+      }
+      return 'ca-app-pub-3940256099942544/3986624511'; // Google Test ID
+    }
+    
+    // PRODUCTION Native ID provided by user
+    return 'ca-app-pub-4671371520079456/9041316490';
   }
 }
