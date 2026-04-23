@@ -915,7 +915,7 @@ class GeminiService {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $key',
-            'HTTP-Referer': 'https://gantavai.com',
+            'HTTP-Referer': 'https://gantav-ai.web.app',
             'X-Title': 'Gantav AI Learning',
           },
           body: body,

@@ -942,7 +942,7 @@ class _GeneratedCoursesTab extends StatelessWidget {
                         break;
                       case 'share':
                         SharePlus.instance.share(ShareParams(
-                          text: 'Check out "${course.title}" on Gantav AI! 🎯\nhttps://gantavai.com/course/${course.id}',
+                          text: 'Check out "${course.title}" on Gantav AI! 🎯\nhttps://gantav-ai.web.app/course/${course.id}',
                         ));
                         break;
                       case 'delete':
@@ -1888,7 +1888,7 @@ class _CourseListTile extends StatelessWidget {
                     break;
                   case 'share':
                     SharePlus.instance.share(ShareParams(
-                      text: 'Check out "${course.title}" on Gantav AI! 🎯\nhttps://gantavai.com/course/${course.id}',
+                      text: 'Check out "${course.title}" on Gantav AI! 🎯\nhttps://gantav-ai.web.app/course/${course.id}',
                     ));
                     break;
                   case 'delete':

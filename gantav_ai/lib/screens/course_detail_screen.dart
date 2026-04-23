@@ -196,7 +196,7 @@ class CourseDetailScreen extends StatelessWidget {
               }
             } else if (value == 'share') {
               SharePlus.instance.share(ShareParams(
-                text: 'Check out "${currentCourse.title}" on Gantav AI! 🎯\nLearn faster with personalized roadmaps.',
+                text: 'Check out "${currentCourse.title}" on Gantav AI! 🎯\nhttps://gantav-ai.web.app/course/${currentCourse.id}',
               ));
             } else if (value == 'delete') {
               // Confirm delete

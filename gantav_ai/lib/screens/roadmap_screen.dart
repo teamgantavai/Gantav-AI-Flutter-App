@@ -74,7 +74,7 @@ class _RoadmapScreenState extends State<RoadmapScreen>
 
       await SharePlus.instance.share(ShareParams(
         files: [XFile(file.path)],
-        text: '🎯 My learning roadmap on Gantav AI!\n${widget.roadmap.title}\n\nhttps://gantavai.com',
+        text: '🎯 My learning roadmap on Gantav AI!\n${widget.roadmap.title}\n\nhttps://gantav-ai.web.app',
       ));
     } catch (e) {
       if (mounted) {
@@ -507,7 +507,7 @@ class _RoadmapScreenState extends State<RoadmapScreen>
           Text('Gantav AI',
             style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.w600,
               color: AppColors.textMuted.withValues(alpha: 0.4))),
-          Text(' · gantavai.com',
+          Text(' · gantav-ai.web.app',
             style: GoogleFonts.dmSans(fontSize: 11,
               color: AppColors.textMuted.withValues(alpha: 0.3))),
         ],

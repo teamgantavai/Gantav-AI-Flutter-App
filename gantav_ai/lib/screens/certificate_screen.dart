@@ -64,7 +64,7 @@ class _CertificateScreenState extends State<CertificateScreen> {
         ShareParams(
           files: [XFile(file.path)],
           text:
-              'I just completed "${widget.certificate.courseTitle}" on Gantav AI! 🎉\nVerification: ${widget.certificate.verificationCode}',
+              'I just completed "${widget.certificate.courseTitle}" on Gantav AI! 🎉\nVerification: ${widget.certificate.verificationCode}\n\nhttps://gantav-ai.web.app',
         ),
       );
     } catch (e) {
