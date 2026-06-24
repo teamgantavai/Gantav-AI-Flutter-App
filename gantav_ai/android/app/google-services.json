@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "88076839712",
+    "project_id": "gantav-ai",
+    "storage_bucket": "gantav-ai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88076839712:android:f6aad7aae2a54154510545",
+        "android_client_info": {
+          "package_name": "com.example.gantav_ai"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "88076839712-2i6p18rnb1bgs2u7b69cvb8m5lp3ck6l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC8t7zu_AiCD8XYHjBOaMIgeECjOit6Hgw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "88076839712-2i6p18rnb1bgs2u7b69cvb8m5lp3ck6l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88076839712:android:954f9e961732609b510545",
+        "android_client_info": {
+          "package_name": "com.gantavai.gantav_ai"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "88076839712-2i6p18rnb1bgs2u7b69cvb8m5lp3ck6l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC8t7zu_AiCD8XYHjBOaMIgeECjOit6Hgw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "88076839712-2i6p18rnb1bgs2u7b69cvb8m5lp3ck6l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

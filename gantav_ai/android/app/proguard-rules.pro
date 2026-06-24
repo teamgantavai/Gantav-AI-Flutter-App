@@ -1,0 +1,2 @@
+-keep class com.pierfrancescosoffritti.androidyoutubeplayer.** { *; }
+-dontwarn com.pierfrancescosoffritti.androidyoutubeplayer.**

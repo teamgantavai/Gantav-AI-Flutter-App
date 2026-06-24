@@ -1,0 +1,139 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as auth;
+import '../models/models.dart';
+
+class FirestoreService {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final auth.FirebaseAuth _auth = auth.FirebaseAuth.instance;
+
+  String? get currentUserId => _auth.currentUser?.uid;
+
+  // -- USER PROFILE --
+
+  Future<void> saveUserProfile(UserProfile user) async {
+    if (currentUserId == null) return;
+    await _db.collection('users').doc(currentUserId).set(user.toJson());
+  }
+
+  Future<UserProfile?> getUserProfile() async {
+    if (currentUserId == null) return null;
+    final doc = await _db.collection('users').doc(currentUserId).get();
+    if (doc.exists) {
+      return UserProfile.fromJson(doc.data()!);
+    }
+    return null;
+  }
+
+  // -- COURSES & ROADMAPS --
+
+  Future<void> saveActiveCourse(Course course) async {
+    if (currentUserId == null) return;
+    await _db
+        .collection('users')
+        .doc(currentUserId)
+        .collection('courses')
+        .doc(course.id)
+        .set(course.toJson());
+  }
+
+  Future<List<Course>> getActiveCourses() async {
+    if (currentUserId == null) return [];
+    final snapshot = await _db
+        .collection('users')
+        .doc(currentUserId)
+        .collection('courses')
+        .get();
+
+    return snapshot.docs.map((doc) => Course.fromJson(doc.data())).toList();
+  }
+
+  Future<void> completeLesson(String courseId, String lessonId) async {
+    if (currentUserId == null) return;
+    // For MVP, just updating local appState is enough since it handles the full graph,
+    // but in a production app you'd run a transaction here.
+  }
+
+  // -- USER PREFERENCES (Onboarding) --
+
+  Future<void> saveUserPreferences(UserPreferences prefs) async {
+    if (currentUserId == null) return;
+    await _db
+        .collection('users')
+        .doc(currentUserId)
+        .collection('settings')
+        .doc('preferences')
+        .set(prefs.toJson());
+  }
+
+  Future<UserPreferences?> getUserPreferences() async {
+    if (currentUserId == null) return null;
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(currentUserId)
+          .collection('settings')
+          .doc('preferences')
+          .get();
+      if (doc.exists) {
+        return UserPreferences.fromJson(doc.data()!);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // -- ROADMAPS --
+
+  Future<void> saveRoadmap(Roadmap roadmap) async {
+    if (currentUserId == null) return;
+    await _db
+        .collection('users')
+        .doc(currentUserId)
+        .collection('roadmaps')
+        .doc(roadmap.id)
+        .set(roadmap.toJson());
+  }
+
+  Future<void> updateRoadmap(Roadmap roadmap) async {
+    if (currentUserId == null) return;
+    await _db
+        .collection('users')
+        .doc(currentUserId)
+        .collection('roadmaps')
+        .doc(roadmap.id)
+        .update(roadmap.toJson());
+  }
+
+  Future<List<Roadmap>> getRoadmaps() async {
+    if (currentUserId == null) return [];
+    try {
+      final snapshot = await _db
+          .collection('users')
+          .doc(currentUserId)
+          .collection('roadmaps')
+          .orderBy('created_at', descending: true)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => Roadmap.fromJson(doc.data()))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Roadmap?> getRoadmap(String roadmapId) async {
+    if (currentUserId == null) return null;
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(currentUserId)
+          .collection('roadmaps')
+          .doc(roadmapId)
+          .get();
+      if (doc.exists) {
+        return Roadmap.fromJson(doc.data()!);
+      }
+    } catch (_) {}
+    return null;
+  }
+}
